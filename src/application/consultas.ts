@@ -53,7 +53,8 @@ const SQL_MODELOS = `
   SELECT m.id, m.nombre, m.materia, m.categoria, m.descripcion, m.activo,
          v.id AS version_id, v.version, v.editable, v.schema_json, v.created_at AS version_creada
   FROM modelo m JOIN modelo_version v ON v.modelo_id = m.id
-  WHERE v.version = (SELECT MAX(version) FROM modelo_version WHERE modelo_id = m.id)`;
+  WHERE v.version = (SELECT MAX(version) FROM modelo_version WHERE modelo_id = m.id)
+    AND m.deleted_at IS NULL`;
 
 function contarCampos(json: string): number {
     try {

@@ -1,0 +1,187 @@
+/* ===== Ventana del editor (pantalla completa) ===== */
+.ed-ventana {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+}
+
+.ed-barra-titulo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    background: var(--superficie);
+    border-bottom: 1px solid var(--borde);
+}
+
+.ed-cinta {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+    padding: 6px 16px;
+    background: var(--superficie-2);
+    border-bottom: 1px solid var(--borde);
+}
+
+.ed-cinta select {
+    width: auto;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+
+.ed-cinta .sep {
+    width: 1px;
+    height: 22px;
+    background: var(--borde-fuerte);
+    margin: 0 6px;
+}
+
+.ed-tb {
+    min-width: 32px;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--texto-2);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.ed-tb:hover:not(:disabled) {
+    background: #e7eaf1;
+}
+
+.ed-tb.on {
+    background: var(--primario-claro);
+    border-color: #cfd8fb;
+    color: var(--primario);
+}
+
+.ed-tb:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: 1px;
+}
+
+.ed-tb:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+.ed-aviso {
+    padding: 8px 16px 0;
+}
+
+.ed-cuerpo {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: minmax(0, 1fr);
+}
+
+.ed-cuerpo.sin-panel {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.ed-pagina {
+    overflow: auto;
+    background: #dde1ea;
+}
+
+.ed-panel {
+    min-height: 0;
+    padding: 12px;
+    background: var(--bg);
+    border-left: 1px solid var(--borde);
+}
+
+.ed-estado {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 16px;
+    background: var(--superficie);
+    border-top: 1px solid var(--borde);
+    font-size: 12px;
+    color: var(--texto-3);
+}
+
+/* ===== Hoja editable ===== */
+.ed-lienzo {
+    padding: 24px;
+    min-height: 100%;
+}
+
+.hoja-ed {
+    outline: none;
+    cursor: text;
+    white-space: pre-wrap;
+}
+
+.hoja-ed p,
+.hoja-ed h1,
+.hoja-ed h2 {
+    margin: 0 0 calc(6pt * var(--esc, 1));
+    min-height: 1em;
+    font-size: inherit;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-align: justify;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.hoja-ed h1 {
+    margin: calc(12pt * var(--esc, 1)) 0;
+    font-size: var(--pt-titulo, 1.2em);
+    font-weight: 700;
+    text-align: center;
+}
+
+.hoja-ed h2 {
+    margin: calc(6pt * var(--esc, 1)) 0;
+    font-weight: 700;
+    text-align: left;
+}
+
+.hoja-ed.con-sangria p:not([style*="center"]):not([style*="right"]) {
+    text-indent: var(--sangria, 1.25cm);
+}
+
+.hoja-ed .mk {
+    cursor: pointer;
+    user-select: all;
+    white-space: pre-wrap;
+    border: 1px solid #c9d4ff;
+}
+
+.hoja-ed .mk:hover {
+    background: #d3dcff;
+}
+
+.hoja-ed .salto-pagina {
+    user-select: none;
+    cursor: default;
+}
+
+.hoja-ed ::selection {
+    background: #b8cbff;
+}
+
+@media (max-width: 1100px) {
+    .ed-cuerpo {
+        grid-template-columns: minmax(0, 1fr) 280px;
+    }
+}

@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { esTextoLargo } from '../../application/camposModelo';
-import type { PersonaResumen } from '../../application/consultas';
+import type { ExpedienteResumen, PersonaResumen } from '../../application/consultas';
 import { claveNormalizada } from '../../domain/texto';
 import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, obtenerTipo } from '../../domain/tiposExpediente';
 import {
-    Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Insignia, Modal, Vacio, datosDeForm, etiquetaTipo, fechaCorta,
+    Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Insignia, Modal, Vacio,
+    avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta,
 } from '../comunes';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 
@@ -16,6 +17,7 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
     const [tipoF, setTipoF] = useState('');
     const [estadoF, setEstadoF] = useState('');
     const [nuevo, setNuevo] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const filtrados = useMemo(() => {
         const k = claveNormalizada(q.trim());
@@ -31,6 +33,23 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
     const activos = todos.filter((e) => e.estado === 'abierto' || e.estado === 'en_tramite').length;
     const suspendidos = todos.filter((e) => e.estado === 'suspendido').length;
     const cerrados = todos.filter((e) => e.estado === 'cerrado' || e.estado === 'archivado').length;
+
+    async function eliminar(x: ExpedienteResumen) {
+        const docs = x.nDocumentos > 0 ? ` Se eliminarán también sus ${x.nDocumentos} documento(s).` : '';
+        const ok = await confirmar(
+            `¿Eliminar el expediente ${x.codigo} «${x.materia}»?${docs} Los archivos .docx no se borran del disco.`,
+            'Eliminar expediente',
+        );
+        if (!ok) return;
+        try {
+            await s.eliminarExpediente.ejecutar(x.id);
+            setError(null);
+            lista.recargar();
+            avisar('Expediente eliminado');
+        } catch (err) {
+            setError(mensajeError(err));
+        }
+    }
 
     return (
         <div className="pagina">
@@ -61,7 +80,7 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
                 </select>
             </div>
 
-            <Aviso error={lista.error} />
+            <Aviso error={error ?? lista.error} />
 
             {lista.datos && filtrados.length === 0 ? (
                 <Vacio
@@ -75,11 +94,11 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
                 <div className="tabla-wrap">
                     <table className="tabla tabla-click">
                         <thead>
-                            <tr><th>Código</th><th>Asunto</th><th>Cliente</th><th>Estado</th><th className="num">Partes</th><th className="num">Docs.</th><th>Creado</th></tr>
+                            <tr><th>Código</th><th>Asunto</th><th>Cliente</th><th>Estado</th><th className="num">Partes</th><th className="num">Docs.</th><th>Creado</th><th /></tr>
                         </thead>
                         <tbody>
                             {filtrados.map((x) => (
-                                <tr key={x.id} tabIndex={0} onClick={() => abrir(x.id)} onKeyDown={(e) => { if (e.key === 'Enter') abrir(x.id); }}>
+                                <tr key={x.id} tabIndex={0} onClick={() => abrir(x.id)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) abrir(x.id); }}>
                                     <td><code>{x.codigo}</code></td>
                                     <td>
                                         <div className="celda-titulo">{x.materia}</div>
@@ -90,6 +109,17 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
                                     <td className="num">{x.nPartes}</td>
                                     <td className="num">{x.nDocumentos}</td>
                                     <td className="suave">{fechaCorta(x.creadoEn)}</td>
+                                    <td className="num">
+                                        <button
+                                            type="button"
+                                            className="btn btn-fan btn-icono btn-sm"
+                                            aria-label="Eliminar expediente"
+                                            title="Eliminar expediente"
+                                            onClick={(e) => { e.stopPropagation(); void eliminar(x); }}
+                                        >
+                                            <Icono n="papelera" tam={15} />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

@@ -52,23 +52,32 @@ export class Buscar {
         }
 
         (await this.db.consultar<Fila>(
-            `SELECT e.* FROM fts_expediente JOIN expediente e ON e.id = fts_expediente.expediente_id
-       WHERE fts_expediente MATCH ?1 AND e.deleted_at IS NULL ORDER BY bm25(fts_expediente) LIMIT ?2`,
+            `SELECT d.id, d.titulo, d.expediente_id, e.codigo
+       FROM fts_documento JOIN documento d ON d.id = fts_documento.documento_id
+       JOIN expediente e ON e.id = d.expediente_id
+       WHERE fts_documento MATCH ?1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL
+       ORDER BY bm25(fts_documento) LIMIT ?2`,
             [prefijo, limite],
-        )).forEach(expediente);
+        )).forEach((d) =>
+            agregar({ tipo: 'documento', id: t(d.id), titulo: t(d.titulo), detalle: t(d.codigo), expedienteId: t(d.expediente_id) }),
+        );
         (await this.db.consultar<Fila>(
             `SELECT * FROM expediente WHERE deleted_at IS NULL AND (codigo LIKE ?1 ESCAPE '\\' OR nro_causa LIKE ?1 ESCAPE '\\') LIMIT ?2`,
             [like, limite],
         )).forEach(expediente);
 
         (await this.db.consultar<Fila>(
-            `SELECT d.id, d.titulo, d.expediente_id, e.codigo
-       FROM fts_documento JOIN documento d ON d.id = fts_documento.documento_id
-       JOIN expediente e ON e.id = d.expediente_id
-       WHERE fts_documento MATCH ?1 AND d.deleted_at IS NULL ORDER BY bm25(fts_documento) LIMIT ?2`,
-            [prefijo, limite],
-        )).forEach((d) =>
-            agregar({ tipo: 'documento', id: t(d.id), titulo: t(d.titulo), detalle: t(d.codigo), expedienteId: t(d.expediente_id) }),
+            `SELECT i.id, i.matricula, i.codigo_catastral, i.ubicacion, e.id AS expediente_id
+       FROM inmueble i
+       LEFT JOIN expediente_inmueble ei ON ei.inmueble_id = i.id
+       LEFT JOIN expediente e ON e.id = ei.expediente_id AND e.deleted_at IS NULL
+       WHERE i.deleted_at IS NULL
+         AND (i.matricula LIKE ?1 ESCAPE '\\' OR i.codigo_catastral LIKE ?1 ESCAPE '\\')
+         AND (ei.expediente_id IS NULL OR e.id IS NOT NULL)
+       LIMIT ?2`,
+            [like, limite],
+        )).forEach((i) =>
+            agregar({ tipo: 'inmueble', id: t(i.id), titulo: `Matrícula ${t(i.matricula)}`, detalle: t(i.ubicacion), expedienteId: t(i.expediente_id) || undefined }),
         );
 
         (await this.db.consultar<Fila>(

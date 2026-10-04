@@ -64,8 +64,10 @@ export class GenerarDocumento {
     );
     const documentoId = existente?.id ?? nuevoId();
     const [{ proximo }] = await db.consultar<{ proximo: number }>(
-      'SELECT COALESCE(MAX(nro), 0) + 1 AS proximo FROM documento_version WHERE documento_id = ?1',
-      [documentoId],
+      `SELECT COALESCE(MAX(v.nro), 0) + 1 AS proximo
+       FROM documento_version v JOIN documento d ON d.id = v.documento_id
+       WHERE d.expediente_id = ?1 AND d.titulo = ?2`,
+      [p.expedienteId, p.titulo],
     );
 
     const nombre = `${nombreSeguro(p.titulo)}_v${String(proximo).padStart(2, '0')}.docx`;

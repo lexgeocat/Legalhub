@@ -21,9 +21,13 @@ export class EliminarPersona {
     /** Borrado lógico. Se bloquea si la persona está vinculada, para no perder partes en silencio. */
     async ejecutar(id: string): Promise<void> {
         const [{ n }] = await this.db.consultar<{ n: number }>(
-            `SELECT (SELECT COUNT(*) FROM expediente_parte WHERE persona_id = ?1)
+            `SELECT (SELECT COUNT(*) FROM expediente_parte ep
+                       JOIN expediente e ON e.id = ep.expediente_id
+                      WHERE ep.persona_id = ?1 AND e.deleted_at IS NULL)
                   + (SELECT COUNT(*) FROM expediente WHERE cliente_id = ?1 AND deleted_at IS NULL)
-                  + (SELECT COUNT(*) FROM inmueble_titular WHERE persona_id = ?1)
+                  + (SELECT COUNT(*) FROM inmueble_titular it
+                       JOIN inmueble i ON i.id = it.inmueble_id
+                      WHERE it.persona_id = ?1 AND i.deleted_at IS NULL)
                   + (SELECT COUNT(*) FROM persona WHERE representante_id = ?1 AND deleted_at IS NULL) AS n`,
             [id],
         );

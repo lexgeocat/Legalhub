@@ -1,0 +1,1 @@
+ALTER TABLE modelo ADD COLUMN deleted_at TEXT;

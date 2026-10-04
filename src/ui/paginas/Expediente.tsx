@@ -42,6 +42,22 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
         }
     }
 
+    const eliminar = async () => {
+        const docsTxt = e.nDocumentos > 0 ? ` Se eliminarán también sus ${e.nDocumentos} documento(s).` : '';
+        const ok = await confirmar(
+            `¿Eliminar el expediente ${e.codigo} «${e.materia}»?${docsTxt} Los archivos .docx no se borran del disco.`,
+            'Eliminar expediente',
+        );
+        if (!ok) return;
+        try {
+            await s.eliminarExpediente.ejecutar(id);
+            avisar('Expediente eliminado');
+            volver();
+        } catch (err) {
+            setError(mensajeError(err));
+        }
+    };
+
     return (
         <div className="pagina">
             <div>{atras}</div>
@@ -64,6 +80,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                     </select>
                     <button type="button" className="btn btn-sec" onClick={() => setEditando(true)}><Icono n="editar" tam={16} /> Editar</button>
                     <button type="button" className="btn btn-pri" onClick={() => setAsistente(true)}><Icono n="mas" tam={16} /> Nuevo documento</button>
+                    <button type="button" className="btn btn-peligro" onClick={() => void eliminar()}><Icono n="papelera" tam={16} /> Eliminar</button>
                 </div>
             </div>
 
@@ -391,6 +408,22 @@ function TabDocumentos({ docs, nuevo, recargar, setError }: {
         }
     }
 
+    async function eliminar(d: DocumentoResumen) {
+        const ok = await confirmar(
+            `¿Eliminar el documento «${d.titulo}» con sus ${d.versiones.length} versión(es)? Los archivos .docx no se borran del disco.`,
+            'Eliminar documento',
+        );
+        if (!ok) return;
+        try {
+            await s.eliminarDocumento.ejecutar(d.id);
+            setError(null);
+            recargar();
+            avisar('Documento eliminado');
+        } catch (err) {
+            setError(mensajeError(err));
+        }
+    }
+
     const abrir = (ruta: string) => s.archivos.abrir(ruta).catch((err) => setError(mensajeError(err)));
     const mostrar = (ruta: string) => s.archivos.mostrarEnCarpeta(ruta).catch((err) => setError(mensajeError(err)));
 
@@ -414,6 +447,15 @@ function TabDocumentos({ docs, nuevo, recargar, setError }: {
                         <div className="acciones">
                             <Insignia tono="azul">{d.estado}</Insignia>
                             <button type="button" className="btn btn-sec btn-sm" onClick={() => void adjuntar(d.id)}>Adjuntar versión editada…</button>
+                            <button
+                                type="button"
+                                className="btn btn-fan btn-icono btn-sm"
+                                aria-label="Eliminar documento"
+                                title="Eliminar documento"
+                                onClick={() => void eliminar(d)}
+                            >
+                                <Icono n="papelera" tam={15} />
+                            </button>
                         </div>
                     </div>
                     <div className="tabla-wrap">

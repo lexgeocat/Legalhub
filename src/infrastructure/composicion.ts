@@ -24,6 +24,7 @@ import { GeneradorDocxFflate } from './docx/generarDocx';
 import { LectorDocxFflate } from './docx/leerModelo';
 import { MotorDocx } from './docx/motor/motor';
 import { FormatoPaqueteFflate } from './docx/paqueteModelo';
+import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 
 export interface Servicios {
     raiz: string;
@@ -50,6 +51,9 @@ export interface Servicios {
     generarDocumento: GenerarDocumento;
     adjuntarVersion: AdjuntarVersionEditada;
     buscar: Buscar;
+    eliminarDocumento: EliminarDocumento;
+    eliminarExpediente: EliminarExpediente;
+    eliminarModelo: EliminarModelo;
 }
 
 export async function crearServicios(): Promise<Servicios> {
@@ -88,5 +92,8 @@ export async function crearServicios(): Promise<Servicios> {
         generarDocumento: new GenerarDocumento({ db, archivos, modelos, contexto, motor }),
         adjuntarVersion: new AdjuntarVersionEditada({ db, archivos, motor }),
         buscar: new Buscar(db),
+        eliminarDocumento: new EliminarDocumento(db),
+        eliminarExpediente: new EliminarExpediente(db),
+        eliminarModelo: new EliminarModelo(db),
     };
 }

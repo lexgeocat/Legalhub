@@ -86,6 +86,23 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
         });
     }
 
+    async function eliminar() {
+        if (!m) return;
+        let usos = 0;
+        try {
+            usos = await s.eliminarModelo.usos(modeloId);
+        } catch {
+            /* si falla el conteo, igual se pide confirmación */
+        }
+        const uso = usos > 0 ? ` Se usó en ${usos} documento(s); esos documentos no se modifican.` : '';
+        if (!(await confirmar(`¿Eliminar el modelo «${m.nombre}» con todas sus versiones?${uso}`, 'Eliminar modelo'))) return;
+        await correr(async () => {
+            await s.eliminarModelo.ejecutar(modeloId);
+            avisar('Modelo eliminado');
+            volver();
+        });
+    }
+
     async function copiaTrabajo() {
         if (!activa) return;
         await correr(async () => {
@@ -139,6 +156,7 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
                     )}
                     <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void duplicar()}>Duplicar</button>
                     <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void alternar()}>{m.activo ? 'Archivar' : 'Restaurar'}</button>
+                    <button type="button" className="btn btn-peligro" disabled={ocupado} onClick={() => void eliminar()}>Eliminar</button>
                 </div>
             </div>
 

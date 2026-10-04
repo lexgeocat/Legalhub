@@ -4,7 +4,7 @@ import { CATEGORIAS_MODELO } from '../../domain/fuenteModelo';
 import { PLANTILLAS_INICIALES } from '../../domain/plantillasIniciales';
 import { claveNormalizada } from '../../domain/texto';
 import {
-    Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, Vacio, avisar, etiquetaTipo,
+    Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, Vacio, avisar, confirmar, etiquetaTipo,
 } from '../comunes';
 import { EditorModelo } from '../EditorModelo';
 import { mensajeError, useCargar, useServicios } from '../servicios';
@@ -65,6 +65,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
     const [cat, setCat] = useState('');
     const [importando, setImportando] = useState(false);
     const [plantillas, setPlantillas] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const filtrados = useMemo(() => {
         const k = claveNormalizada(q.trim());
@@ -77,6 +78,20 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
         () => [...new Set([...CATEGORIAS_MODELO, ...(lista.datos ?? []).map((m) => m.categoria).filter(Boolean)])],
         [lista.datos],
     );
+
+    async function eliminar(m: ModeloResumen) {
+        try {
+            const usos = await s.eliminarModelo.usos(m.id);
+            const uso = usos > 0 ? ` Se usó en ${usos} documento(s); esos documentos no se modifican.` : '';
+            if (!(await confirmar(`¿Eliminar el modelo «${m.nombre}» con todas sus versiones?${uso}`, 'Eliminar modelo'))) return;
+            await s.eliminarModelo.ejecutar(m.id);
+            setError(null);
+            lista.recargar();
+            avisar('Modelo eliminado');
+        } catch (err) {
+            setError(mensajeError(err));
+        }
+    }
 
     return (
         <div className="pagina">
@@ -104,7 +119,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
                 </label>
             </div>
 
-            <Aviso error={lista.error} />
+            <Aviso error={error ?? lista.error} />
 
             {lista.datos && filtrados.length === 0 && (
                 <Vacio
@@ -123,7 +138,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
             <div className="modelos-grid">
                 {filtrados.map((m: ModeloResumen) => (
                     <div key={m.id} className="modelo-card" role="button" tabIndex={0} onClick={() => ver(m.id)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') ver(m.id); }}>
+                        onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) ver(m.id); }}>
                         <div className="mc-cab">
                             <Insignia tono="azul">{m.categoria || 'Sin categoría'}</Insignia>
                             {m.materia && <Insignia tono="violeta">{etiquetaTipo(m.materia)}</Insignia>}
@@ -135,6 +150,16 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
                             <span>v{m.version}</span>
                             <span>{m.editable ? 'Editable' : 'Word'}</span>
                             <span>{m.numCampos} campos</span>
+                            <span className="espacio" />
+                            <button
+                                type="button"
+                                className="btn btn-fan btn-icono btn-sm"
+                                aria-label="Eliminar modelo"
+                                title="Eliminar modelo"
+                                onClick={(e) => { e.stopPropagation(); void eliminar(m); }}
+                            >
+                                <Icono n="papelera" tam={15} />
+                            </button>
                         </div>
                     </div>
                 ))}
