@@ -13,7 +13,6 @@ export interface CampoPropio { clave: string; etiqueta: string; tipo: TipoCampo;
 
 export type TamanoPagina = 'carta' | 'oficio' | 'a4';
 
-/** Márgenes de la página, en centímetros. */
 export interface Margenes { superior: number; inferior: number; izquierdo: number; derecho: number }
 
 export interface ConfigPagina {
@@ -23,6 +22,7 @@ export interface ConfigPagina {
     interlineado: number;
     sangria: boolean;
     margenes: Margenes;
+    simetricos: boolean;
 }
 
 export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[] }
@@ -30,27 +30,28 @@ export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string;
 export const FUENTES_PAGINA = ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Garamond', 'Georgia', 'Verdana'];
 export const CATEGORIAS_MODELO = ['Escrito judicial', 'Contrato', 'Minuta', 'Documento privado', 'Poder', 'Carta o notificación', 'Otro'];
 
-/** Papel en centímetros (ancho × alto). */
 export const PAGINA_CM: Record<TamanoPagina, { w: number; h: number }> = {
     carta: { w: 21.59, h: 27.94 },
     oficio: { w: 21.59, h: 33.02 },
     a4: { w: 21, h: 29.7 },
 };
 
-/** Ancho y alto mínimos que debe conservar el área de texto. */
 export const AREA_MIN_CM = 5;
 export const MARGEN_MAX_CM = 15;
 
 export const MARGENES_BASE: Margenes = { superior: 2.5, inferior: 2.5, izquierdo: 3, derecho: 2.5 };
 export const MARGENES_MEMORIAL: Margenes = { superior: 5.5, inferior: 2, izquierdo: 4, derecho: 2 };
 
-export const PRESETS_MARGENES: { id: string; etiqueta: string; margenes: Margenes }[] = [
-    { id: 'base', etiqueta: 'Predeterminado', margenes: MARGENES_BASE },
-    { id: 'memorial', etiqueta: 'Memorial', margenes: MARGENES_MEMORIAL },
-    { id: 'word', etiqueta: 'Word (2,54)', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 2.54, derecho: 2.54 } },
-    { id: 'moderado', etiqueta: 'Moderado', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 1.91, derecho: 1.91 } },
-    { id: 'estrecho', etiqueta: 'Estrecho', margenes: { superior: 1.27, inferior: 1.27, izquierdo: 1.27, derecho: 1.27 } },
-    { id: 'ancho', etiqueta: 'Ancho', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 5.08, derecho: 5.08 } },
+export interface PresetMargenes { id: string; etiqueta: string; margenes: Margenes; simetricos: boolean }
+
+export const PRESETS_MARGENES: PresetMargenes[] = [
+    { id: 'base', etiqueta: 'Predeterminado', margenes: MARGENES_BASE, simetricos: false },
+    { id: 'memorial', etiqueta: 'Memorial (simétrico)', margenes: MARGENES_MEMORIAL, simetricos: true },
+    { id: 'word', etiqueta: 'Word (2,54)', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 2.54, derecho: 2.54 }, simetricos: false },
+    { id: 'moderado', etiqueta: 'Moderado', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 1.91, derecho: 1.91 }, simetricos: false },
+    { id: 'estrecho', etiqueta: 'Estrecho', margenes: { superior: 1.27, inferior: 1.27, izquierdo: 1.27, derecho: 1.27 }, simetricos: false },
+    { id: 'ancho', etiqueta: 'Ancho', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 5.08, derecho: 5.08 }, simetricos: false },
+    { id: 'simetrico', etiqueta: 'Simétrico (Word)', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 3.18, derecho: 2.54 }, simetricos: true },
 ];
 
 const casi = (a: number, b: number) => Math.abs(a - b) < 0.005;
@@ -58,7 +59,10 @@ const casi = (a: number, b: number) => Math.abs(a - b) < 0.005;
 export const margenesIguales = (a: Margenes, b: Margenes) =>
     casi(a.superior, b.superior) && casi(a.inferior, b.inferior) && casi(a.izquierdo, b.izquierdo) && casi(a.derecho, b.derecho);
 
-export const presetDe = (m: Margenes) => PRESETS_MARGENES.find((p) => margenesIguales(p.margenes, m));
+export const presetDe = (m: Margenes, simetricos?: boolean) =>
+    PRESETS_MARGENES.find((p) => margenesIguales(p.margenes, m) && (simetricos === undefined || p.simetricos === simetricos));
+
+export const esMemorial = (m: Margenes) => margenesIguales(m, MARGENES_MEMORIAL);
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 const bajar = (n: number) => Math.floor(n * 100) / 100;
@@ -68,7 +72,6 @@ function limitar(v: unknown, defecto: number): number {
     return Number.isFinite(n) ? Math.min(MARGEN_MAX_CM, Math.max(0, redondear(n))) : defecto;
 }
 
-/** Si dos márgenes opuestos se comen el área de texto, los reduce en proporción. */
 function ajustarPar(a: number, b: number, total: number): [number, number] {
     const max = Math.max(0, total - AREA_MIN_CM);
     if (a + b <= max) return [a, b];
@@ -76,7 +79,6 @@ function ajustarPar(a: number, b: number, total: number): [number, number] {
     return [bajar(a * f), bajar(b * f)];
 }
 
-/** Devuelve márgenes válidos (con valores por defecto si faltan o son inválidos). */
 export function margenesSeguros(m: Partial<Margenes> | null | undefined, tamano: TamanoPagina): Margenes {
     const p = PAGINA_CM[tamano] ?? PAGINA_CM.carta;
     const o = (m ?? {}) as Partial<Record<keyof Margenes, unknown>>;
@@ -91,7 +93,7 @@ export function margenesSeguros(m: Partial<Margenes> | null | undefined, tamano:
 
 export const CONFIG_POR_DEFECTO: ConfigPagina = {
     tamano: 'carta', fuente: 'Times New Roman', tamanoPt: 12, interlineado: 1.5, sangria: false,
-    margenes: { ...MARGENES_BASE },
+    margenes: { ...MARGENES_BASE }, simetricos: false,
 };
 
 export const fuenteVacia = (): FuenteModelo => ({
@@ -106,6 +108,7 @@ export function leerFuente(json: string): FuenteModelo {
     const r = (typeof o === 'object' && o !== null ? o : {}) as Partial<FuenteModelo>;
     const config = { ...CONFIG_POR_DEFECTO, ...(r.config ?? {}) };
     config.margenes = margenesSeguros(r.config?.margenes, config.tamano);
+    config.simetricos = r.config?.simetricos === true;
     return {
         version: 1,
         config,
@@ -120,18 +123,12 @@ export function marcadorDeCampo(c: CampoPropio): string {
     return `{{caso.${c.clave}${c.requerido ? '' : '?'}${FILTRO_POR_TIPO[c.tipo] ?? ''}}}`;
 }
 
-/** {{x | f}} → {{x? | f}} */
 export function hacerOpcional(marcador: string): string {
     return marcador.replace(
         /^\{\{\s*([^|}#/?]+?)\s*(\||\}\})/,
         (_m, ruta: string, sep: string) => `{{${ruta}?${sep === '|' ? ' |' : '}}'}`,
     );
 }
-
-/* ---------- Sintaxis del editor ----------
-   Cada línea es un párrafo.  **negrita**  *cursiva*  ++subrayado++
-   # Título (centrado)   ## Subtítulo   [c] centrado  [d] derecha  [i] izquierda  [j] justificado
-   === salto de página   \* para un asterisco literal                                   */
 
 export type Alineacion = 'left' | 'center' | 'right' | 'both';
 export type EstiloParrafo = 'normal' | 'titulo' | 'subtitulo';
