@@ -1,6 +1,6 @@
 import type { ArchivosPuerto } from '../../application/puertos/archivos';
 import type { DbPuerto, Fila } from '../../application/puertos/db';
-import type { FormatoPaquete, RepositorioModelos } from '../../application/puertos/modelos';
+import type { ContenidoPaquete, FormatoPaquete, RepositorioModelos } from '../../application/puertos/modelos';
 import type { ModeloVersion } from '../../domain/entidades';
 import { ErrorDeDatos } from '../../domain/errores';
 
@@ -18,22 +18,26 @@ export class RepositorioModelosDb implements RepositorioModelos {
         if (!f) return null;
         return {
             id: t(f.id), modeloId: t(f.modelo_id), version: Number(f.version), rutaPaquete: t(f.ruta_paquete),
-            sha256: t(f.sha256), schemaJson: t(f.schema_json), notas: f.notas == null ? undefined : t(f.notas),
-            creadoEn: t(f.created_at),
+            sha256: t(f.sha256), schemaJson: t(f.schema_json), editable: Number(f.editable) === 1,
+            notas: f.notas == null ? undefined : t(f.notas), creadoEn: t(f.created_at),
         };
     }
 
-    async leerPlantilla(modeloVersionId: string): Promise<Uint8Array> {
+    async leerPaquete(modeloVersionId: string): Promise<ContenidoPaquete> {
         const v = await this.obtenerVersion(modeloVersionId);
         if (!v) throw new Error(`Versión de modelo no encontrada: ${modeloVersionId}`);
         const bytes = await this.archivos.leer(v.rutaPaquete);
         if ((await this.archivos.sha256Bytes(bytes)) !== v.sha256) {
             throw new ErrorDeDatos('El paquete del modelo cambió o está dañado (el hash no coincide)');
         }
-        const { docx, manifest } = this.formato.desempaquetar(bytes);
-        if ((await this.archivos.sha256Bytes(docx)) !== manifest.sha256) {
+        const paquete = this.formato.desempaquetar(bytes);
+        if ((await this.archivos.sha256Bytes(paquete.docx)) !== paquete.manifest.sha256) {
             throw new ErrorDeDatos('La plantilla del paquete está dañada (el hash no coincide)');
         }
-        return docx;
+        return paquete;
+    }
+
+    async leerPlantilla(modeloVersionId: string): Promise<Uint8Array> {
+        return (await this.leerPaquete(modeloVersionId)).docx;
     }
 }

@@ -1,11 +1,13 @@
 import { ErrorDeDatos } from '../errores';
 
 type Genero = 'M' | 'F';
+type ConGenero = { genero: Genero | null };
 
 export function concordar(
-  partes: { genero: Genero | null }[],
+  entrada: ConGenero | ConGenero[],
   singM: string, singF: string, plurM?: string, plurF?: string,
 ): string {
+  const partes = Array.isArray(entrada) ? entrada : [entrada];
   if (partes.length === 0) return '';
   if (partes.some((p) => p.genero === null)) {
     throw new ErrorDeDatos('Falta el género de una de las partes');

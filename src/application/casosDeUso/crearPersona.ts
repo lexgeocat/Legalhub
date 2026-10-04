@@ -32,29 +32,35 @@ export const EsquemaPersona = z
     });
 
 export type DatosPersona = z.input<typeof EsquemaPersona>;
+export type PersonaValida = z.output<typeof EsquemaPersona>;
+
+export function validarPersona(entrada: DatosPersona): PersonaValida {
+    const r = EsquemaPersona.safeParse(entrada);
+    if (!r.success) throw new ErrorDeDatos(r.error.issues.map((i) => i.message).join('; '));
+    return r.data;
+}
+
+export function columnasPersona(d: PersonaValida): Record<string, unknown> {
+    return {
+        tipo: d.tipo, nombres: d.nombres, apellido_paterno: d.apellidoPaterno,
+        apellido_materno: d.apellidoMaterno, apellido_casada: d.apellidoCasada,
+        ci_numero: d.ciNumero, ci_complemento: d.ciComplemento, ci_expedido: d.ciExpedido,
+        fecha_nacimiento: d.fechaNacimiento, genero: d.genero, estado_civil: d.estadoCivil,
+        nacionalidad: d.nacionalidad, profesion: d.profesion, razon_social: d.razonSocial, nit: d.nit,
+        genero_gramatical: d.generoGramatical, representante_id: d.representanteId, poder_ref: d.poderRef,
+        domicilio: d.domicilio, telefono: d.telefono, correo: d.correo,
+    };
+}
 
 export class CrearPersona {
     constructor(private readonly db: DbPuerto) { }
 
     async ejecutar(entrada: DatosPersona): Promise<string> {
-        const r = EsquemaPersona.safeParse(entrada);
-        if (!r.success) throw new ErrorDeDatos(r.error.issues.map((i) => i.message).join('; '));
-        const d = r.data;
+        const d = validarPersona(entrada);
         const id = nuevoId();
         const ahora = new Date().toISOString();
         await this.db.transaccion(
-            [
-                insertar('persona', {
-                    id, tipo: d.tipo, nombres: d.nombres, apellido_paterno: d.apellidoPaterno,
-                    apellido_materno: d.apellidoMaterno, apellido_casada: d.apellidoCasada,
-                    ci_numero: d.ciNumero, ci_complemento: d.ciComplemento, ci_expedido: d.ciExpedido,
-                    fecha_nacimiento: d.fechaNacimiento, genero: d.genero, estado_civil: d.estadoCivil,
-                    nacionalidad: d.nacionalidad, profesion: d.profesion, razon_social: d.razonSocial, nit: d.nit,
-                    genero_gramatical: d.generoGramatical, representante_id: d.representanteId, poder_ref: d.poderRef,
-                    domicilio: d.domicilio, telefono: d.telefono, correo: d.correo,
-                    created_at: ahora, updated_at: ahora,
-                }),
-            ],
+            [insertar('persona', { id, ...columnasPersona(d), created_at: ahora, updated_at: ahora })],
             [{ accion: 'persona.crear', entidad: 'persona', entidadId: id, detalle: { tipo: d.tipo } }],
         );
         return id;

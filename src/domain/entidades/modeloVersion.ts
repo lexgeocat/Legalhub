@@ -1,12 +1,11 @@
-
-// domain/entidades/modeloVersion.ts
 export interface ModeloVersion {
   id: string;
-  modeloId: string; // Referencia a Modelo
+  modeloId: string;
   version: number;
-  rutaPaquete: string; // Ruta al archivo .lhmodel
-  sha256: string;      // Hash del paquete
-  schemaJson: string;  // Esquema extraído del modelo (JSON string)
+  rutaPaquete: string; // .lhmodel
+  sha256: string; // hash del paquete
+  schemaJson: string;
+  editable: boolean; // true si se creó en el editor (tiene texto fuente)
   notas?: string;
   creadoEn: string; // ISO
 }

@@ -11,7 +11,7 @@ export interface LlamadaFiltro {
 }
 
 export type Token =
-    | { tipo: 'valor'; ruta: string; filtros: LlamadaFiltro[] }
+    | { tipo: 'valor'; ruta: string; opcional: boolean; filtros: LlamadaFiltro[] }
     | { tipo: 'apertura'; ruta: string }
     | { tipo: 'cierre'; ruta: string };
 
@@ -73,5 +73,12 @@ export function parsearToken(crudo: string): Token {
     if (s.startsWith('#')) return { tipo: 'apertura', ruta: validarRuta(s.slice(1)) };
     if (s.startsWith('/')) return { tipo: 'cierre', ruta: validarRuta(s.slice(1)) };
     const [rutaTxt, ...filtrosTxt] = dividir(s, '|');
-    return { tipo: 'valor', ruta: validarRuta(rutaTxt), filtros: filtrosTxt.map(parsearFiltro) };
+    const limpia = rutaTxt.trim();
+    const opcional = limpia.endsWith('?');
+    return {
+        tipo: 'valor',
+        ruta: validarRuta(opcional ? limpia.slice(0, -1) : limpia),
+        opcional,
+        filtros: filtrosTxt.map(parsearFiltro),
+    };
 }

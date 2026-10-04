@@ -1,22 +1,17 @@
-
-// domain/entidades/expediente.ts
-export type EstadoExpediente = 
-  | 'abierto' 
-  | 'en_tramite' 
-  | 'suspendido' 
-  | 'cerrado' 
-  | 'archivado';
+export type EstadoExpediente = 'abierto' | 'en_tramite' | 'suspendido' | 'cerrado' | 'archivado';
 
 export interface Expediente {
   id: string;
-  codigo: string; // Formato LH-AAAA-NNNN
-  materia: string;
+  codigo: string; // LH-AAAA-NNNN
+  tipo: string; // clave de TIPOS_EXPEDIENTE
+  materia: string; // asunto
   referencia?: string;
   estado: EstadoExpediente;
   juzgado?: string;
-  nroCausa?: string; // Número que asigna la autoridad
-  clienteId: string; // Referencia a Persona
-  creadoEn: string; // ISO
-  actualizadoEn: string; // ISO
-  eliminadoEn?: string; // ISO (borrado lógico)
+  nroCausa?: string;
+  clienteId: string;
+  datos: Record<string, string>; // «caso.*» precargado en los modelos
+  creadoEn: string;
+  actualizadoEn: string;
+  eliminadoEn?: string;
 }

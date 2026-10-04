@@ -1,0 +1,2 @@
+ALTER TABLE modelo ADD COLUMN descripcion TEXT;
+ALTER TABLE modelo_version ADD COLUMN editable INTEGER NOT NULL DEFAULT 0;

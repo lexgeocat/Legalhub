@@ -53,7 +53,7 @@ export function escanear(plantilla: Uint8Array, opciones: OpcionesEscaneo = {}):
   const errores: string[] = [];
   const advertencias: string[] = [];
   const esquema: CampoEsquema[] = [];
-  const vistos = new Set<string>();
+  const vistos = new Map<string, CampoEsquema>();
   let totalMarcadores = 0;
   let contenedores = 0;
   let tablas = 0;
@@ -150,10 +150,18 @@ export function escanear(plantilla: Uint8Array, opciones: OpcionesEscaneo = {}):
         else if (r.aviso && !advertencias.includes(r.aviso)) advertencias.push(r.aviso);
       }
       const clave = `${abiertos.map(claveNormalizada).join('>')}|${claveNormalizada(token.ruta)}`;
-      if (vistos.has(clave)) continue;
-      vistos.add(clave);
       const tipo = token.filtros.map((f) => TIPO_POR_FILTRO[f.nombre]).find(Boolean) ?? 'texto';
-      esquema.push({ path: token.ruta, tipo, requerido: true, etiqueta: etiquetaDe(token.ruta), ambito: [...abiertos] });
+      const previo = vistos.get(clave);
+      if (previo) {
+        if (!token.opcional) previo.requerido = true;
+        if (previo.tipo === 'texto') previo.tipo = tipo;
+        continue;
+      }
+      const campo: CampoEsquema = {
+        path: token.ruta, tipo, requerido: !token.opcional, etiqueta: etiquetaDe(token.ruta), ambito: [...abiertos],
+      };
+      vistos.set(clave, campo);
+      esquema.push(campo);
     }
     for (const sinCerrar of pila) errores.push(`${nombre}: apertura «#${sinCerrar}» sin cierre`);
   }

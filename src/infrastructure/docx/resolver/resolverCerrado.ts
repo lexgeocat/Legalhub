@@ -96,7 +96,7 @@ export function resolverCerrado(opciones: OpcionesResolver = {}): ScopeDataResol
     }
 
     const rutaVisible = [...padres, token.ruta].join('.');
-    const esOpcional = opcionales.has(claveNormalizada(token.ruta));
+    const esOpcional = token.opcional || opcionales.has(claveNormalizada(token.ruta));
     let valor: unknown = resuelto.valor;
     const sinDato = valor === undefined || valor === null || valor === '';
 
@@ -124,6 +124,14 @@ export function resolverCerrado(opciones: OpcionesResolver = {}): ScopeDataResol
     else if (typeof valor === 'number' || typeof valor === 'bigint' || typeof valor === 'boolean') texto = String(valor);
     else if (esObjeto(valor) && !Array.isArray(valor) && valor.toString !== Object.prototype.toString) texto = String(valor);
     else throw new ErrorDeDatos(`«${rutaVisible}» no es un valor de texto; usa un filtro (p. ej. lista)`);
+
+    if (texto.trim() === '') {
+      if (!esOpcional) {
+        throw new ErrorDeDatos(`El dato «${rutaVisible}» quedó vacío (¿faltan partes o datos en el expediente?)`);
+      }
+      opciones.bitacora?.push({ ruta: rutaVisible, valor: '', opcionalVacio: true });
+      return '';
+    }
 
     opciones.bitacora?.push({ ruta: rutaVisible, valor: texto });
     return texto;

@@ -7,10 +7,11 @@ import { hoyISO } from '../../domain/filtros/fecha';
 import { atributoConcordado, estadoCivilConcordado, nombrePersona } from '../../domain/personas';
 import { fusionarProfundo } from '../../domain/rutas';
 import { claveNormalizada, normalizarRol, pluralRol } from '../../domain/texto';
+import { ROLES_CONOCIDOS } from '../../domain/tiposExpediente';
 
 type Ctx = Record<string, unknown>;
 const s = (v: unknown): string => (v == null ? '' : String(v));
-const ROLES_BASE = ['demandante', 'demandado', 'tercero', 'acusado', 'denunciante'];
+const ROLES_BASE = ROLES_CONOCIDOS;
 
 function json(v: unknown): Ctx {
     try {
@@ -109,7 +110,8 @@ export class ConstructorContextoDb implements ConstructorContexto {
             domicilio_procesal: cfg.abogadoDomicilioProcesal,
         };
 
-        const primero = (roles.demandantes?.[0] ?? cliente) as Ctx;
+        const primeraParte = Object.values(roles).find((l) => l.length > 0)?.[0];
+        const primero = (roles.demandantes?.[0] ?? primeraParte ?? cliente) as Ctx;
         flags.hay_conyuge = ['casado', 'casada'].includes(claveNormalizada(s(primero.estado_civil)));
 
         const filasInm = await this.db.consultar<Fila>(
@@ -140,10 +142,10 @@ export class ConstructorContextoDb implements ConstructorContexto {
             ...roles, ...singulares, ...flags,
             partes: roles,
             expediente: {
-                codigo: s(exp.codigo), materia: s(exp.materia), referencia: s(exp.referencia),
+                codigo: s(exp.codigo), tipo: s(exp.tipo), materia: s(exp.materia), referencia: s(exp.referencia),
                 juzgado: s(exp.juzgado), nro_causa: s(exp.nro_causa), estado: s(exp.estado),
             },
-            cliente, abogado, inmuebles, caso: {},
+            cliente, abogado, inmuebles, caso: json(exp.datos_json),
             hoy: hoyISO(this.ahora()),
         };
         return fusionarProfundo(base, datosFormulario);

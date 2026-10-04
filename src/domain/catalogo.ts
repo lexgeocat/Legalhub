@@ -1,4 +1,6 @@
-import { claveNormalizada } from './texto';
+import type { CampoPropio } from './fuenteModelo';
+import { claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from './texto';
+import { ROLES_CONOCIDOS } from './tiposExpediente';
 
 export const CAMPOS_PERSONA = [
     'id', 'tipo', 'nombre', 'nombre_completo', 'nombres', 'apellido_paterno', 'apellido_materno', 'apellido_casada',
@@ -6,7 +8,7 @@ export const CAMPOS_PERSONA = [
     'profesion', 'fecha_nacimiento', 'domicilio', 'telefono', 'correo', 'razon_social', 'nit', 'poder_ref',
     'domicilio_procesal', 'representante', 'porcentaje',
 ] as const;
-export const CAMPOS_EXPEDIENTE = ['codigo', 'materia', 'referencia', 'juzgado', 'nro_causa', 'estado'] as const;
+export const CAMPOS_EXPEDIENTE = ['codigo', 'tipo', 'materia', 'referencia', 'juzgado', 'nro_causa', 'estado'] as const;
 export const CAMPOS_INMUEBLE = [
     'id', 'tipo', 'departamento', 'provincia', 'municipio', 'localidad', 'superficie_m2', 'superficie',
     'matricula', 'codigo_catastral', 'ubicacion', 'colindancias', 'gravamenes', 'observaciones', 'titulares',
@@ -17,8 +19,8 @@ const PERSONA = set(CAMPOS_PERSONA);
 const EXPEDIENTE = set(CAMPOS_EXPEDIENTE);
 const INMUEBLE = set(CAMPOS_INMUEBLE);
 const COLINDANCIAS = set(['norte', 'sur', 'este', 'oeste']);
-const ROLES = set(['demandantes', 'demandados', 'terceros', 'acusados', 'denunciantes', 'partes']);
-const SINGULARES = set(['demandante', 'demandado', 'tercero', 'acusado', 'denunciante']);
+const ROLES = set([...ROLES_CONOCIDOS.map(pluralRol), 'partes']);
+const SINGULARES = set(ROLES_CONOCIDOS);
 
 export interface ResultadoRuta {
     valida: boolean;
@@ -87,21 +89,87 @@ export function validarRutaCatalogo(ruta: string, ambito: readonly string[]): Re
     return { valida: false };
 }
 
-export const BLOQUES_LISTOS = [
-    { nombre: 'Lista de partes', texto: '{{demandantes | lista}}' },
-    { nombre: 'Bucle de partes', texto: '{{#demandantes}}\n{{nombre | mayus}}, con C.I. N° {{ci}}, {{estado_civil}}, con domicilio en {{domicilio}};\n{{/demandantes}}' },
-    { nombre: 'Condicional de cónyuge', texto: '{{#hay_conyuge}}\n…\n{{/hay_conyuge}}' },
-    { nombre: 'Concordancia', texto: '{{demandantes | concordar:"mayor de edad":"mayor de edad":"mayores de edad":"mayores de edad"}}' },
-];
+/* ---------------- Panel de campos ---------------- */
 
-const EN_BLOQUE_PERSONA = CAMPOS_PERSONA.filter((c) => !['id', 'ci_datos', 'representante', 'porcentaje'].includes(c));
+export interface ItemPanel { etiqueta: string; texto: string; bloque?: boolean }
+export interface GrupoPanel { id: string; titulo: string; ayuda?: string; abierto?: boolean; items: ItemPanel[] }
 
-export const PANEL_CAMPOS: { grupo: string; marcadores: string[] }[] = [
-    { grupo: 'Expediente', marcadores: CAMPOS_EXPEDIENTE.map((c) => `{{expediente.${c}}}`) },
-    { grupo: 'Fecha de hoy', marcadores: ['{{hoy | fecha}}'] },
-    { grupo: 'Dentro de un bloque de partes ({{#demandantes}})', marcadores: EN_BLOQUE_PERSONA.map((c) => `{{${c}}}`) },
-    { grupo: 'Cliente', marcadores: EN_BLOQUE_PERSONA.map((c) => `{{cliente.${c}}}`) },
-    { grupo: 'Abogado', marcadores: [...EN_BLOQUE_PERSONA.map((c) => `{{abogado.${c}}}`), '{{abogado.matricula_profesional}}'] },
-    { grupo: 'Dentro de un bloque de inmuebles ({{#inmuebles}})', marcadores: ['{{superficie | superficie}}', '{{matricula}}', '{{codigo_catastral}}', '{{ubicacion}}', '{{colindancias.norte}}', '{{colindancias.sur}}', '{{colindancias.este}}', '{{colindancias.oeste}}', '{{titulares | lista}}'] },
-    { grupo: 'Caso (campos libres)', marcadores: ['{{caso.cuantia | moneda}}', '{{caso.hechos}}', '{{caso.petitorio}}'] },
-];
+const ETIQUETAS: Record<string, string> = {
+    nombre: 'Nombre completo', nombres: 'Nombres', apellido_paterno: 'Apellido paterno', apellido_materno: 'Apellido materno',
+    apellido_casada: 'Apellido de casada', ci: 'C.I. (con complemento y expedición)', ci_numero: 'C.I. (solo número)',
+    ci_complemento: 'C.I. (complemento)', ci_expedido: 'C.I. (expedido en)', genero: 'Género', estado_civil: 'Estado civil',
+    nacionalidad: 'Nacionalidad', profesion: 'Profesión', fecha_nacimiento: 'Fecha de nacimiento', domicilio: 'Domicilio',
+    telefono: 'Teléfono', correo: 'Correo', razon_social: 'Razón social', nit: 'NIT', poder_ref: 'Poder (referencia)',
+    domicilio_procesal: 'Domicilio procesal',
+};
+const ETIQUETAS_EXP: Record<string, string> = {
+    codigo: 'Código interno', tipo: 'Tipo de expediente', materia: 'Asunto', referencia: 'Referencia',
+    juzgado: 'Juzgado', nro_causa: 'N° de causa', estado: 'Estado',
+};
+const SIN_PANEL = ['id', 'tipo', 'ci_datos', 'representante', 'porcentaje', 'nombre_completo'];
+const CAMPOS_PANEL: string[] = CAMPOS_PERSONA.filter((c) => !SIN_PANEL.includes(c));
+
+function itemsPersona(prefijo: string): ItemPanel[] {
+    const items: ItemPanel[] = CAMPOS_PANEL.map((c) => ({ etiqueta: ETIQUETAS[c] ?? c, texto: `{{${prefijo}${c}}}` }));
+    items.splice(1, 0, { etiqueta: 'Nombre en MAYÚSCULAS', texto: `{{${prefijo}nombre | mayus}}` });
+    return items;
+}
+
+export function construirPanel(rolSingular: string): GrupoPanel[] {
+    const singular = normalizarRol(rolSingular) || 'demandante';
+    const plural = pluralRol(singular);
+    return [
+        {
+            id: 'rol', titulo: `Partes: ${etiquetaRol(plural).toLowerCase()}`, abierto: true,
+            ayuda: 'Escribe arriba el rol (demandante, vendedor, arrendatario…). Los bloques se insertan en líneas propias.',
+            items: [
+                { etiqueta: 'Lista de nombres («A, B y C»)', texto: `{{${plural} | lista}}` },
+                {
+                    etiqueta: 'Un párrafo por parte (bucle)', bloque: true,
+                    texto: `{{#${plural}}}\n{{nombre | mayus}}, con C.I. N° {{ci}}, {{estado_civil}}, {{nacionalidad}}, con domicilio en {{domicilio}};\n{{/${plural}}}`,
+                },
+                { etiqueta: 'Concordancia: el / la / los / las', texto: `{{${plural} | concordar:"el":"la":"los":"las"}}` },
+                { etiqueta: 'Concordancia: señor / señora', texto: `{{${plural} | concordar:"señor":"señora":"señores":"señoras"}}` },
+                { etiqueta: 'Concordancia: mayor de edad', texto: `{{${plural} | concordar:"mayor de edad":"mayor de edad":"mayores de edad":"mayores de edad"}}` },
+                { etiqueta: 'Solo si existe este rol', bloque: true, texto: `{{#hay_${plural}}}\n…\n{{/hay_${plural}}}` },
+            ],
+        },
+        { id: 'rol1', titulo: `Primera parte (${singular})`, items: itemsPersona(`${singular}.`) },
+        {
+            id: 'exp', titulo: 'Expediente',
+            items: CAMPOS_EXPEDIENTE.map((c) => ({ etiqueta: ETIQUETAS_EXP[c] ?? c, texto: `{{expediente.${c}}}` })),
+        },
+        { id: 'fecha', titulo: 'Fecha', items: [{ etiqueta: 'Fecha de hoy («2 de octubre de 2026»)', texto: '{{hoy | fecha}}' }] },
+        { id: 'cliente', titulo: 'Cliente', items: itemsPersona('cliente.') },
+        {
+            id: 'abogado', titulo: 'Abogado',
+            items: [...itemsPersona('abogado.'), { etiqueta: 'Matrícula profesional', texto: '{{abogado.matricula_profesional}}' }],
+        },
+        {
+            id: 'inm', titulo: 'Inmuebles',
+            ayuda: 'Los campos van dentro del bloque de inmuebles.',
+            items: [
+                {
+                    etiqueta: 'Un párrafo por inmueble (bucle)', bloque: true,
+                    texto: '{{#inmuebles}}\nInmueble ubicado en {{ubicacion}}, matrícula N° {{matricula}}, superficie {{superficie | superficie}}, de propiedad de {{titulares | lista}}.\n{{/inmuebles}}',
+                },
+                { etiqueta: 'Superficie en número y literal', texto: '{{superficie | superficie}}' },
+                { etiqueta: 'Matrícula', texto: '{{matricula}}' },
+                { etiqueta: 'Código catastral', texto: '{{codigo_catastral}}' },
+                { etiqueta: 'Ubicación', texto: '{{ubicacion}}' },
+                { etiqueta: 'Titulares', texto: '{{titulares | lista}}' },
+                { etiqueta: 'Colindancia norte', texto: '{{colindancias.norte}}' },
+                { etiqueta: 'Colindancia sur', texto: '{{colindancias.sur}}' },
+                { etiqueta: 'Colindancia este', texto: '{{colindancias.este}}' },
+                { etiqueta: 'Colindancia oeste', texto: '{{colindancias.oeste}}' },
+            ],
+        },
+        {
+            id: 'cond', titulo: 'Condicionales',
+            items: [{ etiqueta: 'Solo si la primera parte está casada', bloque: true, texto: '{{#hay_conyuge}}\n…\n{{/hay_conyuge}}' }],
+        },
+    ];
+}
+
+export const itemsDeCampos = (campos: CampoPropio[]): ItemPanel[] =>
+    campos.map((c) => ({ etiqueta: c.etiqueta, texto: `{{caso.${c.clave}}}` }));
