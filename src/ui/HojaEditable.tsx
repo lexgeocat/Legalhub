@@ -636,21 +636,36 @@ export function HojaEditable({ ref, textoInicial, config, onCambio, onFormato, o
             if (!ult) return;
             if (!r.collapsed) r.deleteContents();
             r.insertNode(frag);
-            r.setStartAfter(ult);
+            const sig = ult.nextSibling;
+            if (!sig || sig.nodeName === 'BR') {
+                // Chromium no deja el cursor tras un inline no editable si es lo último del párrafo:
+                // se añade un carácter invisible (limpiarTexto lo descarta al leer).
+                const zw = document.createTextNode('\u200B');
+                ult.parentNode?.insertBefore(zw, sig);
+                r.setStart(zw, 1);
+            } else {
+                r.setStartAfter(ult);
+            }
             r.collapse(true);
             ponerRango(r);
         } else {
             const nuevos = bloquesADom(texto);
             colocarBloques(el, r, nuevos);
+            normalizar(el); // antes de colocar el cursor: así un salto al final ya tiene párrafo siguiente
             colocarCursor(nuevos);
         }
         tras(true);
     }
 
     function comando(c: 'negrita' | 'cursiva' | 'subrayado') {
+        const el = raizRef.current;
+        if (!el) return;
         foco();
+        const s = window.getSelection();
+        const b = s?.anchorNode ? bloqueRaiz(el, s.anchorNode) : null;
+        if (c === 'negrita' && b && estiloDe(b) !== 'normal') return; // títulos y subtítulos van siempre en negrita
         document.execCommand(c === 'negrita' ? 'bold' : c === 'cursiva' ? 'italic' : 'underline');
-        emitirFormato();
+        tras(true);
     }
 
     function alinear(a: Alineacion) {
@@ -660,4 +675,163 @@ export function HojaEditable({ ref, textoInicial, config, onCambio, onFormato, o
         const bloques = bloquesSeleccionados(el);
         if (bloques.length === 0) return;
         for (const b of bloques) {
-            if (a === BASE[estiloDe(b)]) b.style
+            if (a === BASE[estiloDe(b)]) b.style.removeProperty('text-align');
+            else b.style.textAlign = A_CSS[a];
+            if (!b.getAttribute('style')) b.removeAttribute('style');
+        }
+        tras(true);
+    }
+
+    /** Alterna título/subtítulo; si el bloque ya tiene ese estilo vuelve a párrafo normal. */
+    function estilo(e: 'titulo' | 'subtitulo') {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const bloques = bloquesSeleccionados(el);
+        if (bloques.length === 0) return;
+        for (const b of bloques) {
+            const nuevo: EstiloParrafo = estiloDe(b) === e ? 'normal' : e;
+            const n = renombrar(b, TAG[nuevo]);
+            if (n.style.textAlign === A_CSS[BASE[nuevo]]) n.style.removeProperty('text-align');
+            if (!n.getAttribute('style')) n.removeAttribute('style');
+        }
+        tras(true);
+    }
+
+    function saltoPagina() {
+        insertar('===', true);
+    }
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            leerTexto, insertar, comando, alinear, estilo, saltoPagina, deshacer, rehacer, enfocar: foco,
+        }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [],
+    );
+
+    /* ----- ciclo de vida ----- */
+    useEffect(() => {
+        const el = raizRef.current;
+        if (!el) return;
+        el.replaceChildren(...bloquesADom(textoInicial));
+        normalizar(el);
+        registrar(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const f = () => {
+            const el = raizRef.current;
+            const s = window.getSelection();
+            if (!el || !s || s.rangeCount === 0 || !s.anchorNode || !el.contains(s.anchorNode)) return;
+            guardada.current = s.getRangeAt(0).cloneRange();
+            emitirFormato();
+        };
+        document.addEventListener('selectionchange', f);
+        return () => document.removeEventListener('selectionchange', f);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const el = lienzo.current;
+        if (!el) return;
+        const medir = () => setAncho(el.clientWidth);
+        medir();
+        const o = new ResizeObserver(medir);
+        o.observe(el);
+        return () => o.disconnect();
+    }, []);
+
+    /* ----- eventos ----- */
+    function alEscribir(_e: FormEvent<HTMLDivElement>) {
+        if (pegando.current) return;
+        tras(false);
+    }
+
+    function alTeclear(e: KeyboardEvent<HTMLDivElement>) {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const k = e.key.toLowerCase();
+        if (k === 'z' && !e.shiftKey) { e.preventDefault(); deshacer(); }
+        else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); rehacer(); }
+        else if (k === 'b') { e.preventDefault(); comando('negrita'); }
+        else if (k === 'i') { e.preventDefault(); comando('cursiva'); }
+        else if (k === 'u') { e.preventDefault(); comando('subrayado'); }
+        // Ctrl+S se deja subir hasta la ventana, que guarda.
+    }
+
+    /** Pega siempre como texto plano (los {{…}} se convierten en etiquetas al normalizar). */
+    function alPegar(e: ClipboardEvent<HTMLDivElement>) {
+        e.preventDefault();
+        const lineas = e.clipboardData.getData('text/plain').replace(/\u00A0/g, ' ').split(/\r?\n/);
+        if (lineas.every((l) => l === '')) return;
+        foco();
+        pegando.current = true;
+        try {
+            lineas.forEach((l, i) => {
+                if (i > 0) document.execCommand('insertParagraph');
+                if (l) document.execCommand('insertText', false, l);
+            });
+        } finally {
+            pegando.current = false;
+        }
+        tras(true);
+    }
+
+    /** Doble clic en una etiqueta de campo: pide al padre que la edite. */
+    function alDobleClic(e: MouseEvent<HTMLDivElement>) {
+        const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
+        if (!chip) return;
+        e.preventDefault();
+        cb.current.onEditarCampo(chip.dataset.mk ?? chip.textContent ?? '', (nuevo) => {
+            const limpio = nuevo.trim();
+            if (!limpio) {
+                chip.remove();
+            } else {
+                const marcador = /^\{\{[\s\S]*\}\}$/.test(limpio) ? limpio : `{{${limpio}}}`;
+                chip.dataset.mk = marcador;
+                chip.textContent = marcador;
+            }
+            tras(true);
+        });
+    }
+
+    /* ----- render ----- */
+    const pag = PAGINAS[config.tamano] ?? PAGINAS.carta;
+    const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
+    const cm = (n: number) => `${(n * escala).toFixed(3)}cm`;
+    const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
+    const estiloHoja = {
+        width: cm(pag.w),
+        minHeight: cm(pag.h),
+        padding: `${cm(2.5)} ${cm(2.5)} ${cm(2.5)} ${cm(3)}`,
+        fontFamily: `"${config.fuente}", "Times New Roman", serif`,
+        fontSize: pt(config.tamanoPt),
+        lineHeight: config.interlineado,
+        '--esc': escala,
+        '--pt-titulo': pt(config.tamanoPt + 2),
+        '--sangria': cm(1.25),
+    } as CSSProperties;
+
+    return (
+        <div className="ed-lienzo" ref={lienzo}>
+            <div
+                ref={raizRef}
+                className={`hoja hoja-ed${config.sangria ? ' con-sangria' : ''}`}
+                style={estiloHoja}
+                contentEditable
+                suppressContentEditableWarning
+                spellCheck
+                lang="es"
+                role="textbox"
+                aria-multiline="true"
+                aria-label="Texto del documento"
+                onInput={alEscribir}
+                onKeyDown={alTeclear}
+                onPaste={alPegar}
+                onDoubleClick={alDobleClic}
+            />
+        </div>
+    );
+}
