@@ -1,4 +1,4 @@
-import { ScopeData, type ScopeDataArgs, type ScopeDataResolver } from 'easy-template-x';
+import { ScopeData, type ScopeDataArgs, type ScopeDataResolver, type TemplateContent, type TemplateData } from 'easy-template-x';
 import type { EntradaVerificacion } from '../../../application/puertos/motorPlantillas';
 import { ErrorDeDatos, FILTROS } from '../../../domain/filtros';
 import { claveNormalizada, mensaje, normalizarCaracteres, parsearToken } from '../gramatica';
@@ -59,7 +59,7 @@ function buscar(cadena: unknown[], ruta: string): { encontrado: boolean; valor?:
 export function resolverCerrado(opciones: OpcionesResolver = {}): ScopeDataResolver {
   const opcionales = new Set([...(opciones.opcionales ?? [])].map(claveNormalizada));
 
-  return (args: ScopeDataArgs) => {
+  return (args: ScopeDataArgs): TemplateContent | TemplateData[] => {
     const { path, strPath, data } = args;
     if (!path.length) return ScopeData.defaultResolver(args);
 
@@ -67,7 +67,7 @@ export function resolverCerrado(opciones: OpcionesResolver = {}): ScopeDataResol
     if (typeof ultimo === 'number') {
       const todos = strPath.map(String);
       const cadena = ambitos(data, todos);
-      return cadena.length === todos.length + 1 ? cadena[cadena.length - 1] : ScopeData.defaultResolver(args);
+      return (cadena.length === todos.length + 1 ? cadena[cadena.length - 1] : ScopeData.defaultResolver(args)) as TemplateContent | TemplateData[];
     }
 
     const etiqueta = (ultimo ?? {}) as { name?: unknown; rawText?: unknown };
@@ -92,7 +92,7 @@ export function resolverCerrado(opciones: OpcionesResolver = {}): ScopeDataResol
       if (!resuelto.encontrado) {
         throw new ErrorDeDatos(`El modelo usa «#${token.ruta}» pero el contexto no lo define`);
       }
-      return resuelto.valor ?? false;
+      return (resuelto.valor ?? false) as TemplateContent | TemplateData[];
     }
 
     const rutaVisible = [...padres, token.ruta].join('.');

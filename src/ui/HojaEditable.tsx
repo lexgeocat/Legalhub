@@ -280,8 +280,9 @@ function bloquesSeleccionados(raiz: HTMLElement): HTMLElement[] {
     const s = window.getSelection();
     if (!s || s.rangeCount === 0 || !raiz.contains(s.anchorNode)) return [];
     const r = s.getRangeAt(0);
-    const lista = Array.from(raiz.children).filter((b): b is HTMLElement => {
-        if (!(b instanceof HTMLElement) || esSalto(b) || !r.intersectsNode(b)) return false;
+    const lista = Array.from(raiz.children).filter((el): el is HTMLElement => {
+        if (!(el instanceof HTMLElement) || esSalto(el) || !r.intersectsNode(el)) return false;
+        const b = el as HTMLElement;
         const terminaAlInicio = !r.collapsed && r.endOffset === 0 && !b.contains(r.startContainer) && (r.endContainer === b || b.contains(r.endContainer));
         return !terminaAlInicio;
     });
@@ -323,26 +324,26 @@ function colocarBloques(raiz: HTMLElement, r: Range, nuevos: HTMLElement[]): voi
         return;
     }
     if (esVacio(b)) {
-        b.replaceWith(...nuevos);
+        (b as HTMLElement).replaceWith(...nuevos);
         return;
     }
     const pre = document.createRange();
-    pre.selectNodeContents(b);
+    pre.selectNodeContents(b as HTMLElement);
     pre.setEnd(r.startContainer, r.startOffset);
     const post = document.createRange();
-    post.selectNodeContents(b);
+    post.selectNodeContents(b as HTMLElement);
     post.setStart(r.startContainer, r.startOffset);
     if (pre.toString() === '') {
-        b.before(...nuevos);
+        (b as HTMLElement).before(...nuevos);
         return;
     }
     if (post.toString() === '') {
-        b.after(...nuevos);
+        (b as HTMLElement).after(...nuevos);
         return;
     }
-    const resto = b.cloneNode(false) as HTMLElement;
+    const resto = (b as HTMLElement).cloneNode(false) as HTMLElement;
     resto.appendChild(post.extractContents());
-    b.after(...nuevos, resto);
+    (b as HTMLElement).after(...nuevos, resto);
 }
 
 function colocarCursor(nuevos: HTMLElement[]): void {
@@ -432,7 +433,7 @@ function normalizar(el: HTMLElement): void {
         sueltos = [];
     };
     for (const n of Array.from(el.childNodes)) {
-        if (n instanceof HTMLElement && (esSalto(n) || BLOQUES.has(n.tagName))) {
+        if (n instanceof HTMLElement && (esSalto(n) || BLOQUES.has((n as HTMLElement).tagName))) {
             cerrar(n);
             continue;
         }
