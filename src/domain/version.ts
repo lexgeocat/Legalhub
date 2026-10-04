@@ -1,0 +1,1 @@
+export const VERSION_APP = '0.1.0';

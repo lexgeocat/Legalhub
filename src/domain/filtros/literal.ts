@@ -1,11 +1,12 @@
+import { ErrorDeDatos } from '../errores';
+import { aDecimal, cardinalEntero } from './numeros';
 
-// domain/filtros/literal.ts
-import { toWords } from 'n2words';
-
-export function literal(numero: number | string): string {
-  const num = typeof numero === 'string' ? parseFloat(numero) : numero;
-  if (isNaN(num)) return '';
-  
-  // n2words con lenguaje español
-  return toWords(num, { lang: 'es' });
+export function literal(numero: unknown): string {
+  const d = aDecimal(numero);
+  if (d.decimalPlaces() > 2) {
+    throw new ErrorDeDatos(`El literal admite máximo 2 decimales: ${d.toString()}`);
+  }
+  const signo = d.isNegative() && !d.isZero() ? 'menos ' : '';
+  const [entero, dec] = d.abs().toFixed(2).split('.');
+  return `${signo}${cardinalEntero(entero)}${dec === '00' ? '' : ` con ${dec}/100`}`;
 }

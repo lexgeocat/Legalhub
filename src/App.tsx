@@ -1,51 +1,65 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useState } from 'react';
+import { Buscador } from './ui/Buscador';
+import { Configuracion } from './ui/paginas/Configuracion';
+import { Expediente } from './ui/paginas/Expediente';
+import { Expedientes } from './ui/paginas/Expedientes';
+import { Modelos } from './ui/paginas/Modelos';
+import { Personas } from './ui/paginas/Personas';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type Simple = 'expedientes' | 'personas' | 'modelos' | 'config';
+type Vista = { n: Simple } | { n: 'expediente'; id: string };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+const MENU: [Simple, string][] = [
+  ['expedientes', 'Expedientes'], ['personas', 'Personas'], ['modelos', 'Modelos'], ['config', 'Configuración'],
+];
+
+export default function App() {
+  const [vista, setVista] = useState<Vista>({ n: 'expedientes' });
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setBuscando(true);
+      }
+    };
+    window.addEventListener('keydown', f);
+    return () => window.removeEventListener('keydown', f);
+  }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+    <div className="app">
+      <nav>
+        <h1>LEGAL-HUB</h1>
+        <button onClick={() => setBuscando(true)}>Buscar (Ctrl+K)</button>
+        {MENU.map(([n, etiqueta]) => (
+          <button
+            key={n}
+            className={vista.n === n || (n === 'expedientes' && vista.n === 'expediente') ? 'activo' : ''}
+            onClick={() => setVista({ n })}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </nav>
+      <main>
+        {vista.n === 'expedientes' && <Expedientes abrir={(id) => setVista({ n: 'expediente', id })} />}
+        {vista.n === 'expediente' && <Expediente id={vista.id} volver={() => setVista({ n: 'expedientes' })} />}
+        {vista.n === 'personas' && <Personas />}
+        {vista.n === 'modelos' && <Modelos />}
+        {vista.n === 'config' && <Configuracion />}
+      </main>
+      {buscando && (
+        <Buscador
+          cerrar={() => setBuscando(false)}
+          elegir={(r) => {
+            setBuscando(false);
+            if (r.expedienteId) setVista({ n: 'expediente', id: r.expedienteId });
+            else setVista({ n: r.tipo === 'persona' ? 'personas' : 'expedientes' });
+          }}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      )}
+    </div>
   );
 }
-
-export default App;

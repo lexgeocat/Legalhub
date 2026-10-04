@@ -1,24 +1,12 @@
+import { ErrorDeDatos } from '../errores';
+import { aDecimal, agruparMiles, capitalizar, cardinalEntero } from './numeros';
 
-// domain/filtros/moneda.ts
-import Decimal from 'decimal.js';
-
-export function moneda(monto: number | string | Decimal, simbolo: string = 'Bs.'): string {
-  if (monto === null || monto === undefined) return '';
-  
-  const decimal = new Decimal(monto);
-  if (!decimal.isFinite()) return '';
-  
-  // Formato con 2 decimales, separador de miles como punto y decimal como coma
-  const formato = decimal.toFixed(2);
-  const partes = formato.split('.');
-  const entero = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const decimalPart = partes[1];
-  
-  const montoFormateado = \\ \,\\;
-  
-  // Convertir a literal (opcional, según el ejemplo del plan)
-  // const literalMonto = literal(monto);
-  // return \\ (\ bolivianos)\;
-  
-  return montoFormateado;
+export function moneda(monto: unknown, simbolo = 'Bs.', nombre = 'bolivianos'): string {
+  const d = aDecimal(monto, 'monto');
+  if (d.isNegative()) throw new ErrorDeDatos(`El monto no puede ser negativo: ${d.toString()}`);
+  if (d.decimalPlaces() > 2) {
+    throw new ErrorDeDatos(`El monto admite máximo 2 decimales: ${d.toString()}`);
+  }
+  const [entero, centavos] = d.toFixed(2).split('.');
+  return `${simbolo} ${agruparMiles(entero)},${centavos} (${capitalizar(cardinalEntero(entero))} ${centavos}/100 ${nombre})`;
 }

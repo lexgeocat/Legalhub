@@ -1,5 +1,3 @@
-
-// domain/filtros/index.ts
 export * from './concordar';
 export * from './mayus-minus';
 export * from './titulo';
@@ -9,3 +7,5 @@ export * from './fecha';
 export * from './moneda';
 export * from './superficie';
 export * from './ci';
+export * from './registro';
+export { ErrorDeDatos } from '../errores';

@@ -1,87 +1,56 @@
+import type { Expediente } from '../../domain/entidades';
+import { nuevoId } from '../../domain/id';
+import type { DbPuerto } from '../puertos/db';
 
-// application/casosDeUso/crearExpediente.ts
-import { Expediente } from '../entidades/expediente';
+export type DatosNuevoExpediente = Omit<
+  Expediente,
+  'id' | 'codigo' | 'estado' | 'creadoEn' | 'actualizadoEn' | 'eliminadoEn'
+>;
 
-// Definimos la interfaz del puerto de base de datos que este caso de uso necesita
-export interface DbPuertos {
-  ejecutar(sql: string, params: any[]): Promise<{ cambios: number; lastInsertRowid?: string }>;
-  transaccion(sentencias: Array<{ sql: string; params: any[] }>): Promise<Array<{ cambios: number }>>;
-}
-
-/**
- * Caso de uso para crear un nuevo expediente
- * No depende de frameworks específicos (React, Tauri, etc.)
- */
 export class CrearExpediente {
-  constructor(private dbPuertos: DbPuertos) {}
+  constructor(private readonly db: DbPuerto) { }
 
-  async ejecutar(datos: Omit<Expediente, 'id' | 'codigo' | 'creadoEn' | 'actualizadoEn'>): Promise<Expediente> {
+  async ejecutar(datos: DatosNuevoExpediente): Promise<Expediente> {
     const ahora = new Date().toISOString();
-    
-    // Primero, actualizamos o creamos el contador para el año actual
-    const año = new Date().getFullYear();
-    await this.dbPuertos.ejecutar(
-      INSERT INTO contador (anio, ultimo) VALUES (?, 1) 
-       ON CONFLICT(anio) DO UPDATE SET ultimo = ultimo + 1,
-      [año]
+    const anio = new Date().getFullYear();
+    const id = nuevoId();
+
+    await this.db.transaccion([
+      {
+        sql: `INSERT INTO contador (anio, ultimo) VALUES (?1, 1)
+              ON CONFLICT(anio) DO UPDATE SET ultimo = ultimo + 1`,
+        params: [anio],
+      },
+      {
+        sql: `INSERT INTO expediente
+                (id, codigo, materia, referencia, estado, juzgado, nro_causa, cliente_id, created_at, updated_at)
+              VALUES
+                (?2, 'LH-' || ?1 || '-' || printf('%04d', (SELECT ultimo FROM contador WHERE anio = ?1)),
+                 ?3, ?4, 'abierto', ?5, ?6, ?7, ?8, ?8)`,
+        params: [
+          anio, id, datos.materia,
+          datos.referencia ?? null, datos.juzgado ?? null, datos.nroCausa ?? null,
+          datos.clienteId, ahora,
+        ],
+      },
+    ], [{ accion: 'expediente.crear', entidad: 'expediente', entidadId: id }]);
+
+    const [fila] = await this.db.consultar<{ codigo: string }>(
+      'SELECT codigo FROM expediente WHERE id = ?1',
+      [id],
     );
-    
-    // Luego, obtenemos el valor actual del contador para generar el código
-    const resultadoContador = await this.dbPuertos.ejecutar(
-      SELECT ultimo FROM contador WHERE anio = ?,
-      [año]
-    );
-    
-    // En una implementación real, obtendríamos el valor del resultado
-    // Por ahora, usamos un valor placeholder
-    const numeroSecuencial = 1; // Esto vendría del resultadoContador
-    
-    // Generamos el código del expediente: LH-AAAA-NNNN
-    const codigo = LH--;
-    
-    // Creamos el expediente
-    const expediente: Expediente = {
-      id: this.generarId(), // En una implementación real, usaríamos ULID
-      codigo,
+
+    return {
+      id,
+      codigo: fila.codigo,
       materia: datos.materia,
-      referencia: datos.referencia ?? '',
-      estado: 'abierto', // Siempre comienza como abierto
-      juzgado: datos.juzgado ?? '',
-      nroCausa: datos.nroCausa ?? '',
+      referencia: datos.referencia,
+      estado: 'abierto',
+      juzgado: datos.juzgado,
+      nroCausa: datos.nroCausa,
       clienteId: datos.clienteId,
       creadoEn: ahora,
-      actualizadoEn: ahora
+      actualizadoEn: ahora,
     };
-    
-    // Guardamos en la base de datos
-    await this.dbPuertos.ejecutar(
-      INSERT INTO expediente (
-        id, codigo, materia, referencia, estado, juzgado, nro_causa, 
-        cliente_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-      [
-        expediente.id,
-        expediente.codigo,
-        expediente.materia,
-        expediente.referencia,
-        expediente.estado,
-        expediente.juzgado,
-        expediente.nroCausa,
-        expediente.clienteId,
-        expediente.creadoEn,
-        expediente.actualizadoEn
-      ]
-    );
-    
-    return expediente;
-  }
-  
-  /**
-   * Genera un ID único (en una implementación real sería ULID)
-   * Placeholder para ahora
-   */
-  private generarId(): string {
-    return Math.random().toString(36).substring(2, 15) + 
-           Math.random().toString(36).substring(2, 15);
   }
 }

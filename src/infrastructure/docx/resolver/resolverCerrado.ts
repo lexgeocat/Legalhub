@@ -1,132 +1,131 @@
+import { ScopeData, type ScopeDataArgs, type ScopeDataResolver } from 'easy-template-x';
+import type { EntradaVerificacion } from '../../../application/puertos/motorPlantillas';
+import { ErrorDeDatos, FILTROS } from '../../../domain/filtros';
+import { claveNormalizada, mensaje, normalizarCaracteres, parsearToken } from '../gramatica';
 
-// infrastructure/docx/resolver/resolverCerrado.ts
-import { FILTROS } from '../../domain/filtros';
-
-// Definir los tipos para el contexto
-export type Genero = 'M' | 'F';
-
-export interface Persona {
-  genero: Genero | null;
-  // otros campos...
+export interface OpcionesResolver {
+  /** Rutas (como aparecen en el modelo) que pueden quedar vacías. */
+  opcionales?: ReadonlySet<string>;
+  bitacora?: EntradaVerificacion[];
 }
 
-export interface Contexto {
-  expediente: {
-    codigo: string;
-    materia: string;
-    referencia: string;
-    juzgado: string;
-    nro_causa: string;
-    estado: string;
-  };
-  partes: {
-    demandantes: Persona[];
-    demandados: Persona[];
-    terceros: Persona[];
-    // otros roles...
-  };
-  cliente: Persona;
-  abogado: Persona & { 
-    matriculaProfesional: string;
-    domicilioProcesal: string;
-  };
-  inmuebles: Array<{
-    titulares: string[]; // IDs de personas
-    superficie: string; // en m2
-    matricula: string;
-    colindancias: { norte: string; sur: string; este: string; oeste: string };
-  }>;
-  caso: {
-    hechos: string;
-    cuantia: number | string;
-    petitorio: string;
-    // otros campos libres...
-  };
-  hoy: string; // fecha ISO
-}
+const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
-/**
- * Resolver cerrado que solo permite operaciones específicas
- * No ejecuta código arbitrario, solo aplica filtros predefinidos
- */
-export function resolverCerrado(filtrosDisponibles: Record<string, Function>) {
-  return function (scope: Contexto, key: string): any {
-    // Esta es una implementación simplificada
-    // En una implementación completa, esto haría el parsing de la sintaxis de marcadores
-    // y aplicaría los filtros correspondientes
-    
-    // Por ahora, devolvemos una función que lanzará error si se intenta acceder
-    // a propiedades no permitidas o se usan filtros no autorizados
-    return () => {
-      throw new Error(Acceso no permitido a '' en el resolver cerrado);
-    };
-  };
-}
-
-// Exponer los filtros disponibles para usar en el resolver
-export const FILTROS = {
-  // Desde domain/filtros
-  mayus: (texto: string) => texto.toUpperCase(),
-  minus: (texto: string) => texto.toLowerCase(),
-  titulo: (texto: string) => {
-    if (!texto) return texto;
-    const minusculas = ['de', 'del', 'la', 'las', 'los', 'y', 'o', 'u', 'ni', 'por', 'para', 'con'];
-    return texto
-      .split(' ')
-      .map((palabra, indice) => {
-        const lower = palabra.toLowerCase();
-        if (indice === 0 || !minusculas.includes(lower)) {
-          return palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase();
-        }
-        return lower;
-      })
-      .join(' ');
-  },
-  lista: (array: string[]) => {
-    if (array.length === 0) return '';
-    if (array.length === 1) return array[0];
-    if (array.length === 2) return array[0] + ' y ' + array[1];
-    return array.slice(0, -1).join(', ') + ' y ' + array[array.length - 1];
-  },
-  literal: (numero: number | string) => {
-    // Esta sería la implementación usando n2words
-    // Por ahora, retornamos el número como string
-    return String(numero);
-  },
-  fecha: (fechaISO: string) => {
-    if (!fechaISO) return '';
-    const fecha = new Date(fechaISO);
-    if (isNaN(fecha.getTime())) return '';
-    return new Intl.DateTimeFormat('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }).format(fecha);
-  },
-  moneda: (monto: number | string, simbolo: string = 'Bs.') => {
-    // Implementación simplificada
-    return \\ \\;
-  },
-  superficie: (valor: number | string) => {
-    const num = Number(valor);
-    return \\ m² (\ metros cuadrados)\;
-  },
-  ci: (datos: [string, string, string]) => {
-    const [numero, complemento, expedido] = datos;
-    let resultado = numero.trim();
-    if (complemento?.trim()) resultado += '-' + complemento.trim();
-    if (expedido?.trim()) resultado += ' ' + expedido.trim();
-    return resultado;
-  },
-  concordar: (partes: { genero: Genero | null }[], singM: string, singF: string, plurM?: string, plurF?: string): string => {
-    if (partes.length === 0) return '';
-    if (partes.some(p => p.genero === null)) {
-      throw new Error('Falta el género de una de las partes');
-    }
-    const pm = plurM ?? singM + 's';
-    const pf = plurF ?? singF + 's';
-    const todasF = partes.every(p => p.genero === 'F');
-    if (partes.length === 1) return todasF ? singF : singM;
-    return todasF ? pf : pm;
+function hijo(padre: unknown, clave: string): { existe: boolean; valor?: unknown } {
+  if (Array.isArray(padre)) {
+    if (!/^\d+$/.test(clave)) return { existe: false };
+    const i = Number(clave);
+    return i < padre.length ? { existe: true, valor: padre[i] } : { existe: false };
   }
-};
+  if (!esObjeto(padre)) return { existe: false };
+  const buscada = claveNormalizada(clave);
+  for (const k of Object.keys(padre)) {
+    if (claveNormalizada(k) === buscada) return { existe: true, valor: padre[k] };
+  }
+  return { existe: false };
+}
+
+function ambitos(raiz: unknown, padres: string[]): unknown[] {
+  const cadena: unknown[] = [raiz];
+  let actual: unknown = raiz;
+  for (const p of padres) {
+    const h = hijo(actual, p);
+    if (!h.existe || h.valor === null || h.valor === undefined) break;
+    actual = h.valor;
+    cadena.push(actual);
+  }
+  return cadena;
+}
+
+function buscar(cadena: unknown[], ruta: string): { encontrado: boolean; valor?: unknown } {
+  if (ruta === '.') return { encontrado: true, valor: cadena[cadena.length - 1] };
+  const segmentos = ruta.split('.');
+  for (let i = cadena.length - 1; i >= 0; i--) {
+    let actual: unknown = cadena[i];
+    let ok = true;
+    for (const s of segmentos) {
+      const h = hijo(actual, s);
+      if (!h.existe) {
+        ok = false;
+        break;
+      }
+      actual = h.valor;
+    }
+    if (ok) return { encontrado: true, valor: actual };
+  }
+  return { encontrado: false };
+}
+
+export function resolverCerrado(opciones: OpcionesResolver = {}): ScopeDataResolver {
+  const opcionales = new Set([...(opciones.opcionales ?? [])].map(claveNormalizada));
+
+  return (args: ScopeDataArgs) => {
+    const { path, strPath, data } = args;
+    if (!path.length) return ScopeData.defaultResolver(args);
+
+    const ultimo: unknown = path[path.length - 1];
+    if (typeof ultimo === 'number') {
+      const todos = strPath.map(String);
+      const cadena = ambitos(data, todos);
+      return cadena.length === todos.length + 1 ? cadena[cadena.length - 1] : ScopeData.defaultResolver(args);
+    }
+
+    const etiqueta = (ultimo ?? {}) as { name?: unknown; rawText?: unknown };
+    const nombre = normalizarCaracteres(String(etiqueta.name ?? '')).trim();
+    const crudo = typeof etiqueta.rawText === 'string' ? normalizarCaracteres(etiqueta.rawText) : '';
+    const esContenedor = nombre.startsWith('#') || /^\{\{\s*#/.test(crudo);
+    const limpio = nombre.replace(/^#\s*/, '');
+
+    let token;
+    try {
+      token = parsearToken(esContenedor ? `#${limpio}` : limpio);
+    } catch (e) {
+      throw new ErrorDeDatos(`Marcador inválido «${nombre}»: ${mensaje(e)}`);
+    }
+    if (token.tipo === 'cierre') throw new ErrorDeDatos(`Marcador de cierre inesperado «${nombre}»`);
+
+    const padres = strPath.slice(0, -1).map(String);
+    const cadena = ambitos(data, padres);
+    const resuelto = buscar(cadena, token.ruta);
+
+    if (token.tipo === 'apertura') {
+      if (!resuelto.encontrado) {
+        throw new ErrorDeDatos(`El modelo usa «#${token.ruta}» pero el contexto no lo define`);
+      }
+      return resuelto.valor ?? false;
+    }
+
+    const rutaVisible = [...padres, token.ruta].join('.');
+    const esOpcional = opcionales.has(claveNormalizada(token.ruta));
+    let valor: unknown = resuelto.valor;
+    const sinDato = valor === undefined || valor === null || valor === '';
+
+    if (sinDato) {
+      if (!esOpcional) {
+        throw new ErrorDeDatos(
+          resuelto.encontrado ? `Falta el dato «${rutaVisible}»` : `Dato desconocido «${rutaVisible}»`,
+        );
+      }
+      opciones.bitacora?.push({ ruta: rutaVisible, valor: '', opcionalVacio: true });
+      return '';
+    }
+
+    for (const f of token.filtros) {
+      if (!Object.hasOwn(FILTROS, f.nombre)) throw new ErrorDeDatos(`Filtro desconocido «${f.nombre}»`);
+      try {
+        valor = FILTROS[f.nombre](valor, ...f.args);
+      } catch (e) {
+        throw new ErrorDeDatos(`«${rutaVisible} | ${f.nombre}»: ${mensaje(e)}`);
+      }
+    }
+
+    let texto: string;
+    if (typeof valor === 'string') texto = valor;
+    else if (typeof valor === 'number' || typeof valor === 'bigint' || typeof valor === 'boolean') texto = String(valor);
+    else if (esObjeto(valor) && !Array.isArray(valor) && valor.toString !== Object.prototype.toString) texto = String(valor);
+    else throw new ErrorDeDatos(`«${rutaVisible}» no es un valor de texto; usa un filtro (p. ej. lista)`);
+
+    opciones.bitacora?.push({ ruta: rutaVisible, valor: texto });
+    return texto;
+  };
+}

@@ -1,48 +1,34 @@
+import { TemplateHandler, type TemplateData } from 'easy-template-x';
+import type {
+  EntradaVerificacion, MotorPlantillas, ResultadoEscaneo, ResultadoRender,
+} from '../../../application/puertos/motorPlantillas';
+import { ErrorDeDatos } from '../../../domain/filtros';
+import { resolverCerrado } from '../resolver/resolverCerrado';
+import { escanear, type OpcionesEscaneo } from '../scanner/escanner';
+import { textoPlano } from '../textoPlano';
 
-// infrastructure/docx/motor/motor.ts
-import { TemplateHandler } from 'easy-template-x';
-import { resolverCerrado, FILTROS } from '../resolver/resolverCerrado';
+export class MotorDocx implements MotorPlantillas {
+  constructor(private readonly opciones: OpcionesEscaneo = {}) { }
 
-/**
- * Motor de plantillas que usa easy-template-x con nuestro resolver cerrado
- * Este motor solo permite operaciones específicas y seguras
- */
-export class MotorPlantillas {
-  private handler: TemplateHandler;
+  escanear(plantilla: Uint8Array): ResultadoEscaneo {
+    return escanear(plantilla, this.opciones);
+  }
 
-  constructor() {
-    this.handler = new TemplateHandler({
-      delimiters: { 
-        tagStart: '{{', 
-        tagEnd: '}}', 
-        containerTagOpen: '#', 
-        containerTagClose: '/' 
-      },
-      scopeDataResolver: resolverCerrado(FILTROS)
-      // Otras opciones según la documentación de easy-template-x
+  textoPlano(docx: Uint8Array): string {
+    return textoPlano(docx);
+  }
+
+  async renderizar(plantilla: Uint8Array, contexto: Record<string, unknown>): Promise<ResultadoRender> {
+    const escaneo = escanear(plantilla, this.opciones);
+    if (!escaneo.esValido) throw new ErrorDeDatos(`Modelo inválido: ${escaneo.errores.join('; ')}`);
+
+    const verificacion: EntradaVerificacion[] = [];
+    const handler = new TemplateHandler({
+      delimiters: { tagStart: '{{', tagEnd: '}}', containerTagOpen: '#', containerTagClose: '/' },
+      scopeDataResolver: resolverCerrado({ bitacora: verificacion }),
     });
-  }
-
-  /**
-   * Escanea una plantilla para extraer su esquema
-   * En una implementación completa, esto usaría el escáner/linter
-   */
-  async escanear(plantilla: Uint8Array): Promise<any> {
-    // Placeholder - en una implementación real llamaría al escáner
-    return {
-      // Resultado del escaneo
-    };
-  }
-
-  /**
-   * Renderiza una plantilla con el contexto proporcionado
-   */
-  async renderizar(plantilla: Uint8Array, contexto: any): Promise<Uint8Array> {
-    try {
-      const resultado = await this.handler.process(plantilla, contexto);
-      return resultado;
-    } catch (error) {
-      throw new Error(Error al renderizar plantilla: );
-    }
+    const entrada = plantilla.slice().buffer as ArrayBuffer;
+    const salida = await handler.process(entrada, contexto as TemplateData);
+    return { docx: new Uint8Array(salida), verificacion };
   }
 }

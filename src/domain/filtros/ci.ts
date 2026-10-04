@@ -1,19 +1,10 @@
+import { ErrorDeDatos } from '../errores';
 
-// domain/filtros/ci.ts
-export function ci(datos: [string, string, string]): string {
-  const [numero, complemento, expedido] = datos;
-  
-  if (!numero) return '';
-  
-  let resultado = numero.trim();
-  
-  if (complemento && complemento.trim() !== '') {
-    resultado += '-' + complemento.trim();
+export function ci(datos: unknown): string {
+  if (!Array.isArray(datos)) {
+    throw new ErrorDeDatos('El filtro ci espera [número, complemento, expedido]');
   }
-  
-  if (expedido && expedido.trim() !== '') {
-    resultado += ' ' + expedido.trim();
-  }
-  
-  return resultado;
+  const [numero, complemento, expedido] = (datos as unknown[]).map((v) => String(v ?? '').trim());
+  if (!numero) throw new ErrorDeDatos('C.I. sin número');
+  return numero + (complemento ? `-${complemento}` : '') + (expedido ? ` ${expedido}` : '');
 }

@@ -1,0 +1,1 @@
+CREATE TABLE configuracion (clave TEXT PRIMARY KEY, valor TEXT NOT NULL);
