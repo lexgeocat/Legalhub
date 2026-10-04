@@ -13,12 +13,16 @@ export interface CampoPropio { clave: string; etiqueta: string; tipo: TipoCampo;
 
 export type TamanoPagina = 'carta' | 'oficio' | 'a4';
 
+/** Márgenes de la página, en centímetros. */
+export interface Margenes { superior: number; inferior: number; izquierdo: number; derecho: number }
+
 export interface ConfigPagina {
     tamano: TamanoPagina;
     fuente: string;
     tamanoPt: number;
     interlineado: number;
     sangria: boolean;
+    margenes: Margenes;
 }
 
 export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[] }
@@ -26,16 +30,85 @@ export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string;
 export const FUENTES_PAGINA = ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Garamond', 'Georgia', 'Verdana'];
 export const CATEGORIAS_MODELO = ['Escrito judicial', 'Contrato', 'Minuta', 'Documento privado', 'Poder', 'Carta o notificación', 'Otro'];
 
-export const CONFIG_POR_DEFECTO: ConfigPagina = { tamano: 'carta', fuente: 'Times New Roman', tamanoPt: 12, interlineado: 1.5, sangria: false };
+/** Papel en centímetros (ancho × alto). */
+export const PAGINA_CM: Record<TamanoPagina, { w: number; h: number }> = {
+    carta: { w: 21.59, h: 27.94 },
+    oficio: { w: 21.59, h: 33.02 },
+    a4: { w: 21, h: 29.7 },
+};
 
-export const fuenteVacia = (): FuenteModelo => ({ version: 1, config: { ...CONFIG_POR_DEFECTO }, texto: '', campos: [] });
+/** Ancho y alto mínimos que debe conservar el área de texto. */
+export const AREA_MIN_CM = 5;
+export const MARGEN_MAX_CM = 15;
+
+export const MARGENES_BASE: Margenes = { superior: 2.5, inferior: 2.5, izquierdo: 3, derecho: 2.5 };
+export const MARGENES_MEMORIAL: Margenes = { superior: 5.5, inferior: 2, izquierdo: 4, derecho: 2 };
+
+export const PRESETS_MARGENES: { id: string; etiqueta: string; margenes: Margenes }[] = [
+    { id: 'base', etiqueta: 'Predeterminado', margenes: MARGENES_BASE },
+    { id: 'memorial', etiqueta: 'Memorial', margenes: MARGENES_MEMORIAL },
+    { id: 'word', etiqueta: 'Word (2,54)', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 2.54, derecho: 2.54 } },
+    { id: 'moderado', etiqueta: 'Moderado', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 1.91, derecho: 1.91 } },
+    { id: 'estrecho', etiqueta: 'Estrecho', margenes: { superior: 1.27, inferior: 1.27, izquierdo: 1.27, derecho: 1.27 } },
+    { id: 'ancho', etiqueta: 'Ancho', margenes: { superior: 2.54, inferior: 2.54, izquierdo: 5.08, derecho: 5.08 } },
+];
+
+const casi = (a: number, b: number) => Math.abs(a - b) < 0.005;
+
+export const margenesIguales = (a: Margenes, b: Margenes) =>
+    casi(a.superior, b.superior) && casi(a.inferior, b.inferior) && casi(a.izquierdo, b.izquierdo) && casi(a.derecho, b.derecho);
+
+export const presetDe = (m: Margenes) => PRESETS_MARGENES.find((p) => margenesIguales(p.margenes, m));
+
+const redondear = (n: number) => Math.round(n * 100) / 100;
+const bajar = (n: number) => Math.floor(n * 100) / 100;
+
+function limitar(v: unknown, defecto: number): number {
+    const n = typeof v === 'string' ? Number(v.replace(',', '.')) : Number(v);
+    return Number.isFinite(n) ? Math.min(MARGEN_MAX_CM, Math.max(0, redondear(n))) : defecto;
+}
+
+/** Si dos márgenes opuestos se comen el área de texto, los reduce en proporción. */
+function ajustarPar(a: number, b: number, total: number): [number, number] {
+    const max = Math.max(0, total - AREA_MIN_CM);
+    if (a + b <= max) return [a, b];
+    const f = max / (a + b);
+    return [bajar(a * f), bajar(b * f)];
+}
+
+/** Devuelve márgenes válidos (con valores por defecto si faltan o son inválidos). */
+export function margenesSeguros(m: Partial<Margenes> | null | undefined, tamano: TamanoPagina): Margenes {
+    const p = PAGINA_CM[tamano] ?? PAGINA_CM.carta;
+    const o = (m ?? {}) as Partial<Record<keyof Margenes, unknown>>;
+    const [izquierdo, derecho] = ajustarPar(
+        limitar(o.izquierdo, MARGENES_BASE.izquierdo), limitar(o.derecho, MARGENES_BASE.derecho), p.w,
+    );
+    const [superior, inferior] = ajustarPar(
+        limitar(o.superior, MARGENES_BASE.superior), limitar(o.inferior, MARGENES_BASE.inferior), p.h,
+    );
+    return { superior, inferior, izquierdo, derecho };
+}
+
+export const CONFIG_POR_DEFECTO: ConfigPagina = {
+    tamano: 'carta', fuente: 'Times New Roman', tamanoPt: 12, interlineado: 1.5, sangria: false,
+    margenes: { ...MARGENES_BASE },
+};
+
+export const fuenteVacia = (): FuenteModelo => ({
+    version: 1,
+    config: { ...CONFIG_POR_DEFECTO, margenes: { ...CONFIG_POR_DEFECTO.margenes } },
+    texto: '',
+    campos: [],
+});
 
 export function leerFuente(json: string): FuenteModelo {
     const o: unknown = JSON.parse(json);
     const r = (typeof o === 'object' && o !== null ? o : {}) as Partial<FuenteModelo>;
+    const config = { ...CONFIG_POR_DEFECTO, ...(r.config ?? {}) };
+    config.margenes = margenesSeguros(r.config?.margenes, config.tamano);
     return {
         version: 1,
-        config: { ...CONFIG_POR_DEFECTO, ...(r.config ?? {}) },
+        config,
         texto: typeof r.texto === 'string' ? r.texto : '',
         campos: Array.isArray(r.campos) ? r.campos.filter((c) => c && typeof c.clave === 'string') : [],
     };

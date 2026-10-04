@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { CONFIG_POR_DEFECTO, type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo } from '../domain/fuenteModelo';
+import {
+    CONFIG_POR_DEFECTO, PAGINA_CM, margenesSeguros,
+    type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
+} from '../domain/fuenteModelo';
 
 const PX_POR_CM = 37.7953;
-const PAGINAS = {
-    carta: { w: 21.59, h: 27.94 },
-    oficio: { w: 21.59, h: 33.02 },
-    a4: { w: 21, h: 29.7 },
-};
 
 function Tramos({ tramos, estilo, resaltar }: { tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean }) {
     if (tramos.length === 0) return <>{'\u00A0'}</>;
@@ -49,7 +47,7 @@ function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: Conf
     );
 }
 
-/** Vista previa de página: se ajusta al ancho disponible y respeta papel, fuente, tamaño e interlineado. */
+/** Vista previa de página: se ajusta al ancho disponible y respeta papel, márgenes, fuente, tamaño e interlineado. */
 export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: {
     bloques: Bloque[]; config?: ConfigPagina; resaltar?: boolean;
 }) {
@@ -66,7 +64,8 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
         return () => o.disconnect();
     }, []);
 
-    const pag = PAGINAS[config.tamano] ?? PAGINAS.carta;
+    const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
+    const mg = margenesSeguros(config.margenes, config.tamano);
     const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - 28) / (pag.w * PX_POR_CM))) : 0.6;
     const cm = (n: number) => `${(n * escala).toFixed(3)}cm`;
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
@@ -78,7 +77,7 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
                 style={{
                     width: cm(pag.w),
                     minHeight: cm(pag.h),
-                    padding: `${cm(2.5)} ${cm(2.5)} ${cm(2.5)} ${cm(3)}`,
+                    padding: `${cm(mg.superior)} ${cm(mg.derecho)} ${cm(mg.inferior)} ${cm(mg.izquierdo)}`,
                     fontFamily: `"${config.fuente}", "Times New Roman", serif`,
                     fontSize: pt(config.tamanoPt),
                     lineHeight: config.interlineado,

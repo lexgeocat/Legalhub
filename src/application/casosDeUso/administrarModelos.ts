@@ -133,10 +133,16 @@ export class InstalarPlantillaInicial {
     async ejecutar(indice: number): Promise<ResultadoImportacion> {
         const p = PLANTILLAS_INICIALES[indice];
         if (!p) throw new ErrorDeDatos('Plantilla no encontrada');
+        const base = fuenteVacia();
         return this.importar.desdeFuente({
             nombre: p.nombre, materia: p.materia, categoria: p.categoria, descripcion: p.descripcion,
             notas: 'Plantilla inicial',
-            fuente: { ...fuenteVacia(), texto: p.texto, campos: p.campos },
+            fuente: {
+                ...base,
+                config: { ...base.config, ...(p.margenes ? { margenes: { ...p.margenes } } : {}) },
+                texto: p.texto,
+                campos: p.campos,
+            },
         });
     }
 }

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { esTextoLargo, usosCaso } from '../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
 import {
-    FUENTES_PAGINA, TIPOS_CAMPO, fuenteVacia, marcadorDeCampo,
-    type Alineacion, type CampoPropio, type ConfigPagina, type FuenteModelo, type TamanoPagina, type TipoCampo,
+    AREA_MIN_CM, FUENTES_PAGINA, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES, TIPOS_CAMPO,
+    fuenteVacia, marcadorDeCampo, margenesSeguros, presetDe,
+    type Alineacion, type CampoPropio, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
 } from '../domain/fuenteModelo';
 import { claveCampo, etiquetaRol } from '../domain/texto';
 import {
@@ -20,6 +21,7 @@ type Dialogo =
     | { n: 'campos' }
     | { n: 'nuevoCampo' }
     | { n: 'datos' }
+    | { n: 'pagina' }
     | { n: 'verificacion' }
     | { n: 'marcador'; actual: string; aplicar: (nuevo: string) => void };
 
@@ -27,6 +29,10 @@ const INTERLINEADOS = [1, 1.15, 1.5, 2];
 const TAMANOS_LETRA = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24];
 const PAPEL: Record<TamanoPagina, string> = { carta: 'Carta', oficio: 'Oficio', a4: 'A4' };
 const TIPO_POR_FILTRO: Record<string, TipoCampo> = { moneda: 'moneda', fecha: 'fecha', superficie: 'superficie', literal: 'numero' };
+const LADOS: (keyof Margenes)[] = ['superior', 'inferior', 'izquierdo', 'derecho'];
+const NOMBRE_LADO: Record<keyof Margenes, string> = {
+    superior: 'Superior', inferior: 'Inferior', izquierdo: 'Izquierdo', derecho: 'Derecho',
+};
 
 const ICO = {
     deshacer: 'M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3',
@@ -41,6 +47,8 @@ const ICO_ALIN: Record<Alineacion, string> = {
 const ETIQ_ALIN: Record<Alineacion, string> = {
     left: 'Alinear a la izquierda', center: 'Centrar', right: 'Alinear a la derecha', both: 'Justificar',
 };
+
+const coma = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
 
 const normalizarCampos = (l: CampoPropio[]): CampoPropio[] =>
     l.map((c) => {
@@ -154,6 +162,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [notas, setNotas] = useState('');
     const [formato, setFormato] = useState<FormatoActivo>(FORMATO_INICIAL);
     const [panel, setPanel] = useState(true);
+    const [paginas, setPaginas] = useState(1);
     const [dialogo, setDialogo] = useState<Dialogo | null>(null);
     const [verif, setVerif] = useState<ResultadoValidacion | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -171,6 +180,16 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         setConfig((c) => ({ ...c, ...p }));
         tocar();
         window.setTimeout(() => hoja.current?.enfocar(), 0);
+    };
+
+    /** Desde la regla: un solo margen, sin quitarle el foco a la hoja. */
+    const setMargen = (lado: keyof Margenes, cm: number) => {
+        setConfig((c) => ({ ...c, margenes: margenesSeguros({ ...c.margenes, [lado]: cm }, c.tamano) }));
+        tocar();
+    };
+
+    const aplicarPagina = (tamano: TamanoPagina, margenes: Margenes) => {
+        setCfg({ tamano, margenes: margenesSeguros(margenes, tamano) });
     };
 
     const armarFuente = (): FuenteModelo => ({
@@ -294,7 +313,8 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         ? TAMANOS_LETRA : [...TAMANOS_LETRA, config.tamanoPt].sort((a, b) => a - b);
     const interlineados = INTERLINEADOS.includes(config.interlineado)
         ? INTERLINEADOS : [...INTERLINEADOS, config.interlineado].sort((a, b) => a - b);
-    const coma = (n: number) => String(n).replace('.', ',');
+    const preset = presetDe(config.margenes);
+    const mg = config.margenes;
 
     return (
         <div className="ed-ventana">
@@ -347,9 +367,23 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 <Tb titulo="Línea de firma" onClick={() => hoja.current?.insertar('[c] ______________________________', true)}>Línea de firma</Tb>
                 <Sep />
                 <select aria-label="Tamaño de papel" title="Tamaño de papel" value={config.tamano}
-                    onChange={(e) => setCfg({ tamano: e.target.value as TamanoPagina })}>
+                    onChange={(e) => {
+                        const t = e.target.value as TamanoPagina;
+                        setCfg({ tamano: t, margenes: margenesSeguros(config.margenes, t) });
+                    }}>
                     {(Object.keys(PAPEL) as TamanoPagina[]).map((t) => <option key={t} value={t}>{PAPEL[t]}</option>)}
                 </select>
+                <span className="etq">Márgenes</span>
+                <select aria-label="Márgenes" title={`Sup. ${coma(mg.superior)} · Inf. ${coma(mg.inferior)} · Izq. ${coma(mg.izquierdo)} · Der. ${coma(mg.derecho)} cm`}
+                    value={preset?.id ?? 'personalizado'}
+                    onChange={(e) => {
+                        const p = PRESETS_MARGENES.find((x) => x.id === e.target.value);
+                        if (p) setCfg({ margenes: margenesSeguros(p.margenes, config.tamano) });
+                    }}>
+                    {PRESETS_MARGENES.map((p) => <option key={p.id} value={p.id}>{p.etiqueta}</option>)}
+                    {!preset && <option value="personalizado">Personalizado</option>}
+                </select>
+                <Tb titulo="Configurar página: papel y márgenes en cm" onClick={() => setDialogo({ n: 'pagina' })}>Página…</Tb>
                 <Tb titulo="Sangría de primera línea" activo={config.sangria} onClick={() => setCfg({ sangria: !config.sangria })}>Sangría</Tb>
                 <Sep />
                 <Tb titulo="Crear un campo nuevo e insertarlo en el cursor" onClick={() => setDialogo({ n: 'nuevoCampo' })}>
@@ -370,6 +404,9 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         onCambio={tocar}
                         onFormato={setFormato}
                         onEditarCampo={(actual, aplicar) => setDialogo({ n: 'marcador', actual, aplicar })}
+                        onMargenes={setMargen}
+                        onConfigurarPagina={() => setDialogo({ n: 'pagina' })}
+                        onPaginas={setPaginas}
                     />
                 </div>
                 {panel && (
@@ -380,11 +417,19 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
             </div>
 
             <footer className="ed-estado">
-                <span>{PAPEL[config.tamano]} · {config.fuente} {coma(config.tamanoPt)} pt · interlineado {coma(config.interlineado)}</span>
-                <span>Doble clic en un campo para editarlo · Ctrl+S guardar · Ctrl+Z deshacer</span>
+                <span>
+                    {PAPEL[config.tamano]} · {config.fuente} {coma(config.tamanoPt)} pt · interlineado {coma(config.interlineado)} ·
+                    márgenes sup {coma(mg.superior)} · inf {coma(mg.inferior)} · izq {coma(mg.izquierdo)} · der {coma(mg.derecho)} cm ·
+                    ≈ {paginas} pág.
+                </span>
+                <span>Arrastra los márgenes en la regla · doble clic en la regla: configurar página · Ctrl+S guardar</span>
             </footer>
 
             {/* ===== Diálogos ===== */}
+            {dialogo?.n === 'pagina' && (
+                <ModalPagina config={config} aplicar={aplicarPagina} cerrar={cerrarDialogo} />
+            )}
+
             {dialogo?.n === 'marcador' && (
                 <ModalMarcador actual={dialogo.actual} aplicar={dialogo.aplicar} cerrar={cerrarDialogo} />
             )}
@@ -468,6 +513,120 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 </Modal>
             )}
         </div>
+    );
+}
+
+/* ---------------- Configurar página ---------------- */
+const aTextos = (m: Margenes): Record<keyof Margenes, string> => ({
+    superior: coma(m.superior), inferior: coma(m.inferior), izquierdo: coma(m.izquierdo), derecho: coma(m.derecho),
+});
+const aNumero = (s: string) => (s.trim() === '' ? NaN : Number(s.trim().replace(',', '.')));
+
+function MiniPagina({ w, h, m }: { w: number; h: number; m: Margenes | null }) {
+    const ancho = 120;
+    const k = ancho / w;
+    const alto = h * k;
+    const x = (m?.izquierdo ?? 0) * k;
+    const y = (m?.superior ?? 0) * k;
+    const anchoUtil = m ? Math.max(0, (w - m.izquierdo - m.derecho) * k) : 0;
+    const altoUtil = m ? Math.max(0, (h - m.superior - m.inferior) * k) : 0;
+    const lineas = Math.min(40, Math.floor((altoUtil - 2) / 6));
+    return (
+        <svg width={ancho} height={alto} aria-hidden="true" style={{ flex: 'none', background: '#fff', border: '1px solid var(--borde-fuerte)', boxShadow: 'var(--sombra)' }}>
+            {m && anchoUtil > 0 && altoUtil > 0 && (
+                <>
+                    <rect x={x} y={y} width={anchoUtil} height={altoUtil} fill="none" stroke="#8b9bd9" strokeDasharray="3 2" />
+                    {Array.from({ length: Math.max(0, lineas) }, (_, i) => (
+                        <line key={i} x1={x + 3} x2={x + anchoUtil - 3} y1={y + 5 + i * 6} y2={y + 5 + i * 6} stroke="#c3c8d6" strokeWidth="1.5" />
+                    ))}
+                </>
+            )}
+        </svg>
+    );
+}
+
+function ModalPagina({ config, aplicar, cerrar }: {
+    config: ConfigPagina;
+    aplicar: (tamano: TamanoPagina, m: Margenes) => void;
+    cerrar: () => void;
+}) {
+    const [tamano, setTamano] = useState<TamanoPagina>(config.tamano);
+    const [txt, setTxt] = useState(aTextos(config.margenes));
+    const [error, setError] = useState<string | null>(null);
+
+    const nums: Margenes = {
+        superior: aNumero(txt.superior), inferior: aNumero(txt.inferior),
+        izquierdo: aNumero(txt.izquierdo), derecho: aNumero(txt.derecho),
+    };
+    const valido = LADOS.every((l) => Number.isFinite(nums[l]) && nums[l] >= 0);
+    const preset = valido ? presetDe(nums) : undefined;
+    const pag = PAGINA_CM[tamano];
+
+    const enviar = (ev: FormEvent<HTMLFormElement>) => {
+        ev.preventDefault();
+        if (!valido) {
+            setError('Escribe cada margen en centímetros (por ejemplo 2,5).');
+            return;
+        }
+        if (LADOS.some((l) => nums[l] > MARGEN_MAX_CM)) {
+            setError(`Ningún margen puede pasar de ${MARGEN_MAX_CM} cm.`);
+            return;
+        }
+        if (pag.w - nums.izquierdo - nums.derecho < AREA_MIN_CM) {
+            setError(`Los márgenes izquierdo y derecho dejan menos de ${AREA_MIN_CM} cm de ancho para el texto.`);
+            return;
+        }
+        if (pag.h - nums.superior - nums.inferior < AREA_MIN_CM) {
+            setError(`Los márgenes superior e inferior dejan menos de ${AREA_MIN_CM} cm de alto para el texto.`);
+            return;
+        }
+        aplicar(tamano, nums);
+        cerrar();
+    };
+
+    return (
+        <Modal titulo="Configurar página" cerrar={cerrar}
+            pie={
+                <>
+                    <span className="espacio" />
+                    <button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button>
+                    <button type="submit" form="form-pagina" className="btn btn-pri">Aplicar</button>
+                </>
+            }>
+            <Aviso error={error} />
+            <form id="form-pagina" onSubmit={enviar}
+                style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 20, alignItems: 'start' }}>
+                <div className="form-grid">
+                    <Campo etiqueta="Tamaño de papel">
+                        <select value={tamano} onChange={(e) => { setTamano(e.target.value as TamanoPagina); setError(null); }}>
+                            <option value="carta">Carta (21,6 × 27,9 cm)</option>
+                            <option value="oficio">Oficio (21,6 × 33 cm)</option>
+                            <option value="a4">A4 (21 × 29,7 cm)</option>
+                        </select>
+                    </Campo>
+                    <Campo etiqueta="Márgenes predefinidos">
+                        <select value={preset?.id ?? 'personalizado'}
+                            onChange={(e) => {
+                                const p = PRESETS_MARGENES.find((x) => x.id === e.target.value);
+                                if (p) { setTxt(aTextos(p.margenes)); setError(null); }
+                            }}>
+                            {PRESETS_MARGENES.map((p) => <option key={p.id} value={p.id}>{p.etiqueta}</option>)}
+                            {!preset && <option value="personalizado">Personalizado</option>}
+                        </select>
+                    </Campo>
+                    {LADOS.map((l) => (
+                        <Campo key={l} etiqueta={`${NOMBRE_LADO[l]} (cm)`}>
+                            <input inputMode="decimal" value={txt[l]}
+                                onChange={(e) => { setTxt((t) => ({ ...t, [l]: e.target.value })); setError(null); }} />
+                        </Campo>
+                    ))}
+                    <p className="suave ancho">
+                        Memorial: superior 5,5 · inferior 2 · izquierdo 4 · derecho 2. Los márgenes se aplican a todas las páginas, como en Word.
+                    </p>
+                </div>
+                <MiniPagina w={pag.w} h={pag.h} m={valido ? nums : null} />
+            </form>
+        </Modal>
     );
 }
 

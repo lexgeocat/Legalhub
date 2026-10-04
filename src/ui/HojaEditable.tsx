@@ -3,18 +3,14 @@ import {
     type ClipboardEvent, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type Ref,
 } from 'react';
 import {
-    bloquesATexto, parsearTexto, tramosDe,
-    type Alineacion, type Bloque, type BloqueParrafo, type ConfigPagina, type EstiloParrafo, type Tramo,
+    bloquesATexto, PAGINA_CM, margenesSeguros, parsearTexto, tramosDe,
+    type Alineacion, type Bloque, type BloqueParrafo, type ConfigPagina, type EstiloParrafo, type Margenes, type Tramo,
 } from '../domain/fuenteModelo';
+import { Regla } from './Regla';
 import './editorWord.css';
 
 const PX_POR_CM = 37.7953;
 const MARGEN_LIENZO = 48;
-const PAGINAS: Record<ConfigPagina['tamano'], { w: number; h: number }> = {
-    carta: { w: 21.59, h: 27.94 },
-    oficio: { w: 21.59, h: 33.02 },
-    a4: { w: 21, h: 29.7 },
-};
 
 const BASE: Record<EstiloParrafo, Alineacion> = { normal: 'both', titulo: 'center', subtitulo: 'left' };
 const TAG: Record<EstiloParrafo, string> = { normal: 'p', titulo: 'h1', subtitulo: 'h2' };
@@ -459,27 +455,34 @@ function normalizar(el: HTMLElement): void {
 }
 
 /* ---------------- Componente ---------------- */
-export function HojaEditable({ ref, textoInicial, config, onCambio, onFormato, onEditarCampo }: {
+export function HojaEditable({
+    ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas,
+}: {
     ref?: Ref<ControlHoja>;
     textoInicial: string;
     config: ConfigPagina;
     onCambio: () => void;
     onFormato: (f: FormatoActivo) => void;
     onEditarCampo: (actual: string, aplicar: (nuevo: string) => void) => void;
+    onMargenes: (lado: keyof Margenes, cm: number) => void;
+    onConfigurarPagina: () => void;
+    onPaginas: (n: number) => void;
 }) {
     const raizRef = useRef<HTMLDivElement>(null);
     const lienzo = useRef<HTMLDivElement>(null);
     const [ancho, setAncho] = useState(0);
+    const [paginas, setPaginas] = useState(1);
+    const nPaginas = useRef(1);
+    const medida = useRef({ padSup: 0, util: 1 });
     const guardada = useRef<Range | null>(null);
     const hist = useRef<{ pila: Snap[]; i: number; t: number; t0: number }>({ pila: [], i: -1, t: 0, t0: 0 });
     const ultimoFmt = useRef('');
     const pegando = useRef(false);
-    const cb = useRef({ onCambio, onFormato, onEditarCampo });
+    const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas });
 
     useEffect(() => {
-        cb.current = { onCambio, onFormato, onEditarCampo };
+        cb.current = { onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas };
     });
-
     /* ----- historial propio (deshacer / rehacer) ----- */
     function registrar(forzar: boolean) {
         const el = raizRef.current;
@@ -798,14 +801,48 @@ export function HojaEditable({ ref, textoInicial, config, onCambio, onFormato, o
     }
 
     /* ----- render ----- */
-    const pag = PAGINAS[config.tamano] ?? PAGINAS.carta;
+    const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
+    const mg = margenesSeguros(config.margenes, config.tamano);
     const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
+    const pxCm = PX_POR_CM * escala;
+    const padSup = mg.superior * pxCm;
+    const util = (pag.h - mg.superior - mg.inferior) * pxCm;
     const cm = (n: number) => `${(n * escala).toFixed(3)}cm`;
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
+
+    /** Páginas aproximadas: alto usado por el texto ÷ alto útil de una página. */
+    function medirPaginas() {
+        const el = raizRef.current;
+        if (!el) return;
+        const { padSup: sup, util: u } = medida.current;
+        const ult = el.lastElementChild;
+        const usado = ult instanceof HTMLElement ? ult.offsetTop + ult.offsetHeight - sup : 0;
+        const n = Math.max(1, Math.ceil((usado - 2) / u));
+        if (n === nPaginas.current) return;
+        nPaginas.current = n;
+        setPaginas(n);
+        cb.current.onPaginas(n);
+    }
+
+    useEffect(() => {
+        const el = raizRef.current;
+        if (!el) return;
+        const o = new ResizeObserver(() => medirPaginas());
+        o.observe(el);
+        return () => o.disconnect();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        medida.current = { padSup, util };
+        medirPaginas();
+    });
+
     const estiloHoja = {
+        position: 'relative',
         width: cm(pag.w),
         minHeight: cm(pag.h),
-        padding: `${cm(2.5)} ${cm(2.5)} ${cm(2.5)} ${cm(3)}`,
+        padding: `${cm(mg.superior)} ${cm(mg.derecho)} ${cm(mg.inferior)} ${cm(mg.izquierdo)}`,
         fontFamily: `"${config.fuente}", "Times New Roman", serif`,
         fontSize: pt(config.tamanoPt),
         lineHeight: config.interlineado,
@@ -814,24 +851,54 @@ export function HojaEditable({ ref, textoInicial, config, onCambio, onFormato, o
         '--sangria': cm(1.25),
     } as CSSProperties;
 
+    const cambiarMargen = (lado: keyof Margenes, v: number) => cb.current.onMargenes(lado, v);
+    const abrirPagina = () => cb.current.onConfigurarPagina();
+
     return (
         <div className="ed-lienzo" ref={lienzo}>
-            <div
-                ref={raizRef}
-                className={`hoja hoja-ed${config.sangria ? ' con-sangria' : ''}`}
-                style={estiloHoja}
-                contentEditable
-                suppressContentEditableWarning
-                spellCheck
-                lang="es"
-                role="textbox"
-                aria-multiline="true"
-                aria-label="Texto del documento"
-                onInput={alEscribir}
-                onKeyDown={alTeclear}
-                onPaste={alPegar}
-                onDoubleClick={alDobleClic}
-            />
+            <div className="ed-regla-barra">
+                <div style={{ width: cm(pag.w), margin: '0 auto' }}>
+                    <Regla
+                        orientacion="h" largoCm={pag.w} escala={escala}
+                        ini={mg.izquierdo} fin={mg.derecho} ladoIni="izquierdo" ladoFin="derecho"
+                        onCambio={cambiarMargen} onAbrir={abrirPagina}
+                    />
+                </div>
+            </div>
+
+            <div className="ed-caja" style={{ width: cm(pag.w) }}>
+                <div className="ed-regla-v">
+                    <Regla
+                        orientacion="v" largoCm={pag.h} escala={escala}
+                        ini={mg.superior} fin={mg.inferior} ladoIni="superior" ladoFin="inferior"
+                        onCambio={cambiarMargen} onAbrir={abrirPagina}
+                    />
+                </div>
+
+                <div
+                    ref={raizRef}
+                    className={`hoja hoja-ed${config.sangria ? ' con-sangria' : ''}`}
+                    style={estiloHoja}
+                    contentEditable
+                    suppressContentEditableWarning
+                    spellCheck
+                    lang="es"
+                    role="textbox"
+                    aria-multiline="true"
+                    aria-label="Texto del documento"
+                    onInput={alEscribir}
+                    onKeyDown={alTeclear}
+                    onPaste={alPegar}
+                    onDoubleClick={alDobleClic}
+                />
+
+                {/* Guías de corte de página (hermanas de la hoja: no forman parte del contenido editable) */}
+                {Array.from({ length: paginas - 1 }, (_, i) => (
+                    <div key={i} className="ed-corte" style={{ top: `${padSup + (i + 1) * util}px` }}>
+                        <span>Pág. {i + 2}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

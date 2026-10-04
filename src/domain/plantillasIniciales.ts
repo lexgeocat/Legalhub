@@ -1,4 +1,4 @@
-import type { CampoPropio } from './fuenteModelo';
+import { MARGENES_MEMORIAL, type CampoPropio, type Margenes } from './fuenteModelo';
 
 export interface PlantillaInicial {
     nombre: string;
@@ -7,8 +7,8 @@ export interface PlantillaInicial {
     descripcion: string;
     texto: string;
     campos: CampoPropio[];
+    margenes?: Margenes;
 }
-
 const COMPRAVENTA = [
     '# MINUTA DE COMPRAVENTA DE INMUEBLE',
     '',
@@ -83,6 +83,7 @@ export const PLANTILLAS_INICIALES: PlantillaInicial[] = [
         nombre: 'Memorial (esqueleto)', categoria: 'Escrito judicial', materia: 'civil',
         descripcion: 'Estructura básica de un escrito con partes, hechos y petitorio. Revísalo antes de usarlo.',
         texto: MEMORIAL,
+        margenes: MARGENES_MEMORIAL,
         campos: [
             { clave: 'hechos', etiqueta: 'Hechos', tipo: 'texto_largo', requerido: true },
             { clave: 'petitorio', etiqueta: 'Petitorio', tipo: 'texto_largo', requerido: true },

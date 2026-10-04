@@ -185,3 +185,104 @@
         grid-template-columns: minmax(0, 1fr) 280px;
     }
 }
+
+/* ===== Regla, márgenes y guías de página ===== */
+.ed-lienzo {
+    padding: 0 24px 40px;
+}
+
+.ed-regla-barra {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    margin: 0 -24px 18px;
+    padding: 6px 24px 5px;
+    background: var(--superficie-2);
+    border-bottom: 1px solid var(--borde);
+}
+
+.ed-caja {
+    position: relative;
+    margin: 0 auto;
+}
+
+.ed-regla-v {
+    position: absolute;
+    top: 0;
+    left: -24px;
+    z-index: 3;
+}
+
+.ed-corte {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 1.5px dashed #9aa5c4;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.ed-corte span {
+    position: absolute;
+    right: 6px;
+    top: 3px;
+    font: 10px "Segoe UI", sans-serif;
+    color: #8a93ad;
+    letter-spacing: .04em;
+}
+
+.regla {
+    position: relative;
+    user-select: none;
+}
+
+.regla svg {
+    display: block;
+}
+
+.regla-zona {
+    fill: #c5ccdc;
+}
+
+.regla-papel {
+    fill: #fff;
+}
+
+.regla-marca {
+    stroke: #7a8296;
+    stroke-width: 1;
+}
+
+.regla-num {
+    fill: #4a5268;
+    font: 10px "Segoe UI", sans-serif;
+}
+
+.regla-asa {
+    fill: var(--primario);
+}
+
+.regla-asa-zona {
+    fill: transparent;
+}
+
+.regla-h .regla-asa-zona {
+    cursor: col-resize;
+}
+
+.regla-v .regla-asa-zona {
+    cursor: row-resize;
+}
+
+.regla-tip {
+    position: absolute;
+    z-index: 9;
+    background: #1b2340;
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+}

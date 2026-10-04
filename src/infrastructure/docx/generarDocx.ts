@@ -1,7 +1,7 @@
 import { strToU8, zipSync, type Zippable } from 'fflate';
 import type { GeneradorDocx } from '../../application/puertos/modelos';
 import {
-    CONFIG_POR_DEFECTO, parsearTexto,
+    CONFIG_POR_DEFECTO, margenesSeguros, parsearTexto,
     type BloqueParrafo, type ConfigPagina, type FuenteModelo, type Tramo,
 } from '../../domain/fuenteModelo';
 
@@ -22,14 +22,19 @@ const escAttr = (s: string) => escTexto(s).replace(/"/g, '&quot;');
 const acotar = (n: number, min: number, max: number, defecto: number) =>
     Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : defecto;
 
+/** 1 cm = 566,929 twips (unidad de Word). */
+const twips = (cm: number) => Math.round(cm * 566.929);
+
 function configSegura(c: Partial<ConfigPagina> | undefined): ConfigPagina {
     const b = { ...CONFIG_POR_DEFECTO, ...(c ?? {}) };
+    const tamano: ConfigPagina['tamano'] = b.tamano in PAGINAS ? b.tamano : 'carta';
     return {
-        tamano: b.tamano in PAGINAS ? b.tamano : 'carta',
+        tamano,
         fuente: (b.fuente ?? '').trim() || CONFIG_POR_DEFECTO.fuente,
         tamanoPt: Math.round(acotar(Number(b.tamanoPt), 8, 24, 12) * 2) / 2,
         interlineado: acotar(Number(b.interlineado), 1, 3, 1.5),
         sangria: !!b.sangria,
+        margenes: margenesSeguros(b.margenes, tamano),
     };
 }
 
@@ -65,7 +70,9 @@ function documentoXml(fuente: FuenteModelo, cfg: ConfigPagina): string {
     return (
         `${CABECERA}<w:document xmlns:w="${NS_W}"><w:body>${cuerpo || '<w:p/>'}` +
         `<w:sectPr><w:pgSz w:w="${pag.w}" w:h="${pag.h}"/>` +
-        '<w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1701" w:header="709" w:footer="709" w:gutter="0"/>' +
+        `<w:pgMar w:top="${twips(cfg.margenes.superior)}" w:right="${twips(cfg.margenes.derecho)}" ` +
+        `w:bottom="${twips(cfg.margenes.inferior)}" w:left="${twips(cfg.margenes.izquierdo)}" ` +
+        'w:header="709" w:footer="709" w:gutter="0"/>' +
         '</w:sectPr></w:body></w:document>'
     );
 }
