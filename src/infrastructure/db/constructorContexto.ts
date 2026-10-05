@@ -102,15 +102,14 @@ export class ConstructorContextoDb implements ConstructorContexto {
             if (singular && singular !== plural) singulares[singular] = lista[0] ?? vacia;
         }
 
-        const cliente = personaCtx((await persona(s(exp.cliente_id))) ?? {});
+        const filaCliente = (await persona(s(exp.cliente_id))) ?? {};
+        const cliente = personaCtx(filaCliente, null, await persona(s(filaCliente.representante_id)));
         const cfg = await this.config.cargar();
         const abogado: Ctx = {
             ...personaCtx((await persona(cfg.abogadoPersonaId ?? '')) ?? {}),
             matricula_profesional: cfg.abogadoMatricula,
             domicilio_procesal: cfg.abogadoDomicilioProcesal,
         };
-        const filaCliente = (await persona(s(exp.cliente_id))) ?? {};
-        const cliente = personaCtx(filaCliente, null, await persona(s(filaCliente.representante_id)));
 
         const primeraParte = Object.values(roles).find((l) => l.length > 0)?.[0];
         const primero = (roles.demandantes?.[0] ?? primeraParte ?? cliente) as Ctx;
