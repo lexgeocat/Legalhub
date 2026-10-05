@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-    CONFIG_POR_DEFECTO, PAGINA_CM, margenesSeguros,
+    CONFIG_POR_DEFECTO, PAGINA_CM,
     type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
 } from '../domain/fuenteModelo';
+import { usePaginacion } from './Paginacion';
 
 const PX_POR_CM = 37.7953;
 
@@ -47,11 +48,12 @@ function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: Conf
     );
 }
 
-/** Vista previa de página: se ajusta al ancho disponible y respeta papel, márgenes, fuente, tamaño e interlineado. */
+/** Vista previa paginada: hojas separadas, márgenes respetados en todas las páginas. */
 export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: {
     bloques: Bloque[]; config?: ConfigPagina; resaltar?: boolean;
 }) {
     const cont = useRef<HTMLDivElement>(null);
+    const raiz = useRef<HTMLDivElement>(null);
     const [ancho, setAncho] = useState(0);
 
     useEffect(() => {
@@ -65,32 +67,36 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
     }, []);
 
     const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
-    const mg = margenesSeguros(config.margenes, config.tamano);
     const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - 28) / (pag.w * PX_POR_CM))) : 0.6;
-    const cm = (n: number) => `${(n * escala).toFixed(3)}cm`;
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
+    const pg = usePaginacion(raiz, config, PX_POR_CM * escala, bloques);
 
     return (
         <div className="hoja-wrap" ref={cont}>
-            <div
-                className="hoja"
-                style={{
-                    width: cm(pag.w),
-                    minHeight: cm(pag.h),
-                    padding: `${cm(mg.superior)} ${cm(mg.derecho)} ${cm(mg.inferior)} ${cm(mg.izquierdo)}`,
-                    fontFamily: `"${config.fuente}", "Times New Roman", serif`,
-                    fontSize: pt(config.tamanoPt),
-                    lineHeight: config.interlineado,
-                }}
-            >
-                {bloques.length === 0 && <p className="hoja-vacia">El documento está vacío.</p>}
-                {bloques.map((b, i) =>
-                    b.tipo === 'salto' ? (
-                        <div key={i} className="salto-pagina"><span>Salto de página</span></div>
-                    ) : (
-                        <ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} />
-                    ),
-                )}
+            <div className="pg-caja" style={pg.estiloCaja}>
+                {pg.fondos}
+                <div className="pg-flujo" ref={pg.refFlujo}>
+                    <div className="pg-excl" ref={pg.refExcl} aria-hidden="true" />
+                    <div
+                        ref={raiz}
+                        className="hoja-lectura"
+                        style={{
+                            ...pg.estiloRaiz,
+                            fontFamily: `"${config.fuente}", "Times New Roman", serif`,
+                            fontSize: pt(config.tamanoPt),
+                            lineHeight: config.interlineado,
+                        }}
+                    >
+                        {bloques.length === 0 && <p className="hoja-vacia">El documento está vacío.</p>}
+                        {bloques.map((b, i) =>
+                            b.tipo === 'salto' ? (
+                                <div key={i} className="pg-salto" data-salto="1"><span>Salto de página</span></div>
+                            ) : (
+                                <ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} />
+                            ),
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

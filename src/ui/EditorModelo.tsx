@@ -188,10 +188,9 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         tocar();
     };
 
-    const aplicarPagina = (tamano: TamanoPagina, margenes: Margenes) => {
-        setCfg({ tamano, margenes: margenesSeguros(margenes, tamano) });
+    const aplicarPagina = (tamano: TamanoPagina, margenes: Margenes, simetricos: boolean) => {
+        setCfg({ tamano, margenes: margenesSeguros(margenes, tamano), simetricos });
     };
-
     const armarFuente = (): FuenteModelo => ({
         version: 1,
         config,
@@ -313,7 +312,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         ? TAMANOS_LETRA : [...TAMANOS_LETRA, config.tamanoPt].sort((a, b) => a - b);
     const interlineados = INTERLINEADOS.includes(config.interlineado)
         ? INTERLINEADOS : [...INTERLINEADOS, config.interlineado].sort((a, b) => a - b);
-    const preset = presetDe(config.margenes);
+    const preset = presetDe(config.margenes, config.simetricos);
     const mg = config.margenes;
 
     return (
@@ -378,7 +377,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                     value={preset?.id ?? 'personalizado'}
                     onChange={(e) => {
                         const p = PRESETS_MARGENES.find((x) => x.id === e.target.value);
-                        if (p) setCfg({ margenes: margenesSeguros(p.margenes, config.tamano) });
+                        if (p) setCfg({ margenes: margenesSeguros(p.margenes, config.tamano), simetricos: p.simetricos });
                     }}>
                     {PRESETS_MARGENES.map((p) => <option key={p.id} value={p.id}>{p.etiqueta}</option>)}
                     {!preset && <option value="personalizado">Personalizado</option>}
@@ -547,11 +546,12 @@ function MiniPagina({ w, h, m }: { w: number; h: number; m: Margenes | null }) {
 
 function ModalPagina({ config, aplicar, cerrar }: {
     config: ConfigPagina;
-    aplicar: (tamano: TamanoPagina, m: Margenes) => void;
+    aplicar: (tamano: TamanoPagina, m: Margenes, simetricos: boolean) => void;
     cerrar: () => void;
 }) {
     const [tamano, setTamano] = useState<TamanoPagina>(config.tamano);
     const [txt, setTxt] = useState(aTextos(config.margenes));
+    const [sim, setSim] = useState(config.simetricos);
     const [error, setError] = useState<string | null>(null);
 
     const nums: Margenes = {
@@ -559,7 +559,7 @@ function ModalPagina({ config, aplicar, cerrar }: {
         izquierdo: aNumero(txt.izquierdo), derecho: aNumero(txt.derecho),
     };
     const valido = LADOS.every((l) => Number.isFinite(nums[l]) && nums[l] >= 0);
-    const preset = valido ? presetDe(nums) : undefined;
+    const preset = valido ? presetDe(nums, sim) : undefined;
     const pag = PAGINA_CM[tamano];
 
     const enviar = (ev: FormEvent<HTMLFormElement>) => {
@@ -580,7 +580,7 @@ function ModalPagina({ config, aplicar, cerrar }: {
             setError(`Los márgenes superior e inferior dejan menos de ${AREA_MIN_CM} cm de alto para el texto.`);
             return;
         }
-        aplicar(tamano, nums);
+        aplicar(tamano, nums, sim);
         cerrar();
     };
 
@@ -608,7 +608,7 @@ function ModalPagina({ config, aplicar, cerrar }: {
                         <select value={preset?.id ?? 'personalizado'}
                             onChange={(e) => {
                                 const p = PRESETS_MARGENES.find((x) => x.id === e.target.value);
-                                if (p) { setTxt(aTextos(p.margenes)); setError(null); }
+                                if (p) { setTxt(aTextos(p.margenes)); setSim(p.simetricos); setError(null); }
                             }}>
                             {PRESETS_MARGENES.map((p) => <option key={p.id} value={p.id}>{p.etiqueta}</option>)}
                             {!preset && <option value="personalizado">Personalizado</option>}
@@ -620,6 +620,10 @@ function ModalPagina({ config, aplicar, cerrar }: {
                                 onChange={(e) => { setTxt((t) => ({ ...t, [l]: e.target.value })); setError(null); }} />
                         </Campo>
                     ))}
+                    <label className="casilla ancho">
+                        <input type="checkbox" checked={sim} onChange={(e) => setSim(e.target.checked)} />
+                        Márgenes simétricos (espejo): el izquierdo pasa a ser el interior y se alterna en cada hoja
+                    </label>
                     <p className="suave ancho">
                         Memorial: superior 5,5 · inferior 2 · izquierdo 4 · derecho 2. Los márgenes se aplican a todas las páginas, como en Word.
                     </p>

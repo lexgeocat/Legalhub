@@ -35,6 +35,7 @@ function configSegura(c: Partial<ConfigPagina> | undefined): ConfigPagina {
         interlineado: acotar(Number(b.interlineado), 1, 3, 1.5),
         sangria: !!b.sangria,
         margenes: margenesSeguros(b.margenes, tamano),
+        simetricos: !!b.simetricos,
     };
 }
 
@@ -90,10 +91,16 @@ function estilosXml(cfg: ConfigPagina): string {
     );
 }
 
-const CONFIGURACION =
-    `${CABECERA}<w:settings xmlns:w="${NS_W}"><w:defaultTabStop w:val="708"/>` +
-    '<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>';
-
+/** Con márgenes simétricos Word usa `izquierdo` como margen interior y `derecho` como exterior, y los alterna por hoja. */
+function configuracionXml(cfg: ConfigPagina): string {
+    return (
+        `${CABECERA}<w:settings xmlns:w="${NS_W}">` +
+        // CT_Settings es una secuencia: mirrorMargins debe ir antes de defaultTabStop.
+        (cfg.simetricos ? '<w:mirrorMargins/>' : '') +
+        '<w:defaultTabStop w:val="708"/>' +
+        '<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>'
+    );
+}
 const TIPOS =
     `${CABECERA}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
@@ -122,7 +129,7 @@ export class GeneradorDocxFflate implements GeneradorDocx {
             'word/document.xml': strToU8(documentoXml(fuente, cfg)),
             'word/_rels/document.xml.rels': strToU8(REL_DOCUMENTO),
             'word/styles.xml': strToU8(estilosXml(cfg)),
-            'word/settings.xml': strToU8(CONFIGURACION),
+            'word/settings.xml': strToU8(configuracionXml(cfg)),
         };
         return zipSync(partes);
     }

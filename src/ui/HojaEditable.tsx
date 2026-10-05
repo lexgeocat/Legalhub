@@ -7,6 +7,7 @@ import {
     type Alineacion, type Bloque, type BloqueParrafo, type ConfigPagina, type EstiloParrafo, type Margenes, type Tramo,
 } from '../domain/fuenteModelo';
 import { Regla } from './Regla';
+import { usePaginacion } from './Paginacion';
 import './editorWord.css';
 
 const PX_POR_CM = 37.7953;
@@ -90,7 +91,7 @@ function parrafoADom(b: BloqueParrafo): HTMLElement {
 
 function saltoADom(): HTMLElement {
     const d = document.createElement('div');
-    d.className = 'salto-pagina';
+    d.className = 'pg-salto';
     d.contentEditable = 'false';
     d.dataset.salto = '1';
     const s = document.createElement('span');
@@ -419,6 +420,9 @@ function limpiarBloque(b: HTMLElement): void {
         && texto.trim() === (chips[0].textContent ?? '').trim()
         && /^\{\{\s*[#/]/.test(chips[0].dataset.mk ?? '');
     b.classList.toggle('mk-bloque', solo);
+    // Una línea sin contenido tiene ancho 0: el navegador no la baja de las franjas y el cursor cae arriba a la derecha.
+    // La clase añade un testigo de 1 px (ver CSS) para que se comporte como cualquier otra línea.
+    b.classList.toggle('vacio', chips.length === 0 && texto.replace(/[\u200B\s]/g, '') === '');
     if (b.classList.length === 0) b.removeAttribute('class');
 }
 
@@ -455,7 +459,102 @@ function normalizar(el: HTMLElement): void {
     for (const b of Array.from(el.children)) if (b instanceof HTMLElement && !esSalto(b)) limpiarBloque(b);
 }
 
+/* ---------------- Pegado ---------------- */
+/** Texto del portapapeles → líneas limpias (sin retornos, tabulaciones ni caracteres de control). */
+function lineasDePegado(crudo: string): string[] {
+    const lineas = crudo
+        .replace(/[\u000B\u2028\u2029]/g, '\n')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\t/g, '    ')
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u0008\u000C\u000E-\u001F\u007F\uFFFE\uFFFF]/g, '')
+        .split(/\r\n|\r|\n/);
+    if (lineas.length > 1 && lineas[lineas.length - 1] === '') lineas.pop(); // «texto\n» no crea un párrafo extra
+    return lineas;
+}
+
+/**
+ * Pega texto plano construyendo el DOM de una sola vez. Con execCommand línea a línea cada llamada
+ * forzaba un layout completo (O(n²)) y el editor se congelaba con muchas páginas.
+ * Conserva el formato donde cae el cursor y reparte el resto del párrafo tras la última línea.
+ */
+function pegarTexto(raiz: HTMLElement, r: Range, lineas: string[]): void {
+    r.collapse(true);
+    const bloque = bloqueRaiz(raiz, r.startContainer) as HTMLElement | null;
+    if (!bloque || esSalto(bloque)) return;
+    const bloqueEl = bloque as HTMLElement;
+
+    if (lineas.length === 1) {
+        const t = document.createTextNode(lineas[0]);
+        r.insertNode(t);
+        const c = document.createRange();
+        c.setStart(t, t.length);
+        c.collapse(true);
+        ponerRango(c);
+        bloqueEl.normalize();
+        return;
+    }
+
+    const alineacion = estiloDe(bloqueEl) === 'normal' ? bloqueEl.style.textAlign : '';
+
+    // 1) Lo que hay desde el cursor hasta el final del bloque se aparta (conserva negritas, etc.).
+    const corte = document.createRange();
+    corte.setStart(r.startContainer, r.startOffset);
+    corte.setEnd(bloqueEl, bloqueEl.childNodes.length);
+    const resto = corte.extractContents();
+
+    // 2) La primera línea queda donde estaba el cursor.
+    if (lineas[0]) r.insertNode(document.createTextNode(lineas[0]));
+
+    // 3) Las demás líneas son párrafos nuevos; el último recibe el resto del párrafo original.
+    const frag = document.createDocumentFragment();
+    let textoUltimo: Text | null = null;
+    for (let i = 1; i < lineas.length; i++) {
+        const p = document.createElement('p');
+        if (alineacion) p.style.textAlign = alineacion;
+        textoUltimo = lineas[i] ? document.createTextNode(lineas[i]) : null;
+        if (textoUltimo) p.appendChild(textoUltimo);
+        frag.appendChild(p);
+    }
+    const ultimo = frag.lastElementChild as HTMLElement;
+    ultimo.appendChild(resto);
+    bloqueEl.after(frag);
+
+    // El rango se crea DESPUÉS de insertar: mover nodos desde un fragmento reubica los rangos que apuntan dentro.
+    const c = document.createRange();
+    if (textoUltimo) c.setStart(textoUltimo, textoUltimo.length);
+    else c.setStart(ultimo, 0);
+    c.collapse(true);
+    ponerRango(c);
+    bloqueEl.normalize();
+    ultimo.normalize();
+}
+
+/** Mueve el scroll del lienzo para que el cursor quede visible (el DOM directo no lo hace solo). */
+function mostrarCursor(raiz: HTMLElement): void {
+    const s = window.getSelection();
+    const cont = raiz.closest<HTMLElement>('.ed-pagina');
+    if (!s || s.rangeCount === 0 || !cont) return;
+    const r = s.getRangeAt(0);
+    let rect: DOMRect | undefined = r.getClientRects()[0];
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+        rect = bloqueRaiz(raiz, r.startContainer)?.getBoundingClientRect();
+    }
+    if (!rect) return;
+    const c = cont.getBoundingClientRect();
+    const arriba = c.top + 56; // regla fija
+    const abajo = c.bottom - 32;
+    if (rect.bottom > abajo) cont.scrollTop += rect.bottom - abajo;
+    else if (rect.top < arriba) cont.scrollTop -= arriba - rect.top;
+}
+
 /* ---------------- Componente ---------------- */
+const MAX_HISTORIAL = 200;
+const MAX_HISTORIAL_CHARS = 24_000_000;
+
+/** HTML del documento sin las alturas que calcula la paginación (no son contenido: no deben ensuciar el historial). */
+const instantanea = (el: HTMLElement) => el.innerHTML.replace(/ style="height: [\d.]+px;"/g, '');
+
 export function HojaEditable({
     ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas,
 }: {
@@ -472,9 +571,6 @@ export function HojaEditable({
     const raizRef = useRef<HTMLDivElement>(null);
     const lienzo = useRef<HTMLDivElement>(null);
     const [ancho, setAncho] = useState(0);
-    const [paginas, setPaginas] = useState(1);
-    const nPaginas = useRef(1);
-    const medida = useRef({ padSup: 0, util: 1 });
     const guardada = useRef<Range | null>(null);
     const hist = useRef<{ pila: Snap[]; i: number; t: number; t0: number }>({ pila: [], i: -1, t: 0, t0: 0 });
     const ultimoFmt = useRef('');
@@ -484,12 +580,23 @@ export function HojaEditable({
     useEffect(() => {
         cb.current = { onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas };
     });
+
+    /* ----- geometría y paginación ----- */
+    const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
+    const mg = margenesSeguros(config.margenes, config.tamano);
+    const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
+    const pg = usePaginacion(raizRef, config, PX_POR_CM * escala);
+
+    useEffect(() => {
+        cb.current.onPaginas(pg.paginas);
+    }, [pg.paginas]);
+
     /* ----- historial propio (deshacer / rehacer) ----- */
     function registrar(forzar: boolean) {
         const el = raizRef.current;
         if (!el) return;
         const h = hist.current;
-        const s: Snap = { html: el.innerHTML, sel: tomarSel(el) };
+        const s: Snap = { html: instantanea(el), sel: tomarSel(el) };
         const actual = h.pila[h.i];
         if (actual && actual.html === s.html) {
             actual.sel = s.sel;
@@ -501,7 +608,13 @@ export function HojaEditable({
         } else {
             h.pila = h.pila.slice(0, h.i + 1);
             h.pila.push(s);
-            if (h.pila.length > 200) h.pila.shift();
+            // Tope por cantidad y por tamaño total: con documentos largos cada instantánea pesa cientos de KB.
+            while (
+                h.pila.length > MAX_HISTORIAL
+                || (h.pila.length > 10 && h.pila.reduce((a, x) => a + x.html.length, 0) > MAX_HISTORIAL_CHARS)
+            ) {
+                h.pila.shift();
+            }
             h.i = h.pila.length - 1;
             h.t0 = ahora;
         }
@@ -540,6 +653,7 @@ export function HojaEditable({
         const el = raizRef.current;
         if (!el) return;
         normalizar(el);
+        pg.remedir();
         registrar(forzar);
         cb.current.onCambio();
         emitirFormato();
@@ -553,6 +667,7 @@ export function HojaEditable({
         ponerSel(el, s.sel);
         guardada.current = null;
         ultimoFmt.current = '';
+        pg.remedir();
         cb.current.onCambio();
         emitirFormato();
     }
@@ -659,6 +774,7 @@ export function HojaEditable({
             colocarCursor(nuevos);
         }
         tras(true);
+        mostrarCursor(el);
     }
 
     function comando(c: 'negrita' | 'cursiva' | 'subrayado') {
@@ -722,6 +838,7 @@ export function HojaEditable({
         el.replaceChildren(...bloquesADom(textoInicial));
         normalizar(el);
         registrar(true);
+        pg.remedir();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -755,6 +872,55 @@ export function HojaEditable({
     }
 
     function alTeclear(e: KeyboardEvent<HTMLDivElement>) {
+        // Enter: siempre crea un párrafo <p> normal, como en Word.
+        // Sin este bloqueo el navegador duplica el tag actual (h1, h2…) y aparece un recuadro enorme.
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const el = raizRef.current;
+            if (!el) return;
+            const s = window.getSelection();
+            if (!s || s.rangeCount === 0) return;
+            const r = s.getRangeAt(0);
+            if (!r.collapsed) r.deleteContents();
+
+            const bloque = bloqueRaiz(el, r.startContainer) as HTMLElement | null;
+            if (!bloque || esSalto(bloque)) return;
+            const bloqueEl = bloque as HTMLElement;
+
+            // Extrae lo que queda a la derecha del cursor hasta el fin del bloque actual.
+            const corte = document.createRange();
+            corte.setStart(r.startContainer, r.startOffset);
+            corte.setEnd(bloqueEl, bloqueEl.childNodes.length);
+            const resto = corte.extractContents();
+
+            // Nuevo párrafo normal con el contenido restante (o vacío con <br>).
+            const p = document.createElement('p');
+            // Hereda la alineación del bloque original si era un párrafo normal.
+            if (bloqueEl.tagName === 'P' && bloqueEl.style.textAlign) {
+                p.style.textAlign = bloqueEl.style.textAlign;
+            }
+            if (resto.textContent || resto.childNodes.length > 0) {
+                p.appendChild(resto);
+            } else {
+                p.appendChild(document.createElement('br'));
+            }
+            bloqueEl.after(p);
+
+            // Coloca el cursor al inicio del nuevo párrafo.
+            const c = document.createRange();
+            const primerNodo = p.firstChild;
+            if (primerNodo && primerNodo.nodeName !== 'BR') {
+                c.setStart(primerNodo, 0);
+            } else {
+                c.setStart(p, 0);
+            }
+            c.collapse(true);
+            ponerRango(c);
+            tras(false);
+            mostrarCursor(el);
+            return;
+        }
+
         if (!(e.ctrlKey || e.metaKey)) return;
         const k = e.key.toLowerCase();
         if (k === 'z' && !e.shiftKey) { e.preventDefault(); deshacer(); }
@@ -765,22 +931,28 @@ export function HojaEditable({
         // Ctrl+S se deja subir hasta la ventana, que guarda.
     }
 
-    /** Pega siempre como texto plano (los {{…}} se convierten en etiquetas al normalizar). */
+
+    /** Pega siempre como texto plano; los {{…}} se convierten en etiquetas al normalizar. */
     function alPegar(e: ClipboardEvent<HTMLDivElement>) {
         e.preventDefault();
-        const lineas = e.clipboardData.getData('text/plain').replace(/\u00A0/g, ' ').split(/\r?\n/);
+        const el = raizRef.current;
+        if (!el) return;
+        const lineas = lineasDePegado(e.clipboardData.getData('text/plain'));
         if (lineas.every((l) => l === '')) return;
         foco();
-        pegando.current = true;
-        try {
-            lineas.forEach((l, i) => {
-                if (i > 0) document.execCommand('insertParagraph');
-                if (l) document.execCommand('insertText', false, l);
-            });
-        } finally {
-            pegando.current = false;
+        const s = window.getSelection();
+        if (s && s.rangeCount > 0 && !s.isCollapsed) {
+            // El borrado nativo une bien los bloques de los extremos. Su evento input se ignora: tras() corre al final.
+            pegando.current = true;
+            try {
+                document.execCommand('delete');
+            } finally {
+                pegando.current = false;
+            }
         }
+        pegarTexto(el, rangoActual(), lineas);
         tras(true);
+        mostrarCursor(el);
     }
 
     /** Doble clic en una etiqueta de campo: pide al padre que la edite. */
@@ -802,48 +974,11 @@ export function HojaEditable({
     }
 
     /* ----- render ----- */
-    const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
-    const mg = margenesSeguros(config.margenes, config.tamano);
-    const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
-    const pxCm = PX_POR_CM * escala;
-    const padSup = mg.superior * pxCm;
-    const util = (pag.h - mg.superior - mg.inferior) * pxCm;
     const cm = (n: number) => `${(n * escala).toFixed(3)}cm`;
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
 
-    /** Páginas aproximadas: alto usado por el texto ÷ alto útil de una página. */
-    function medirPaginas() {
-        const el = raizRef.current;
-        if (!el) return;
-        const { padSup: sup, util: u } = medida.current;
-        const ult = el.lastElementChild;
-        const usado = ult instanceof HTMLElement ? ult.offsetTop + ult.offsetHeight - sup : 0;
-        const n = Math.max(1, Math.ceil((usado - 2) / u));
-        if (n === nPaginas.current) return;
-        nPaginas.current = n;
-        setPaginas(n);
-        cb.current.onPaginas(n);
-    }
-
-    useEffect(() => {
-        const el = raizRef.current;
-        if (!el) return;
-        const o = new ResizeObserver(() => medirPaginas());
-        o.observe(el);
-        return () => o.disconnect();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    useEffect(() => {
-        medida.current = { padSup, util };
-        medirPaginas();
-    });
-
     const estiloHoja = {
-        position: 'relative',
-        width: cm(pag.w),
-        minHeight: cm(pag.h),
-        padding: `${cm(mg.superior)} ${cm(mg.derecho)} ${cm(mg.inferior)} ${cm(mg.izquierdo)}`,
+        ...pg.estiloRaiz,
         fontFamily: `"${config.fuente}", "Times New Roman", serif`,
         fontSize: pt(config.tamanoPt),
         lineHeight: config.interlineado,
@@ -858,7 +993,7 @@ export function HojaEditable({
     return (
         <div className="ed-lienzo" ref={lienzo}>
             <div className="ed-regla-barra">
-                <div style={{ width: cm(pag.w), margin: '0 auto' }}>
+                <div style={{ width: pg.geo.ancho, margin: '0 auto' }}>
                     <Regla
                         orientacion="h" largoCm={pag.w} escala={escala}
                         ini={mg.izquierdo} fin={mg.derecho} ladoIni="izquierdo" ladoFin="derecho"
@@ -867,7 +1002,7 @@ export function HojaEditable({
                 </div>
             </div>
 
-            <div className="ed-caja" style={{ width: cm(pag.w) }}>
+            <div className="ed-caja pg-caja" style={pg.estiloCaja}>
                 <div className="ed-regla-v">
                     <Regla
                         orientacion="v" largoCm={pag.h} escala={escala}
@@ -876,29 +1011,27 @@ export function HojaEditable({
                     />
                 </div>
 
-                <div
-                    ref={raizRef}
-                    className={`hoja hoja-ed${config.sangria ? ' con-sangria' : ''}`}
-                    style={estiloHoja}
-                    contentEditable
-                    suppressContentEditableWarning
-                    spellCheck
-                    lang="es"
-                    role="textbox"
-                    aria-multiline="true"
-                    aria-label="Texto del documento"
-                    onInput={alEscribir}
-                    onKeyDown={alTeclear}
-                    onPaste={alPegar}
-                    onDoubleClick={alDobleClic}
-                />
+                {pg.fondos}
 
-                {/* Guías de corte de página (hermanas de la hoja: no forman parte del contenido editable) */}
-                {Array.from({ length: paginas - 1 }, (_, i) => (
-                    <div key={i} className="ed-corte" style={{ top: `${padSup + (i + 1) * util}px` }}>
-                        <span>Pág. {i + 2}</span>
-                    </div>
-                ))}
+                <div className="pg-flujo" ref={pg.refFlujo}>
+                    <div className="pg-excl" ref={pg.refExcl} aria-hidden="true" />
+                    <div
+                        ref={raizRef}
+                        className={`hoja-ed${config.sangria ? ' con-sangria' : ''}`}
+                        style={estiloHoja}
+                        contentEditable
+                        suppressContentEditableWarning
+                        spellCheck
+                        lang="es"
+                        role="textbox"
+                        aria-multiline="true"
+                        aria-label="Texto del documento"
+                        onInput={alEscribir}
+                        onKeyDown={alTeclear}
+                        onPaste={alPegar}
+                        onDoubleClick={alDobleClic}
+                    />
+                </div>
             </div>
         </div>
     );
