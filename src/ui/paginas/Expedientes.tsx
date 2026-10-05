@@ -4,7 +4,7 @@ import type { ExpedienteResumen, PersonaResumen } from '../../application/consul
 import { claveNormalizada } from '../../domain/texto';
 import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, obtenerTipo } from '../../domain/tiposExpediente';
 import {
-    Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Insignia, Modal, Vacio,
+    Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Modal, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta,
 } from '../comunes';
 import { mensajeError, useCargar, useServicios } from '../servicios';
@@ -234,5 +234,3 @@ function NuevoExpediente({ personas, cerrar, creado, irPersonas }: {
         </Modal>
     );
 }
-
-export { Insignia as _InsigniaReexport };

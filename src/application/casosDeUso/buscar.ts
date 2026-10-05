@@ -80,15 +80,6 @@ export class Buscar {
             agregar({ tipo: 'inmueble', id: t(i.id), titulo: `Matrícula ${t(i.matricula)}`, detalle: t(i.ubicacion), expedienteId: t(i.expediente_id) || undefined }),
         );
 
-        (await this.db.consultar<Fila>(
-            `SELECT i.id, i.matricula, i.codigo_catastral, i.ubicacion, ei.expediente_id
-       FROM inmueble i LEFT JOIN expediente_inmueble ei ON ei.inmueble_id = i.id
-       WHERE i.deleted_at IS NULL AND (i.matricula LIKE ?1 ESCAPE '\\' OR i.codigo_catastral LIKE ?1 ESCAPE '\\') LIMIT ?2`,
-            [like, limite],
-        )).forEach((i) =>
-            agregar({ tipo: 'inmueble', id: t(i.id), titulo: `Matrícula ${t(i.matricula)}`, detalle: t(i.ubicacion), expedienteId: t(i.expediente_id) || undefined }),
-        );
-
         return [...salida.values()].slice(0, limite);
     }
 }

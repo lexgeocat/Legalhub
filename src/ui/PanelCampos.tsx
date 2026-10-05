@@ -1,13 +1,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { construirPanel, construirPanelAmbito, type GrupoPanel, type ItemPanel } from '../domain/catalogo';
-import { marcadorDeCampo, type CampoPropio } from '../domain/fuenteModelo';
-import { claveCampo, claveNormalizada } from '../domain/texto';
-import { ROLES_CONOCIDOS } from '../domain/tiposExpediente';
+import {
+    SECCIONES_PANEL, construirGrupoPropios, construirPanel, construirPanelAmbito, describirBloque, rolDesdeTexto,
+    type GrupoPanel, type ItemPanel, type SeccionPanel,
+} from '../domain/catalogo';
+import { hacerOpcional, type CampoPropio } from '../domain/fuenteModelo';
+import { claveNormalizada, etiquetaRol } from '../domain/texto';
+import { ROLES_CONOCIDOS, TIPOS_EXPEDIENTE } from '../domain/tiposExpediente';
 import { copiarConAviso, Icono } from './comunes';
 
 const ROLES_RAPIDOS = ['demandante', 'demandado', 'vendedor', 'comprador', 'arrendador', 'arrendatario', 'poderdante', 'apoderado'];
 const CLAVE_RECIENTES = 'legalhub.panel.recientes';
-const MAX_RECIENTES = 6;
+const PREF_BLANCO = 'legalhub.panel.enBlanco';
+const PREF_CODIGO = 'legalhub.panel.verCodigo';
+const MAX_RECIENTES = 5;
 const SIN_AMBITO: readonly string[] = [];
 
 function leerRecientes(): ItemPanel[] {
@@ -16,7 +21,10 @@ function leerRecientes(): ItemPanel[] {
         if (!Array.isArray(o)) return [];
         return o
             .filter((x) => !!x && typeof x.etiqueta === 'string' && typeof x.texto === 'string')
-            .map((x) => ({ etiqueta: x.etiqueta as string, texto: x.texto as string, bloque: !!x.bloque }))
+            .map((x) => ({
+                etiqueta: x.etiqueta as string, texto: x.texto as string, bloque: !!x.bloque,
+                ejemplo: typeof x.ejemplo === 'string' ? (x.ejemplo as string) : undefined,
+            }))
             .slice(0, MAX_RECIENTES);
     } catch {
         return [];
@@ -31,55 +39,110 @@ function guardarRecientes(l: ItemPanel[]): void {
     }
 }
 
-const Fila = memo(function Fila({ item, onUsar }: { item: ItemPanel; onUsar: (i: ItemPanel) => void }) {
+function usePreferencia(clave: string, inicial: boolean): [boolean, (v: boolean) => void] {
+    const [valor, setValor] = useState<boolean>(() => {
+        try {
+            const g = localStorage.getItem(clave);
+            return g === null ? inicial : g === '1';
+        } catch {
+            return inicial;
+        }
+    });
+    const poner = useCallback((v: boolean) => {
+        setValor(v);
+        try {
+            localStorage.setItem(clave, v ? '1' : '0');
+        } catch {
+            /* sin almacenamiento */
+        }
+    }, [clave]);
+    return [valor, poner];
+}
+
+/** Marca como opcionales («?») todos los campos de un texto; los bloques no se tocan. */
+const volverOpcional = (t: string) => t.replace(/\{\{[^}]*\}\}/g, (m) => hacerOpcional(m));
+
+const rolesSugeridos = (materia?: string): string[] => {
+    const t = TIPOS_EXPEDIENTE.find((x) => x.clave === materia);
+    return t && t.roles.length > 0 ? [...t.roles] : ROLES_RAPIDOS;
+};
+
+const tipoBloque = (texto: string) => (/\{\{#hay_/.test(texto) ? 'Condicional' : 'Se repite');
+
+const Fila = memo(function Fila({ item, onUsar, verCodigo }: {
+    item: ItemPanel; onUsar: (i: ItemPanel) => void; verCodigo: boolean;
+}) {
     return (
         <div className="pc-item">
-            <button type="button" className="pc-insertar" title="Insertar en el cursor"
+            <button type="button" className="pc-insertar" title="Clic para insertar en el cursor"
                 onMouseDown={(e) => e.preventDefault()} onClick={() => onUsar(item)}>
                 <span className="pc-etiq">
                     {item.etiqueta}
-                    {item.bloque && <span className="pc-tag">Bloque</span>}
+                    {item.bloque && <span className={`pc-tag${/\{\{#hay_/.test(item.texto) ? ' cond' : ''}`}>{tipoBloque(item.texto)}</span>}
                 </span>
-                <code className="pc-codigo">{item.texto}</code>
+                {item.ejemplo && <span className="pc-ejemplo">Ej.: {item.ejemplo}</span>}
+                {item.ayuda && <span className="pc-nota">{item.ayuda}</span>}
+                {verCodigo && <code className="pc-codigo">{item.texto}</code>}
             </button>
-            <button type="button" className="btn btn-fan btn-icono btn-sm" title="Copiar marcador"
-                onMouseDown={(e) => e.preventDefault()} onClick={() => void copiarConAviso(item.texto)}>
+            <button type="button" className="btn btn-fan btn-icono btn-sm" title="Copiar el código para pegarlo en otro lugar"
+                aria-label="Copiar código" onMouseDown={(e) => e.preventDefault()} onClick={() => void copiarConAviso(item.texto)}>
                 <Icono n="copiar" tam={15} />
             </button>
         </div>
     );
 });
 
-function Grupo({ g, abierto, forzar, alternar, onUsar }: {
-    g: GrupoPanel; abierto: boolean; forzar: boolean; alternar: (id: string) => void; onUsar: (i: ItemPanel) => void;
+function Grupo({ g, abierto, forzar, alternar, onUsar, verCodigo }: {
+    g: GrupoPanel; abierto: boolean; forzar: boolean;
+    alternar: (id: string, porDefecto: boolean) => void; onUsar: (i: ItemPanel) => void; verCodigo: boolean;
 }) {
+    const [mas, setMas] = useState(false);
     const visible = forzar || abierto;
+    const principales = g.items.filter((i) => !i.avanzado);
+    const extra = g.items.filter((i) => i.avanzado);
+    const verExtra = forzar || mas || principales.length === 0;
+    const fila = (i: ItemPanel, k: number) => <Fila key={`${i.texto}:${k}`} item={i} onUsar={onUsar} verCodigo={verCodigo} />;
     return (
         <section className="pc-grupo">
-            <button type="button" className="pc-grupo-tit" aria-expanded={visible} onClick={() => alternar(g.id)}>
+            <button type="button" className="pc-grupo-tit" aria-expanded={visible}
+                onMouseDown={(e) => e.preventDefault()} onClick={() => alternar(g.id, !!g.abierto)}>
                 <span>{g.titulo}</span>
                 <span className="suave">{visible ? '−' : '+'}</span>
             </button>
             {visible && (
                 <>
                     {g.ayuda && <p className="pc-ayuda">{g.ayuda}</p>}
-                    {g.items.map((i, k) => <Fila key={`${i.texto}:${k}`} item={i} onUsar={onUsar} />)}
+                    {principales.map(fila)}
+                    {extra.length > 0 && !verExtra && (
+                        <button type="button" className="pc-mas" onMouseDown={(e) => e.preventDefault()} onClick={() => setMas(true)}>
+                            Más datos ({extra.length})…
+                        </button>
+                    )}
+                    {verExtra && extra.map(fila)}
                 </>
             )}
         </section>
     );
 }
 
-export function PanelCampos({ campos, ambito = SIN_AMBITO, onInsertar }: {
+export function PanelCampos({ campos, ambito = SIN_AMBITO, materia, onInsertar }: {
     campos: CampoPropio[];
     /** Bloques «{{#…}}» abiertos donde está el cursor del editor. */
     ambito?: readonly string[];
+    /** Tipo de expediente del modelo: sirve para sugerir los roles habituales. */
+    materia?: string;
     onInsertar: (texto: string, bloque: boolean) => void;
 }) {
-    const [rol, setRol] = useState('demandante');
+    const sugeridos = useMemo(() => rolesSugeridos(materia), [materia]);
+    const [rolElegido, setRolElegido] = useState<string | null>(null);
+    const rol = rolElegido ?? sugeridos[0] ?? 'demandante';
+    const rolActual = rolDesdeTexto(rol);
+    const [seccion, setSeccion] = useState<SeccionPanel>('personas');
     const [q, setQ] = useState('');
     const [abiertos, setAbiertos] = useState<Record<string, boolean>>({});
     const [recientes, setRecientes] = useState<ItemPanel[]>(leerRecientes);
+    const [enBlanco, setEnBlanco] = usePreferencia(PREF_BLANCO, false);
+    const [verCodigo, setVerCodigo] = usePreferencia(PREF_CODIGO, false);
     const cuerpo = useRef<HTMLDivElement>(null);
     const buscador = useRef<HTMLInputElement>(null);
     const insertar = useRef(onInsertar);
@@ -92,46 +155,42 @@ export function PanelCampos({ campos, ambito = SIN_AMBITO, onInsertar }: {
     }, [recientes]);
 
     const usar = useCallback((item: ItemPanel) => {
-        insertar.current(item.texto, !!item.bloque);
+        insertar.current(enBlanco && !item.bloque ? volverOpcional(item.texto) : item.texto, !!item.bloque);
         setRecientes((l) => [
-            { etiqueta: item.etiqueta, texto: item.texto, bloque: !!item.bloque },
+            { etiqueta: item.etiqueta, texto: item.texto, bloque: !!item.bloque, ejemplo: item.ejemplo },
             ...l.filter((x) => x.texto !== item.texto),
         ].slice(0, MAX_RECIENTES));
-    }, []);
+    }, [enBlanco]);
 
-    const alternar = useCallback((id: string) => {
-        setAbiertos((a) => ({ ...a, [id]: !(a[id] ?? false) }));
+    const alternar = useCallback((id: string, porDefecto: boolean) => {
+        setAbiertos((a) => ({ ...a, [id]: !(a[id] ?? porDefecto) }));
     }, []);
 
     const ctx = useMemo(() => construirPanelAmbito(ambito), [ambito]);
-
-    const grupos = useMemo<GrupoPanel[]>(() => {
-        const propios: GrupoPanel = {
-            id: 'propios',
-            titulo: 'Campos del caso (de este modelo)',
-            abierto: true,
-            ayuda: campos.some((c) => c.clave.trim()) ? undefined : 'Crea campos en la pestaña «Campos del caso» y aparecerán aquí.',
-            items: campos
-                .filter((c) => claveCampo(c.clave))
-                .map((c) => ({ etiqueta: c.etiqueta || c.clave, texto: marcadorDeCampo({ ...c, clave: claveCampo(c.clave) }) })),
-        };
-        return [...(ctx ? [ctx] : []), propios, ...construirPanel(rol)];
-    }, [rol, campos, ctx]);
+    const grupos = useMemo<GrupoPanel[]>(
+        () => [...(ctx ? [ctx] : []), construirGrupoPropios(campos), ...construirPanel(rol)],
+        [ctx, campos, rol],
+    );
 
     const tokens = claveNormalizada(q.trim()).split(/\s+/).filter(Boolean);
     const buscando = tokens.length > 0;
     const coincide = (i: ItemPanel) => {
-        const h = claveNormalizada(`${i.etiqueta} ${i.texto}`);
+        const h = claveNormalizada(`${i.etiqueta} ${i.ejemplo ?? ''} ${i.ayuda ?? ''} ${i.claves ?? ''} ${i.texto}`);
         return tokens.every((t) => h.includes(t));
     };
+    const nombreSeccion = (s: SeccionPanel) => SECCIONES_PANEL.find((x) => x.id === s)?.etiqueta ?? '';
 
-    const todos: GrupoPanel[] = !buscando && recientes.length > 0
-        ? [...(ctx ? [ctx] : []), { id: 'recientes', titulo: 'Usados recientemente', abierto: true, items: recientes },
-        ...grupos.filter((g) => g !== ctx)]
-        : grupos;
-
-    const visibles = todos
-        .map((g) => ({ ...g, items: buscando ? g.items.filter(coincide) : g.items }))
+    const delTab = buscando ? grupos : grupos.filter((g) => g === ctx || g.seccion === seccion);
+    const reciente: GrupoPanel[] = !buscando && recientes.length > 0
+        ? [{ id: 'recientes', seccion, titulo: 'Usados hace poco', abierto: true, items: recientes }]
+        : [];
+    const orden = [...delTab.filter((g) => g === ctx), ...reciente, ...delTab.filter((g) => g !== ctx)];
+    const visibles = orden
+        .map((g) => ({
+            ...g,
+            titulo: buscando && g !== ctx ? `${nombreSeccion(g.seccion)} · ${g.titulo}` : g.titulo,
+            items: buscando ? g.items.filter(coincide) : g.items,
+        }))
         .filter((g) => (buscando ? g.items.length > 0 : g.items.length > 0 || !!g.ayuda));
 
     function teclasBuscador(e: KeyboardEvent<HTMLInputElement>) {
@@ -162,31 +221,64 @@ export function PanelCampos({ campos, ambito = SIN_AMBITO, onInsertar }: {
     return (
         <div className="pc">
             <div className="pc-cab">
-                <h3>Campos y bloques</h3>
-                <input ref={buscador} type="search" placeholder="Buscar campo… (Enter inserta el primero)"
-                    value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={teclasBuscador} />
-                <label className="campo">
-                    <span className="campo-etiq">Rol de las partes (singular)</span>
-                    <input list="roles-panel" value={rol} onChange={(e) => setRol(e.target.value)} placeholder="demandante, vendedor…" />
-                    <datalist id="roles-panel">
-                        {ROLES_CONOCIDOS.map((r) => <option key={r} value={r} />)}
-                    </datalist>
-                </label>
-                <div className="chips">
-                    {ROLES_RAPIDOS.map((r) => (
-                        <button key={r} type="button" className={`chip${claveNormalizada(rol) === r ? ' sel' : ''}`} onClick={() => setRol(r)}>{r}</button>
-                    ))}
-                </div>
-                {ambito.length > 0 && (
-                    <div className="pc-ctx">Cursor dentro de {ambito.map((a) => `#${a}`).join(' › ')}</div>
+                <h3>Insertar en el documento</h3>
+                <input ref={buscador} type="search" aria-label="Buscar dato" value={q}
+                    placeholder="Buscar: cédula, domicilio, precio… (Enter inserta)"
+                    onChange={(e) => setQ(e.target.value)} onKeyDown={teclasBuscador} />
+                {!buscando && (
+                    <div className="pc-tabs" role="tablist" aria-label="Tipo de dato">
+                        {SECCIONES_PANEL.map((s) => (
+                            <button key={s.id} type="button" role="tab" aria-selected={s.id === seccion}
+                                className={`pc-tab${s.id === seccion ? ' activa' : ''}`}
+                                onMouseDown={(e) => e.preventDefault()} onClick={() => setSeccion(s.id)}>
+                                {s.etiqueta}
+                            </button>
+                        ))}
+                    </div>
                 )}
+                {ambito.length > 0 && <div className="pc-ctx">Cursor dentro de: {ambito.map(describirBloque).join(' › ')}</div>}
             </div>
+
             <div className="pc-cuerpo" ref={cuerpo} onKeyDown={teclasLista}>
-                {visibles.length === 0 && <p className="pc-ayuda">Sin coincidencias.</p>}
+                {!buscando && seccion === 'personas' && (
+                    <div className="pc-rol">
+                        <span className="campo-etiq">¿De qué parte hablas?</span>
+                        <div className="chips">
+                            {sugeridos.slice(0, 12).map((r) => (
+                                <button key={r} type="button" className={`chip${rolActual === r ? ' sel' : ''}`}
+                                    onClick={() => setRolElegido(r)}>
+                                    {etiquetaRol(r)}
+                                </button>
+                            ))}
+                        </div>
+                        <input list="roles-panel" aria-label="Rol de las partes" value={rol}
+                            placeholder="Otro rol: fiador, testigo…" onChange={(e) => setRolElegido(e.target.value)} />
+                        <datalist id="roles-panel">{ROLES_CONOCIDOS.map((r) => <option key={r} value={r} />)}</datalist>
+                    </div>
+                )}
+
+                {visibles.length === 0 && (
+                    <p className="pc-ayuda">
+                        {buscando ? `No encontré «${q.trim()}». Prueba con otra palabra: cédula, domicilio, fecha, precio…` : 'Nada para mostrar aquí.'}
+                    </p>
+                )}
                 {visibles.map((g) => (
                     <Grupo key={g.id} g={g} abierto={abiertos[g.id] ?? !!g.abierto} forzar={buscando}
-                        alternar={(id) => setAbiertos((a) => ({ ...a, [id]: !(a[id] ?? !!g.abierto) }))} onUsar={usar} />
+                        alternar={alternar} onUsar={usar} verCodigo={verCodigo} />
                 ))}
+            </div>
+
+            <div className="pc-pie">
+                <label className="casilla"
+                    title="Normalmente, si falta un dato la generación se detiene y te lo avisa (es lo más seguro). Con esta opción, lo insertado queda en blanco; la hoja de verificación te lo marca antes de generar.">
+                    <input type="checkbox" checked={enBlanco} onChange={(e) => setEnBlanco(e.target.checked)} />
+                    Si falta un dato, dejarlo en blanco
+                </label>
+                <label className="casilla">
+                    <input type="checkbox" checked={verCodigo} onChange={(e) => setVerCodigo(e.target.checked)} />
+                    Mostrar el código de cada campo
+                </label>
+                <p className="pc-ayuda">Clic: inserta en el cursor · Doble clic sobre un campo del texto: editarlo.</p>
             </div>
         </div>
     );

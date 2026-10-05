@@ -14,6 +14,7 @@ import {
 import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } from './HojaEditable';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
+import { etiquetaCampoCaso } from '../domain/catalogo';
 
 interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 
@@ -238,7 +239,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
         const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
             .filter(([k]) => !declaradas.has(k))
-            .map(([k, u]) => ({ clave: k, etiqueta: etiquetaRol(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
+            .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
         if (nuevos.length === 0) {
             avisar('No hay campos nuevos en el texto', 'info');
             return;
@@ -246,6 +247,18 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         setCampos((l) => [...l, ...nuevos]);
         tocar();
         avisar(`Se agregaron ${nuevos.length} campo(s)`);
+    }
+
+    /** Inserta desde el panel y declara los «caso.*» que el texto usa y aún no existen. */
+    function insertarDesdePanel(texto: string, bloque: boolean) {
+        hoja.current?.insertar(texto, bloque);
+        const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
+        const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
+            .filter(([k]) => !declaradas.has(k))
+            .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
+        if (nuevos.length === 0) return;
+        setCampos((l) => [...l, ...nuevos]);
+        tocar();
     }
 
     /* ----- verificar y guardar ----- */
@@ -298,7 +311,8 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     });
     useEffect(() => {
         const f = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            const k = e.key.toLowerCase();
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'g' || k === 's')) {
                 e.preventDefault();
                 guardarRef.current();
             }
@@ -350,9 +364,9 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                     {interlineados.map((n) => <option key={n} value={n}>{coma(n)}</option>)}
                 </select>
                 <Sep />
-                <Tb titulo="Negrita (Ctrl+B)" activo={formato.negrita} onClick={() => hoja.current?.comando('negrita')}><b>N</b></Tb>
-                <Tb titulo="Cursiva (Ctrl+I)" activo={formato.cursiva} onClick={() => hoja.current?.comando('cursiva')}><i>K</i></Tb>
-                <Tb titulo="Subrayado (Ctrl+U)" activo={formato.subrayado} onClick={() => hoja.current?.comando('subrayado')}><u>S</u></Tb>
+                <Tb titulo="Negrita (Ctrl+N)" activo={formato.negrita} onClick={() => hoja.current?.comando('negrita')}><b>N</b></Tb>
+                <Tb titulo="Cursiva (Ctrl+K)" activo={formato.cursiva} onClick={() => hoja.current?.comando('cursiva')}><i>K</i></Tb>
+                <Tb titulo="Subrayado (Ctrl+S)" activo={formato.subrayado} onClick={() => hoja.current?.comando('subrayado')}><u>S</u></Tb>
                 <Sep />
                 <Tb titulo="Título (centrado, negrita)" activo={formato.estilo === 'titulo'} onClick={() => hoja.current?.estilo('titulo')}>Título</Tb>
                 <Tb titulo="Subtítulo" activo={formato.estilo === 'subtitulo'} onClick={() => hoja.current?.estilo('subtitulo')}>Subtítulo</Tb>
@@ -412,7 +426,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 </div>
                 {panel && (
                     <aside className="ed-panel">
-                        <PanelCampos campos={campos} ambito={ambito} onInsertar={(texto, bloque) => hoja.current?.insertar(texto, bloque)} />
+                        <PanelCampos campos={campos} ambito={ambito} materia={materia} onInsertar={insertarDesdePanel} />
                     </aside>
                 )}
             </div>

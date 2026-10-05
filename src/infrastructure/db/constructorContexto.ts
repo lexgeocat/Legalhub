@@ -109,6 +109,8 @@ export class ConstructorContextoDb implements ConstructorContexto {
             matricula_profesional: cfg.abogadoMatricula,
             domicilio_procesal: cfg.abogadoDomicilioProcesal,
         };
+        const filaCliente = (await persona(s(exp.cliente_id))) ?? {};
+        const cliente = personaCtx(filaCliente, null, await persona(s(filaCliente.representante_id)));
 
         const primeraParte = Object.values(roles).find((l) => l.length > 0)?.[0];
         const primero = (roles.demandantes?.[0] ?? primeraParte ?? cliente) as Ctx;

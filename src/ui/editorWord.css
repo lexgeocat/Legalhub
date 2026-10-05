@@ -302,3 +302,102 @@
         grid-template-columns: minmax(0, 1fr) 280px;
     }
 }
+
+/* ===== Panel de campos (versión amigable) ===== */
+.pc-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    padding: 3px;
+    background: #e7eaf1;
+    border-radius: 9px;
+}
+
+.pc-tab {
+    border: 0;
+    border-radius: 7px;
+    padding: 6px 2px;
+    background: transparent;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--texto-2);
+    cursor: pointer;
+}
+
+.pc-tab:hover {
+    color: var(--texto);
+}
+
+.pc-tab.activa {
+    background: #fff;
+    color: var(--primario);
+    box-shadow: var(--sombra);
+}
+
+.pc-tab:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: 1px;
+}
+
+.pc-rol {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 4px 10px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.pc-ejemplo {
+    font-size: 12px;
+    color: var(--texto-2);
+    font-style: italic;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.pc-nota {
+    font-size: 11.5px;
+    color: var(--texto-3);
+}
+
+.pc-mas {
+    margin: 2px 0 6px 4px;
+    padding: 3px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--primario);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pc-mas:hover {
+    background: var(--primario-claro);
+}
+
+.pc-tag.cond {
+    background: var(--adv-bg);
+    color: var(--adv);
+}
+
+.pc-pie {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px 12px 10px;
+    border-top: 1px solid var(--borde);
+    background: var(--superficie-2);
+    font-size: 12.5px;
+}
+
+.pc-pie .pc-ayuda {
+    padding: 2px 0 0;
+}
