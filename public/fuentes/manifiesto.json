@@ -1,0 +1,103 @@
+{
+  "EB Garamond": {
+    "400-normal": "eb-garamond-400-normal.woff",
+    "400-italic": "eb-garamond-400-italic.woff",
+    "700-normal": "eb-garamond-700-normal.woff",
+    "700-italic": "eb-garamond-700-italic.woff"
+  },
+  "Libre Baskerville": {
+    "400-normal": "libre-baskerville-400-normal.woff",
+    "400-italic": "libre-baskerville-400-italic.woff",
+    "700-normal": "libre-baskerville-700-normal.woff",
+    "700-italic": "libre-baskerville-700-italic.woff"
+  },
+  "Crimson Pro": {
+    "400-normal": "crimson-pro-400-normal.woff",
+    "400-italic": "crimson-pro-400-italic.woff",
+    "700-normal": "crimson-pro-700-normal.woff",
+    "700-italic": "crimson-pro-700-italic.woff"
+  },
+  "Source Serif 4": {
+    "400-normal": "source-serif-4-400-normal.woff",
+    "400-italic": "source-serif-4-400-italic.woff",
+    "700-normal": "source-serif-4-700-normal.woff",
+    "700-italic": "source-serif-4-700-italic.woff"
+  },
+  "Lora": {
+    "400-normal": "lora-400-normal.woff",
+    "400-italic": "lora-400-italic.woff",
+    "700-normal": "lora-700-normal.woff",
+    "700-italic": "lora-700-italic.woff"
+  },
+  "Merriweather": {
+    "400-normal": "merriweather-400-normal.woff",
+    "400-italic": "merriweather-400-italic.woff",
+    "700-normal": "merriweather-700-normal.woff",
+    "700-italic": "merriweather-700-italic.woff"
+  },
+  "PT Serif": {
+    "400-normal": "pt-serif-400-normal.woff",
+    "400-italic": "pt-serif-400-italic.woff",
+    "700-normal": "pt-serif-700-normal.woff",
+    "700-italic": "pt-serif-700-italic.woff"
+  },
+  "Libre Caslon Text": {
+    "400-normal": "libre-caslon-text-400-normal.woff",
+    "400-italic": "libre-caslon-text-400-italic.woff",
+    "700-normal": "libre-caslon-text-700-normal.woff"
+  },
+  "Playfair Display": {
+    "400-normal": "playfair-display-400-normal.woff",
+    "400-italic": "playfair-display-400-italic.woff",
+    "700-normal": "playfair-display-700-normal.woff",
+    "700-italic": "playfair-display-700-italic.woff"
+  },
+  "Tinos": {
+    "400-normal": "tinos-400-normal.woff",
+    "400-italic": "tinos-400-italic.woff",
+    "700-normal": "tinos-700-normal.woff",
+    "700-italic": "tinos-700-italic.woff"
+  },
+  "Inter": {
+    "400-normal": "inter-400-normal.woff",
+    "400-italic": "inter-400-italic.woff",
+    "700-normal": "inter-700-normal.woff",
+    "700-italic": "inter-700-italic.woff"
+  },
+  "Source Sans 3": {
+    "400-normal": "source-sans-3-400-normal.woff",
+    "400-italic": "source-sans-3-400-italic.woff",
+    "700-normal": "source-sans-3-700-normal.woff",
+    "700-italic": "source-sans-3-700-italic.woff"
+  },
+  "Open Sans": {
+    "400-normal": "open-sans-400-normal.woff",
+    "400-italic": "open-sans-400-italic.woff",
+    "700-normal": "open-sans-700-normal.woff",
+    "700-italic": "open-sans-700-italic.woff"
+  },
+  "Lato": {
+    "400-normal": "lato-400-normal.woff",
+    "400-italic": "lato-400-italic.woff",
+    "700-normal": "lato-700-normal.woff",
+    "700-italic": "lato-700-italic.woff"
+  },
+  "IBM Plex Sans": {
+    "400-normal": "ibm-plex-sans-400-normal.woff",
+    "400-italic": "ibm-plex-sans-400-italic.woff",
+    "700-normal": "ibm-plex-sans-700-normal.woff",
+    "700-italic": "ibm-plex-sans-700-italic.woff"
+  },
+  "Arimo": {
+    "400-normal": "arimo-400-normal.woff",
+    "400-italic": "arimo-400-italic.woff",
+    "700-normal": "arimo-700-normal.woff",
+    "700-italic": "arimo-700-italic.woff"
+  },
+  "Roboto": {
+    "400-normal": "roboto-400-normal.woff",
+    "400-italic": "roboto-400-italic.woff",
+    "700-normal": "roboto-700-normal.woff",
+    "700-italic": "roboto-700-italic.woff"
+  }
+}

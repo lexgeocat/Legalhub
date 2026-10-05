@@ -15,6 +15,7 @@ import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } f
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
 import { etiquetaCampoCaso } from '../domain/catalogo';
+import { GRUPOS_FUENTES, buscarFuente, pilaCss, precargarFuentes } from '../domain/fuentes';
 
 interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 
@@ -309,6 +310,11 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     useEffect(() => {
         guardarRef.current = () => void guardar(false);
     });
+
+    useEffect(() => {
+        precargarFuentes();
+    }, []);
+
     useEffect(() => {
         const f = (e: KeyboardEvent) => {
             const k = e.key.toLowerCase();
@@ -354,7 +360,17 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 <Tb titulo="Rehacer (Ctrl+Y)" onClick={() => hoja.current?.rehacer()}><Ico d={ICO.rehacer} /></Tb>
                 <Sep />
                 <select className="ed-fuente" aria-label="Fuente" value={config.fuente} onChange={(e) => setCfg({ fuente: e.target.value })}>
-                    {fuentes.map((f) => <option key={f} value={f}>{f}</option>)}
+                    {GRUPOS_FUENTES.map((g) => {
+                        const lista = fuentes.filter((f) => (buscarFuente(f)?.categoria ?? 'sistema') === g.id);
+                        if (lista.length === 0) return null;
+                        return (
+                            <optgroup key={g.id} label={g.titulo}>
+                                {lista.map((f) => (
+                                    <option key={f} value={f} title={buscarFuente(f)?.nota} style={{ fontFamily: pilaCss(f) }}>{f}</option>
+                                ))}
+                            </optgroup>
+                        );
+                    })}
                 </select>
                 <select aria-label="Tamaño de letra" value={config.tamanoPt} onChange={(e) => setCfg({ tamanoPt: Number(e.target.value) })}>
                     {tamanos.map((n) => <option key={n} value={n}>{coma(n)}</option>)}

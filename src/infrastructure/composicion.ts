@@ -24,6 +24,8 @@ import { GeneradorDocxFflate } from './docx/generarDocx';
 import { LectorDocxFflate } from './docx/leerModelo';
 import { MotorDocx } from './docx/motor/motor';
 import { FormatoPaqueteFflate } from './docx/paqueteModelo';
+import { IncrustadorFuentesDocx } from './docx/incrustarFuentes';
+import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
 import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 
 export interface Servicios {
@@ -69,6 +71,7 @@ export async function crearServicios(): Promise<Servicios> {
     const lector = new LectorDocxFflate();
     const modelos = new RepositorioModelosDb(db, archivos, formato);
     const contexto = new ConstructorContextoDb(db, config);
+    const incrustador = new IncrustadorFuentesDocx(new CargadorFuentesWeb());
     const importarModelo = new ImportarModelo({ db, archivos, motor, formato, modelos, generador });
 
     return {
@@ -89,7 +92,7 @@ export async function crearServicios(): Promise<Servicios> {
         duplicarModelo: new DuplicarModelo({ db, modelos, importar: importarModelo }),
         convertirModelo: new ConvertirModeloAEditable({ db, modelos, lector, importar: importarModelo }),
         instalarPlantilla: new InstalarPlantillaInicial(importarModelo),
-        generarDocumento: new GenerarDocumento({ db, archivos, modelos, contexto, motor }),
+        generarDocumento: new GenerarDocumento({ db, archivos, modelos, contexto, motor, incrustador }),
         adjuntarVersion: new AdjuntarVersionEditada({ db, archivos, motor }),
         buscar: new Buscar(db),
         eliminarDocumento: new EliminarDocumento(db),

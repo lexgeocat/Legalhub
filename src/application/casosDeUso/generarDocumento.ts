@@ -5,6 +5,7 @@ import type { ArchivosPuerto } from '../puertos/archivos';
 import type { ConstructorContexto } from '../puertos/contexto';
 import type { DbPuerto, Sentencia } from '../puertos/db';
 import type { RepositorioModelos } from '../puertos/modelos';
+import type { IncrustadorFuentes } from '../puertos/fuentes';
 import type { EntradaVerificacion, MotorPlantillas } from '../puertos/motorPlantillas';
 
 export interface DependenciasGenerarDocumento {
@@ -13,6 +14,7 @@ export interface DependenciasGenerarDocumento {
   modelos: RepositorioModelos;
   contexto: ConstructorContexto;
   motor: MotorPlantillas;
+  incrustador?: IncrustadorFuentes;
 }
 
 export interface DocumentoPreparado {
@@ -36,7 +38,7 @@ export class GenerarDocumento {
     datosFormulario: Record<string, unknown>,
     titulo: string,
   ): Promise<DocumentoPreparado> {
-    const { db, modelos, contexto, motor } = this.dep;
+    const { db, modelos, contexto, motor, incrustador } = this.dep;
     const tituloLimpio = titulo.trim();
     if (!tituloLimpio) throw new Error('Falta el título del documento');
 
@@ -48,7 +50,9 @@ export class GenerarDocumento {
 
     const plantilla = await modelos.leerPlantilla(modeloVersionId);
     const datos = await contexto.construir(expedienteId, datosFormulario);
-    const { docx, verificacion } = await motor.renderizar(plantilla, datos);
+    const { docx: crudo, verificacion } = await motor.renderizar(plantilla, datos);
+    // Las fuentes viajan dentro del .docx: se ve igual en cualquier PC.
+    const docx = incrustador ? await incrustador.incrustar(crudo) : crudo;
     return {
       expedienteId, codigoExpediente: exp.codigo, modeloVersionId, titulo: tituloLimpio,
       datos, docx, texto: motor.textoPlano(docx), verificacion,

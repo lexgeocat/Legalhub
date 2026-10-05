@@ -1,3 +1,4 @@
+import { NOMBRES_FUENTES } from './fuentes';
 export type TipoCampo = 'texto' | 'texto_largo' | 'fecha' | 'moneda' | 'numero' | 'superficie';
 
 export const TIPOS_CAMPO: { valor: TipoCampo; etiqueta: string }[] = [
@@ -27,7 +28,7 @@ export interface ConfigPagina {
 
 export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[] }
 
-export const FUENTES_PAGINA = ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Garamond', 'Georgia', 'Verdana'];
+export const FUENTES_PAGINA: string[] = NOMBRES_FUENTES;
 export const CATEGORIAS_MODELO = ['Escrito judicial', 'Contrato', 'Minuta', 'Documento privado', 'Poder', 'Carta o notificación', 'Otro'];
 
 export const PAGINA_CM: Record<TamanoPagina, { w: number; h: number }> = {

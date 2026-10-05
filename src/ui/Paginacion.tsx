@@ -178,10 +178,13 @@ export function usePaginacion(
         };
         const o = new ResizeObserver(programar);
         o.observe(el);
-        void document.fonts?.ready.then(programar);
+        const fuentes = document.fonts;
+        void fuentes?.ready.then(programar);
+        fuentes?.addEventListener('loadingdone', programar);
         return () => {
             cancelAnimationFrame(cuadro);
             o.disconnect();
+            fuentes?.removeEventListener('loadingdone', programar);
         };
     }, [refRaiz, medir]);
 

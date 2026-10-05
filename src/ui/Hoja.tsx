@@ -4,7 +4,7 @@ import {
     type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
 } from '../domain/fuenteModelo';
 import { usePaginacion } from './Paginacion';
-
+import { pilaCss } from '../domain/fuentes';
 const PX_POR_CM = 37.7953;
 
 function Tramos({ tramos, estilo, resaltar }: { tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean }) {
@@ -82,7 +82,7 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
                         className="hoja-lectura"
                         style={{
                             ...pg.estiloRaiz,
-                            fontFamily: `"${config.fuente}", "Times New Roman", serif`,
+                            fontFamily: pilaCss(config.fuente),
                             tabSize: `${(1.25 * escala).toFixed(3)}cm`,
                             fontSize: pt(config.tamanoPt),
                             lineHeight: config.interlineado,

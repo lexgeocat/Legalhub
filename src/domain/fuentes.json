@@ -1,0 +1,160 @@
+[
+    {
+        "familia": "Times New Roman",
+        "categoria": "sistema",
+        "generica": "serif",
+        "equivalente": "Tinos",
+        "nota": "Estándar de los escritos judiciales"
+    },
+    {
+        "familia": "Arial",
+        "categoria": "sistema",
+        "generica": "sans-serif",
+        "equivalente": "Arimo"
+    },
+    {
+        "familia": "Calibri",
+        "categoria": "sistema",
+        "generica": "sans-serif"
+    },
+    {
+        "familia": "Cambria",
+        "categoria": "sistema",
+        "generica": "serif"
+    },
+    {
+        "familia": "Garamond",
+        "categoria": "sistema",
+        "generica": "serif",
+        "equivalente": "EB Garamond"
+    },
+    {
+        "familia": "Georgia",
+        "categoria": "sistema",
+        "generica": "serif"
+    },
+    {
+        "familia": "Verdana",
+        "categoria": "sistema",
+        "generica": "sans-serif"
+    },
+    {
+        "familia": "EB Garamond",
+        "paquete": "eb-garamond",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Garamond clásico, muy elegante para escritos y contratos"
+    },
+    {
+        "familia": "Libre Baskerville",
+        "paquete": "libre-baskerville",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Baskerville sobrio, muy legible en papel"
+    },
+    {
+        "familia": "Crimson Pro",
+        "paquete": "crimson-pro",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Serif de libro, compacta y limpia"
+    },
+    {
+        "familia": "Source Serif 4",
+        "paquete": "source-serif-4",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Serif moderna de Adobe, excelente para cuerpo de texto"
+    },
+    {
+        "familia": "Lora",
+        "paquete": "lora",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Serif cálida y equilibrada"
+    },
+    {
+        "familia": "Merriweather",
+        "paquete": "merriweather",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Serif robusta, muy legible en tamaños pequeños"
+    },
+    {
+        "familia": "PT Serif",
+        "paquete": "pt-serif",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Serif institucional"
+    },
+    {
+        "familia": "Libre Caslon Text",
+        "paquete": "libre-caslon-text",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Caslon clásico, tono tradicional"
+    },
+    {
+        "familia": "Playfair Display",
+        "paquete": "playfair-display",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Alto contraste: ideal para títulos"
+    },
+    {
+        "familia": "Tinos",
+        "paquete": "tinos",
+        "categoria": "serif",
+        "generica": "serif",
+        "nota": "Equivalente métrico de Times New Roman (mismo espaciado)"
+    },
+    {
+        "familia": "Inter",
+        "paquete": "inter",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Sans moderna, muy nítida en pantalla"
+    },
+    {
+        "familia": "Source Sans 3",
+        "paquete": "source-sans-3",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Sans sobria de Adobe"
+    },
+    {
+        "familia": "Open Sans",
+        "paquete": "open-sans",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Sans neutra y muy difundida"
+    },
+    {
+        "familia": "Lato",
+        "paquete": "lato",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Sans amable y profesional"
+    },
+    {
+        "familia": "IBM Plex Sans",
+        "paquete": "ibm-plex-sans",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Sans corporativa"
+    },
+    {
+        "familia": "Arimo",
+        "paquete": "arimo",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Equivalente métrico de Arial"
+    },
+    {
+        "familia": "Roboto",
+        "paquete": "roboto",
+        "categoria": "sans",
+        "generica": "sans-serif",
+        "nota": "Sans geométrica y neutra"
+    }
+]

@@ -9,6 +9,8 @@ import {
 import { Regla } from './Regla';
 import { usePaginacion } from './Paginacion';
 import './editorWord.css';
+import { pilaCss } from '../domain/fuentes';
+import { htmlABloques } from './pegadoHtml';
 
 const PX_POR_CM = 37.7953;
 const MARGEN_LIENZO = 48;
@@ -20,10 +22,6 @@ const DESDE_CSS: Record<string, Alineacion> = { left: 'left', start: 'left', cen
 const A_CSS: Record<Alineacion, string> = { left: 'left', center: 'center', right: 'right', both: 'justify' };
 const BLOQUES = new Set(['P', 'H1', 'H2']);
 
-/**
- * Atajos de Word en español (Ctrl + letra). Para usar los de Word en inglés basta con cambiar las letras
- * (B negrita, I cursiva, U subrayado, L izquierda, E centro, R derecha, A todo).
- */
 type Atajo =
     | 'negrita' | 'cursiva' | 'subrayado' | 'izquierda' | 'centro' | 'derecha' | 'justificado'
     | 'todo' | 'deshacer' | 'rehacer';
@@ -34,14 +32,12 @@ const ATAJOS = new Map<string, Atajo>([
     ['e', 'todo'], ['z', 'deshacer'], ['y', 'rehacer'],
 ]);
 
-/** Atajo de Ctrl+tecla; null si no es nuestro (copiar, pegar, guardar…): sigue su curso normal. */
 function atajoDe(tecla: string, mayus: boolean): Atajo | null {
     const k = tecla.toLowerCase();
     if (k === 'z' && mayus) return 'rehacer'; // Ctrl+Mayús+Z, además de Ctrl+Y
     return mayus ? null : (ATAJOS.get(k) ?? null);
 }
 
-/** Estilos en línea que el navegador mete al mezclar bloques y que alteran el aspecto (tamaño, fuente, color…). */
 const ESTILOS_RUIDO = [
     'font', 'font-family', 'font-size', 'font-variant', 'color', 'background', 'background-color', 'line-height',
     'letter-spacing', 'word-spacing', 'white-space', 'text-indent', 'margin', 'padding', 'caret-color',
@@ -73,13 +69,7 @@ export interface ControlHoja {
     enfocar(): void;
 }
 
-/* ================= DOM ⇄ bloques =================
- * Estructura del documento: <p>, <h1>, <h2> y <div data-salto>.
- * Dentro de un bloque: texto, <b>/<i>/<u>, etiquetas de campo (span.mk) y <br>.
- * Un <br> es un salto de línea suave (Shift+Enter), salvo el ÚLTIMO <br> del bloque:
- * ese es solo un relleno para que una línea vacía tenga altura y cursor.
- * Por eso un salto suave al final del párrafo se representa con dos <br> seguidos.
- */
+/* ================= DOM ⇄ bloques ================ */
 interface Fmt { b: boolean; i: boolean; u: boolean }
 interface Pieza { texto: string; f: Fmt; chip: boolean; br?: boolean }
 const SIN_FMT: Fmt = { b: false, i: false, u: false };
@@ -478,7 +468,6 @@ function colocarCursor(nuevos: HTMLElement[]): void {
 }
 
 /* ================= Normalización ================= */
-/** Nodos «hoja» del bloque, en orden: textos no vacíos, etiquetas de campo y <br>. */
 function hojasDe(b: HTMLElement): ChildNode[] {
     const salida: ChildNode[] = [];
     const rec = (n: Node) => {
@@ -587,10 +576,6 @@ function convertirMarcadores(el: HTMLElement): void {
     }
 }
 
-/**
- * Deja la página con la estructura esperada: solo <p>, <h1>, <h2> y saltos de página.
- * Con `solo` únicamente se limpia ese bloque (escritura normal); sin él se revisa todo el documento.
- */
 function normalizar(el: HTMLElement, solo?: HTMLElement | null): void {
     let sueltos: Node[] = [];
     const cerrar = (antes: Node | null) => {
@@ -667,10 +652,6 @@ function ambitoEn(raiz: HTMLElement, nodo: Node, offset: number): string[] {
 }
 
 /* ================= Pegado ================= */
-/**
- * Texto del portapapeles → párrafos. Dentro de cada línea, «\u2028» marca un salto suave
- * (Word copia Shift+Enter como tabulación vertical).
- */
 function lineasDePegado(crudo: string): string[] {
     const lineas = crudo
         .replace(/\u2029/g, '\n')
@@ -703,10 +684,6 @@ function brAntesDe(r: Range): boolean {
     return c.nodeType === 3 && o === 0 && esBr(c.previousSibling);
 }
 
-/**
- * Pega texto plano construyendo el DOM de una sola vez (con execCommand línea a línea el editor se congelaba).
- * Conserva el formato donde cae el cursor y reparte el resto del párrafo tras la última línea.
- */
 function pegarTexto(raiz: HTMLElement, r: Range, lineas: string[]): void {
     r.collapse(true);
     const bloque = bloqueRaiz(raiz, r.startContainer);
@@ -761,6 +738,44 @@ function pegarTexto(raiz: HTMLElement, r: Range, lineas: string[]): void {
     ponerRango(ultimoNodo ? trasNodo(ultimoNodo) : inicioDe(ultimo));
     bloque.normalize();
     ultimo.normalize();
+}
+
+function pegarBloques(raiz: HTMLElement, r: Range, bloques: Bloque[]): void {
+    r.collapse(true);
+    const bloque = bloqueRaiz(raiz, r.startContainer);
+    const unico = bloques.length === 1 && bloques[0].tipo === 'parrafo' ? bloques[0] : null;
+
+    if (unico && bloque && !esSalto(bloque) && !esVacio(bloque)) {
+        const frag = document.createDocumentFragment();
+        for (const t of unico.tramos) frag.appendChild(tramoADom(t));
+        const ultimo = frag.lastChild;
+        if (!ultimo) return;
+        r.insertNode(frag);
+        rellenarSaltoFinal(bloque, ultimo);
+        const sig = ultimo.nextSibling;
+        if (!sig || sig.nodeName === 'BR') {
+            // Chromium no deja el cursor tras un inline no editable al final del párrafo.
+            const zw = document.createTextNode('\u200B');
+            ultimo.parentNode?.insertBefore(zw, sig);
+            r.setStart(zw, 1);
+        } else {
+            r.setStartAfter(ultimo);
+        }
+        r.collapse(true);
+        ponerRango(r);
+        return;
+    }
+
+    const nuevos = bloques.map((b) => (b.tipo === 'salto' ? saltoADom() : parrafoADom(b)));
+    colocarBloques(raiz, r, nuevos);
+    const ult = nuevos[nuevos.length - 1];
+    if (!ult) return;
+    if (esSalto(ult)) {
+        const sig = ult.nextElementSibling;
+        if (sig instanceof HTMLElement) ponerRango(inicioDe(sig));
+    } else {
+        ponerRango(alFinal(ult));
+    }
 }
 
 /** Mueve el scroll del lienzo para que el cursor quede visible (el DOM directo no lo hace solo). */
@@ -831,9 +846,7 @@ export function HojaEditable({
         cb.current.onPaginas(pg.paginas);
     }, [pg.paginas]);
 
-    /* ----- historial propio (deshacer / rehacer) -----
-     * Se guarda una instantánea cuando haces una pausa al escribir (o antes de cada acción de formato),
-     * no en cada tecla: con documentos largos copiar todo el HTML por pulsación era lo que frenaba. */
+    /* ----- historial propio (deshacer / rehacer) ----- */
     function registrar() {
         const el = raizRef.current;
         if (!el) return;
@@ -920,10 +933,6 @@ export function HojaEditable({
         cuadro.current = requestAnimationFrame(emitirEstado);
     }
 
-    /**
-     * Cierra una edición. `inmediato`: guarda ya en el historial (acciones de formato);
-     * si no, se guarda al pausar. `completo`: revisa todo el documento (por defecto) o solo el bloque del cursor.
-     */
     function tras(inmediato: boolean, completo = true) {
         const el = raizRef.current;
         if (!el) return;
@@ -1024,7 +1033,6 @@ export function HojaEditable({
     }
 
     /* ----- Enter, Shift+Enter, Tab ----- */
-    /** Enter: párrafo nuevo. Al final de un título/subtítulo el nuevo es normal; en medio se parte conservando el estilo. */
     function nuevoParrafo() {
         const el = raizRef.current;
         if (!el) return;
@@ -1105,8 +1113,6 @@ export function HojaEditable({
             r.insertNode(frag);
             const sig = ult.nextSibling;
             if (!sig || sig.nodeName === 'BR') {
-                // Chromium no deja el cursor tras un inline no editable si es lo último del párrafo:
-                // se añade un carácter invisible (limpiarTexto lo descarta al leer).
                 const zw = document.createTextNode('\u200B');
                 ult.parentNode?.insertBefore(zw, sig);
                 r.setStart(zw, 1);
@@ -1300,11 +1306,30 @@ export function HojaEditable({
         ejecutarAtajo(atajo);
     }
 
-    /** Pega siempre como texto plano; los {{…}} se convierten en etiquetas al normalizar. */
     function alPegar(e: ClipboardEvent<HTMLDivElement>) {
         e.preventDefault();
         const el = raizRef.current;
         if (!el) return;
+
+        const html = e.clipboardData.getData('text/html');
+        if (html) {
+            let bloques: Bloque[] = [];
+            try {
+                bloques = htmlABloques(html);
+            } catch {
+                bloques = [];
+            }
+            if (bloques.length > 0) {
+                foco();
+                registrar();
+                borrarSeleccion();
+                pegarBloques(el, rangoActual(), bloques);
+                tras(true);
+                mostrarCursor(el);
+                return;
+            }
+        }
+
         const lineas = lineasDePegado(e.clipboardData.getData('text/plain'));
         if (lineas.every((l) => l === '')) return;
         foco();
@@ -1340,7 +1365,7 @@ export function HojaEditable({
 
     const estiloHoja = {
         ...pg.estiloRaiz,
-        fontFamily: `"${config.fuente}", "Times New Roman", serif`,
+        fontFamily: pilaCss(config.fuente),
         fontSize: pt(config.tamanoPt),
         lineHeight: config.interlineado,
         tabSize: cm(TAB_CM),
