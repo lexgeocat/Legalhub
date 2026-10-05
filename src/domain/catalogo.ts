@@ -173,3 +173,47 @@ export function construirPanel(rolSingular: string): GrupoPanel[] {
 
 export const itemsDeCampos = (campos: CampoPropio[]): ItemPanel[] =>
     campos.map((c) => ({ etiqueta: c.etiqueta, texto: `{{caso.${c.clave}}}` }));
+
+/* ---------------- Campos según el bloque donde está el cursor ---------------- */
+const ITEMS_INMUEBLE: ItemPanel[] = [
+    { etiqueta: 'Ubicación', texto: '{{ubicacion}}' },
+    { etiqueta: 'Matrícula', texto: '{{matricula}}' },
+    { etiqueta: 'Código catastral', texto: '{{codigo_catastral}}' },
+    { etiqueta: 'Superficie en número y literal', texto: '{{superficie | superficie}}' },
+    { etiqueta: 'Tipo', texto: '{{tipo}}' },
+    { etiqueta: 'Departamento', texto: '{{departamento}}' },
+    { etiqueta: 'Provincia', texto: '{{provincia}}' },
+    { etiqueta: 'Municipio', texto: '{{municipio}}' },
+    { etiqueta: 'Localidad', texto: '{{localidad}}' },
+    { etiqueta: 'Colindancia norte', texto: '{{colindancias.norte}}' },
+    { etiqueta: 'Colindancia sur', texto: '{{colindancias.sur}}' },
+    { etiqueta: 'Colindancia este', texto: '{{colindancias.este}}' },
+    { etiqueta: 'Colindancia oeste', texto: '{{colindancias.oeste}}' },
+    { etiqueta: 'Gravámenes', texto: '{{gravamenes}}' },
+    { etiqueta: 'Observaciones', texto: '{{observaciones}}' },
+    { etiqueta: 'Titulares («A, B y C»)', texto: '{{titulares | lista}}' },
+    {
+        etiqueta: 'Un párrafo por titular (bucle)', bloque: true,
+        texto: '{{#titulares}}\n{{nombre | mayus}}, con C.I. N° {{ci}}, {{porcentaje}}%;\n{{/titulares}}',
+    },
+];
+
+/**
+ * Campos relativos al bloque abierto en el cursor: dentro de «{{#demandantes}}» basta escribir {{nombre}}.
+ * Devuelve null si el cursor no está dentro de ningún bloque con datos.
+ */
+export function construirPanelAmbito(ambito: readonly string[]): GrupoPanel | null {
+    for (const contenedor of [...ambito].reverse()) {
+        const tipo = tipoContenedor(contenedor);
+        if (tipo === 'flag') continue;
+        const titulo = `Dentro de «${contenedor}»`;
+        const ayuda = `Estás dentro del bloque «${contenedor}»: los campos se escriben sin prefijo.`;
+        if (tipo === 'inmueble') return { id: 'ambito', titulo, ayuda, abierto: true, items: ITEMS_INMUEBLE };
+        const items = itemsPersona('');
+        if (claveNormalizada(contenedor) === 'titulares') {
+            items.push({ etiqueta: 'Porcentaje de propiedad', texto: '{{porcentaje}}' });
+        }
+        return { id: 'ambito', titulo, ayuda, abierto: true, items };
+    }
+    return null;
+}

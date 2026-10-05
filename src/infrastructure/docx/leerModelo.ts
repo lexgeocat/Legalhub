@@ -65,13 +65,14 @@ function piezasDe(p: Element): Pieza[] {
         };
         for (const n of Array.from(r.childNodes)) {
             if (esW(n, 't')) texto += n.textContent ?? '';
-            else if (esW(n, 'tab') || esW(n, 'cr')) texto += ' ';
+            else if (esW(n, 'tab')) texto += '\t';
+            else if (esW(n, 'cr')) texto += '\n';
             else if (esW(n, 'noBreakHyphen')) texto += '-';
             else if (esW(n, 'br')) {
                 if (n.getAttributeNS(W, 'type') === 'page') {
                     vaciar();
                     piezas.push({ tipo: 'salto' });
-                } else texto += ' ';
+                } else texto += '\n';
             }
         }
         vaciar();
@@ -103,7 +104,7 @@ function aTramos(piezas: Pieza[]): Tramo[] {
     for (let i = 0; i < texto.length;) {
         if (texto.startsWith('{{', i)) {
             const fin = texto.indexOf('}}', i + 2);
-            if (fin !== -1) {
+            if (fin !== -1 && !texto.slice(i, fin).includes('\n')) {
                 vaciar();
                 tramos.push({ texto: normalizarCaracteres(texto.slice(i, fin + 2)), ...formatos[i], marcador: true });
                 formatoBuf = null;

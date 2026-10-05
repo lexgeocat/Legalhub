@@ -47,7 +47,21 @@ function corrida(t: Tramo, estilo: BloqueParrafo['estilo'], mediosPuntos: number
         (t.cursiva ? '<w:i/><w:iCs/>' : '') +
         tamano +
         (t.subrayado ? '<w:u w:val="single"/>' : '');
-    return `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ''}<w:t xml:space="preserve">${escTexto(t.texto)}</w:t></w:r>`;
+    const rPr = props ? `<w:rPr>${props}</w:rPr>` : '';
+
+    // Los marcadores van siempre en una sola corrida, sin partir.
+    if (t.marcador) return `<w:r>${rPr}<w:t xml:space="preserve">${escTexto(t.texto)}</w:t></w:r>`;
+
+    // Texto normal: «\n» = salto de línea (Shift+Enter), «\t» = tabulación.
+    return t.texto
+        .split(/(\n|\t)/)
+        .filter((x) => x !== '')
+        .map((x) =>
+            x === '\n' ? `<w:r>${rPr}<w:br/></w:r>`
+                : x === '\t' ? `<w:r>${rPr}<w:tab/></w:r>`
+                    : `<w:r>${rPr}<w:t xml:space="preserve">${escTexto(x)}</w:t></w:r>`,
+        )
+        .join('');
 }
 
 function parrafo(b: BloqueParrafo, cfg: ConfigPagina): string {

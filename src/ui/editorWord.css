@@ -262,3 +262,31 @@
     white-space: nowrap;
     pointer-events: none;
 }
+
+/* Panel de campos */
+.pc-tag {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #f0ecff;
+    color: #5b3fc4;
+    font-size: 10.5px;
+    font-weight: 600;
+    vertical-align: 1px;
+}
+
+.pc-ctx {
+    padding: 8px 10px;
+    border: 1px solid #cfd8fb;
+    background: var(--primario-claro);
+    color: var(--primario);
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 550;
+}
+
+.pc-insertar:focus-visible,
+.pc-grupo-tit:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: -2px;
+}

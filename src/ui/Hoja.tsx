@@ -83,6 +83,7 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
                         style={{
                             ...pg.estiloRaiz,
                             fontFamily: `"${config.fuente}", "Times New Roman", serif`,
+                            tabSize: `${(1.25 * escala).toFixed(3)}cm`,
                             fontSize: pt(config.tamanoPt),
                             lineHeight: config.interlineado,
                         }}

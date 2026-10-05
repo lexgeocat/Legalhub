@@ -161,6 +161,7 @@ export function tramosDe(linea: string): Tramo[] {
                 continue;
             }
         }
+        if (linea[i] === '\u2028') { buf += '\n'; i += 1; continue; }
         if (linea[i] === '\\' && i + 1 < linea.length) { buf += linea[i + 1]; i += 2; continue; }
         if (linea.startsWith('**', i)) { vaciar(); negrita = !negrita; i += 2; continue; }
         if (linea.startsWith('++', i)) { vaciar(); subrayado = !subrayado; i += 2; continue; }
@@ -192,7 +193,9 @@ export function parsearTexto(texto: string): Bloque[] {
 }
 
 function tramoATexto(t: Tramo): string {
-    let o = t.marcador ? t.texto : t.texto.replace(/[\\*]/g, '\\$&').replace(/\+\+/g, '\\+\\+');
+    let o = t.marcador
+        ? t.texto
+        : t.texto.replace(/[\\*]/g, '\\$&').replace(/\+\+/g, '\\+\\+').replace(/\n/g, '\u2028');
     if (t.subrayado) o = `++${o}++`;
     if (t.cursiva) o = `*${o}*`;
     if (t.negrita) o = `**${o}**`;

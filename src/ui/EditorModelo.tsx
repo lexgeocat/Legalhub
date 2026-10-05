@@ -169,6 +169,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [guardando, setGuardando] = useState(false);
     const [modificado, setModificado] = useState(false);
     const [ultima, setUltima] = useState<number | null>(null);
+    const [ambito, setAmbito] = useState<string[]>([]);
 
     const tocar = () => {
         setModificado(true);
@@ -401,6 +402,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         textoInicial={inicial.fuente.texto}
                         config={config}
                         onCambio={tocar}
+                        onAmbito={setAmbito}
                         onFormato={setFormato}
                         onEditarCampo={(actual, aplicar) => setDialogo({ n: 'marcador', actual, aplicar })}
                         onMargenes={setMargen}
@@ -410,7 +412,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 </div>
                 {panel && (
                     <aside className="ed-panel">
-                        <PanelCampos campos={campos} onInsertar={(texto, bloque) => hoja.current?.insertar(texto, bloque)} />
+                        <PanelCampos campos={campos} ambito={ambito} onInsertar={(texto, bloque) => hoja.current?.insertar(texto, bloque)} />
                     </aside>
                 )}
             </div>
