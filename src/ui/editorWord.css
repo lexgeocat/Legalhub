@@ -120,14 +120,30 @@
 
 /* ===== Hoja editable ===== */
 .ed-lienzo {
-    padding: 24px;
+    padding: 0 24px 40px;
     min-height: 100%;
 }
 
 .hoja-ed {
-    outline: none;
+    color: #000;
+    caret-color: #000;
     cursor: text;
+    outline: none;
+    border: none;
     white-space: pre-wrap;
+}
+
+/*
+ * Línea vacía (la marca JS `limpiarBloque`). Sin contenido mide 0 de ancho y el navegador no la baja de las
+ * franjas de página: un testigo de 1 px lo arregla. Es una pseudo-caja en línea: NO usar flex, padding ni borde
+ * aquí, para que el cursor y la alineación se comporten como en Word.
+ * (Antes se llamaba `.vacio`, que es el estado vacío de las listas y le ponía caja, borde y centrado.)
+ */
+.hoja-ed>.linea-vacia::before {
+    content: "";
+    display: inline-block;
+    width: 1px;
+    height: 1px;
 }
 
 .hoja-ed p,
@@ -175,17 +191,7 @@
     background: #b8cbff;
 }
 
-@media (max-width: 1100px) {
-    .ed-cuerpo {
-        grid-template-columns: minmax(0, 1fr) 280px;
-    }
-}
-
 /* ===== Regla, márgenes y guías de página ===== */
-.ed-lienzo {
-    padding: 0 24px 40px;
-}
-
 .ed-regla-barra {
     position: sticky;
     top: 0;
@@ -263,7 +269,7 @@
     pointer-events: none;
 }
 
-/* Panel de campos */
+/* ===== Panel de campos (complementa .pc de App.css) ===== */
 .pc-tag {
     margin-left: 6px;
     padding: 0 6px;
@@ -289,4 +295,10 @@
 .pc-grupo-tit:focus-visible {
     outline: 2px solid var(--primario);
     outline-offset: -2px;
+}
+
+@media (max-width: 1100px) {
+    .ed-cuerpo {
+        grid-template-columns: minmax(0, 1fr) 280px;
+    }
 }

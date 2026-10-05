@@ -20,6 +20,27 @@ const DESDE_CSS: Record<string, Alineacion> = { left: 'left', start: 'left', cen
 const A_CSS: Record<Alineacion, string> = { left: 'left', center: 'center', right: 'right', both: 'justify' };
 const BLOQUES = new Set(['P', 'H1', 'H2']);
 
+/**
+ * Atajos de Word en español (Ctrl + letra). Para usar los de Word en inglés basta con cambiar las letras
+ * (B negrita, I cursiva, U subrayado, L izquierda, E centro, R derecha, A todo).
+ */
+type Atajo =
+    | 'negrita' | 'cursiva' | 'subrayado' | 'izquierda' | 'centro' | 'derecha' | 'justificado'
+    | 'todo' | 'deshacer' | 'rehacer';
+
+const ATAJOS = new Map<string, Atajo>([
+    ['n', 'negrita'], ['k', 'cursiva'], ['s', 'subrayado'],
+    ['q', 'izquierda'], ['t', 'centro'], ['d', 'derecha'], ['j', 'justificado'],
+    ['e', 'todo'], ['z', 'deshacer'], ['y', 'rehacer'],
+]);
+
+/** Atajo de Ctrl+tecla; null si no es nuestro (copiar, pegar, guardar…): sigue su curso normal. */
+function atajoDe(tecla: string, mayus: boolean): Atajo | null {
+    const k = tecla.toLowerCase();
+    if (k === 'z' && mayus) return 'rehacer'; // Ctrl+Mayús+Z, además de Ctrl+Y
+    return mayus ? null : (ATAJOS.get(k) ?? null);
+}
+
 /** Estilos en línea que el navegador mete al mezclar bloques y que alteran el aspecto (tamaño, fuente, color…). */
 const ESTILOS_RUIDO = [
     'font', 'font-family', 'font-size', 'font-variant', 'color', 'background', 'background-color', 'line-height',
@@ -517,7 +538,7 @@ function limpiarBloque(b: HTMLElement): void {
         && /^\{\{\s*[#/]/.test(chips[0].dataset.mk ?? '');
     b.classList.toggle('mk-bloque', solo);
     // Una línea sin contenido tiene ancho 0: el navegador no la baja de las franjas de página (ver CSS .vacio).
-    b.classList.toggle('vacio', chips.length === 0 && texto.trim() === '');
+    b.classList.toggle('linea-vacia', chips.length === 0 && texto.trim() === '');
     if (b.classList.length === 0) b.removeAttribute('class');
 }
 
@@ -1151,6 +1172,26 @@ export function HojaEditable({
     function saltoPagina() {
         insertar('===', true);
     }
+    /** Ctrl+E: selecciona todo el documento (igual que el Ctrl+A nativo: la selección queda dentro de los bloques). */
+    function seleccionarTodo() {
+        foco();
+        document.execCommand('selectAll');
+    }
+
+    function ejecutarAtajo(a: Atajo) {
+        switch (a) {
+            case 'negrita':
+            case 'cursiva':
+            case 'subrayado': comando(a); break;
+            case 'izquierda': alinear('left'); break;
+            case 'centro': alinear('center'); break;
+            case 'derecha': alinear('right'); break;
+            case 'justificado': alinear('both'); break;
+            case 'todo': seleccionarTodo(); break;
+            case 'deshacer': deshacer(); break;
+            case 'rehacer': rehacer(); break;
+        }
+    }
 
     useImperativeHandle(
         ref,
@@ -1252,17 +1293,11 @@ export function HojaEditable({
 
         // Ctrl+Alt = AltGr en teclados latinoamericanos ({ } @ …): no es un atajo.
         if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-        const k = e.key.toLowerCase();
-        if (k === 'z' && !e.shiftKey) { e.preventDefault(); deshacer(); }
-        else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); rehacer(); }
-        else if (k === 'b') { e.preventDefault(); comando('negrita'); }
-        else if (k === 'i') { e.preventDefault(); comando('cursiva'); }
-        else if (k === 'u') { e.preventDefault(); comando('subrayado'); }
-        else if (k === 'e') { e.preventDefault(); alinear('center'); }
-        else if (k === 'l') { e.preventDefault(); alinear('left'); }
-        else if (k === 'r') { e.preventDefault(); alinear('right'); }
-        else if (k === 'j') { e.preventDefault(); alinear('both'); }
-        // Ctrl+S se deja subir hasta la ventana, que guarda.
+        const atajo = atajoDe(e.key, e.shiftKey);
+        if (!atajo) return; // Ctrl+C/X/V/A, Ctrl+G (guardar)… suben o siguen su curso
+        e.preventDefault();
+        e.stopPropagation(); // aquí Ctrl+K es cursiva, no el buscador global
+        ejecutarAtajo(atajo);
     }
 
     /** Pega siempre como texto plano; los {{…}} se convierten en etiquetas al normalizar. */
