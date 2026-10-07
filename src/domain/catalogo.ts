@@ -128,6 +128,12 @@ export interface GrupoPanel {
     items: ItemPanel[];
 }
 
+/** De quién son los datos que se muestran en «Personas». */
+export type FuentePersona = 'rol' | 'cliente' | 'abogado';
+
+/** Campo «caso.*» habitual que el modelo aún no declara. `delTipo`: es del tipo de expediente del modelo. */
+export interface SugerenciaCampo { campo: CampoPropio; delTipo: boolean }
+
 const rotulo = (r: string) => r.replace(/_/g, ' ');
 const NOMBRES_EJ = 'Juan Pérez, María López y Pedro Gómez';
 const FEMENINO_IGUAL = new Set(['testigo']);
@@ -302,10 +308,27 @@ export function construirGrupoPropios(campos: CampoPropio[]): GrupoPanel {
     const items = itemsDeCampos(campos);
     return {
         id: 'propios', seccion: 'caso', abierto: true,
-        titulo: 'Datos que se piden al generar este documento',
+        titulo: 'Mis campos (se piden al generar)',
         ayuda: items.length > 0
-            ? 'Son los datos propios de este modelo (precio, plazo, hechos…). El asistente los pide si no están en el expediente.'
-            : 'Aún no hay datos propios. Usa «Campo nuevo» en la cinta para crear uno (precio, plazo, lugar…) y aparecerá aquí.',
+            ? 'Datos propios de este modelo. Si no están en el expediente, el asistente los pide.'
+            : 'Aún no tienes campos propios. Crea uno aquí abajo (precio, plazo, lugar…) o elige uno sugerido.',
+        items,
+    };
+}
+
+export function construirGrupoSugeridos(sugerencias: SugerenciaCampo[]): GrupoPanel | null {
+    if (sugerencias.length === 0) return null;
+    const items = sugerencias.flatMap(({ campo, delTipo }) =>
+        itemsDeCampos([campo]).map((i) => ({
+            ...i,
+            avanzado: !delTipo,
+            ayuda: 'Se agrega a «Mis campos» al insertarlo.',
+        })),
+    );
+    return {
+        id: 'sugeridos', seccion: 'caso', abierto: sugerencias.some((s) => s.delTipo),
+        titulo: 'Sugeridos para este tipo de documento',
+        ayuda: 'Datos habituales. Un clic lo crea y lo inserta en el cursor.',
         items,
     };
 }
@@ -352,25 +375,20 @@ const ITEMS_EXPEDIENTE: ItemPanel[] = [
 ];
 
 /* ----- Panel completo ----- */
-export function construirPanel(rol: string): GrupoPanel[] {
-    const singular = rolDesdeTexto(rol) || 'demandante';
-    const plural = pluralRol(singular);
-    const grupos: GrupoPanel[] = [
-        {
-            id: 'rol', seccion: 'personas', abierto: true, titulo: `${etiquetaRol(rotulo(plural))}: una o varias partes`,
-            ayuda: 'Para cuando el texto habla de todas las partes con este rol a la vez.',
-            items: itemsDeRol(singular, plural),
-        },
-        {
-            id: 'cliente', seccion: 'personas', titulo: 'Nuestro cliente',
+function gruposPersonas(singular: string, plural: string, fuente: FuentePersona): GrupoPanel[] {
+    if (fuente === 'cliente') {
+        return [{
+            id: 'cliente', seccion: 'personas', abierto: true, titulo: 'Nuestro cliente',
             ayuda: 'La persona que contrata tus servicios en este expediente.',
             items: [
                 { etiqueta: 'Señor / señora', texto: '{{cliente | concordar:"señor":"señora"}}', ejemplo: 'señor · señora', ayuda: 'Según el género del cliente.' },
                 ...itemsPersona('cliente.', { representante: true }),
             ],
-        },
-        {
-            id: 'abogado', seccion: 'personas', titulo: 'Abogado (tus datos)',
+        }];
+    }
+    if (fuente === 'abogado') {
+        return [{
+            id: 'abogado', seccion: 'personas', abierto: true, titulo: 'Abogado (tus datos)',
             ayuda: 'Se completan en Configuración → Datos generales.',
             items: [
                 { etiqueta: 'Matrícula profesional', texto: '{{abogado.matricula_profesional}}', ejemplo: 'Reg. Prof. 12345', claves: 'registro colegio' },
@@ -378,7 +396,28 @@ export function construirPanel(rol: string): GrupoPanel[] {
                 { etiqueta: 'El abogado / la abogada', texto: '{{abogado | concordar:"el abogado":"la abogada"}}', ejemplo: 'el abogado · la abogada', ayuda: 'Según el género del abogado.' },
                 ...itemsPersona('abogado.'),
             ],
-        },
+        }];
+    }
+    const grupos: GrupoPanel[] = [{
+        id: 'rol', seccion: 'personas', abierto: true, titulo: `${etiquetaRol(rotulo(plural))}: una o varias partes`,
+        ayuda: 'Para cuando el texto habla de todas las partes con este rol a la vez.',
+        items: itemsDeRol(singular, plural),
+    }];
+    if (singular !== plural) {
+        grupos.push({
+            id: 'rol1', seccion: 'personas', titulo: `${etiquetaRol(rotulo(singular))}: datos de la primera parte`,
+            ayuda: 'Úsalo si hay una sola parte con este rol. Si hay varias, solo sale la primera: usa «Presentar a cada parte».',
+            items: itemsPersona(`${singular}.`, { representante: true, domicilioProcesal: true }),
+        });
+    }
+    return grupos;
+}
+
+export function construirPanel(rol: string, fuente: FuentePersona = 'rol'): GrupoPanel[] {
+    const singular = rolDesdeTexto(rol) || 'demandante';
+    const plural = pluralRol(singular);
+    return [
+        ...gruposPersonas(singular, plural, fuente),
         { id: 'exp', seccion: 'caso', abierto: true, titulo: 'Datos del expediente', items: ITEMS_EXPEDIENTE },
         {
             id: 'fecha', seccion: 'caso', abierto: true, titulo: 'Fecha y lugar',
@@ -422,14 +461,6 @@ export function construirPanel(rol: string): GrupoPanel[] {
             ],
         },
     ];
-    if (singular !== plural) {
-        grupos.splice(1, 0, {
-            id: 'rol1', seccion: 'personas', titulo: `${etiquetaRol(rotulo(singular))}: solo la primera parte`,
-            ayuda: 'Úsalo si hay una sola parte con este rol. Si hay varias, solo sale la primera: usa «Presentar a cada parte».',
-            items: itemsPersona(`${singular}.`, { representante: true, domicilioProcesal: true }),
-        });
-    }
-    return grupos;
 }
 
 /** Campos relativos al bloque donde está el cursor: dentro de «{{#demandantes}}» basta escribir {{nombre}}. */

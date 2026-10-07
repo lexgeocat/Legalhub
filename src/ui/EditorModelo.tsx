@@ -442,7 +442,10 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 </div>
                 {panel && (
                     <aside className="ed-panel">
-                        <PanelCampos campos={campos} ambito={ambito} materia={materia} onInsertar={insertarDesdePanel} />
+                        <PanelCampos campos={campos} ambito={ambito} materia={materia}
+                            onInsertar={insertarDesdePanel}
+                            onCrearCampo={crearEInsertar}
+                            onAdministrar={() => setDialogo({ n: 'campos' })} />
                     </aside>
                 )}
             </div>

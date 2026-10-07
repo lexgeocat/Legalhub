@@ -66,13 +66,12 @@ function corrida(t: Tramo, estilo: BloqueParrafo['estilo'], mediosPuntos: number
 
 function parrafo(b: BloqueParrafo, cfg: ConfigPagina): string {
     const mediosPuntos = Math.round(cfg.tamanoPt * 2);
+
     const pPr: string[] = [];
+    if (b.estilo === 'titulo') pPr.push('<w:pStyle w:val="Title"/>');
+    else if (b.estilo === 'subtitulo') pPr.push('<w:pStyle w:val="Subtitle"/>');
     if (b.estilo !== 'normal') pPr.push('<w:keepNext/>');
-    if (b.estilo === 'titulo') pPr.push('<w:spacing w:before="240" w:after="240"/>');
-    if (b.estilo === 'subtitulo') pPr.push('<w:spacing w:before="120" w:after="120"/>');
-    if (cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')) {
-        pPr.push('<w:ind w:firstLine="709"/>');
-    }
+
     pPr.push(`<w:jc w:val="${b.alineacion}"/>`);
     return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${b.tramos.map((t) => corrida(t, b.estilo, mediosPuntos)).join('')}</w:p>`;
 }
@@ -101,7 +100,9 @@ function estilosXml(cfg: ConfigPagina): string {
         `<w:rPrDefault><w:rPr><w:rFonts w:ascii="${f}" w:hAnsi="${f}" w:eastAsia="${f}" w:cs="${f}"/>` +
         `<w:sz w:val="${medios}"/><w:szCs w:val="${medios}"/><w:lang w:val="es-BO"/></w:rPr></w:rPrDefault>` +
         `<w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="${linea}" w:lineRule="auto"/></w:pPr></w:pPrDefault>` +
-        '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>'
+        '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/></w:style>' +
+        '<w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/></w:style></w:styles>'
     );
 }
 

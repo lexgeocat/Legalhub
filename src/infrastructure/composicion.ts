@@ -1,4 +1,5 @@
 import { documentDir, join } from '@tauri-apps/api/path';
+import { ActualizarModeloDesdeDocumento } from '../application/casosDeUso/actualizarModeloDesdeDocumento';
 import { AdjuntarVersionEditada } from '../application/casosDeUso/adjuntarVersionEditada';
 import {
     AlternarModeloActivo, ConvertirModeloAEditable, DuplicarModelo, EditarDatosModelo,
@@ -9,24 +10,25 @@ import { Buscar } from '../application/casosDeUso/buscar';
 import { CrearExpediente } from '../application/casosDeUso/crearExpediente';
 import { CrearInmueble } from '../application/casosDeUso/crearInmueble';
 import { CrearPersona } from '../application/casosDeUso/crearPersona';
+import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 import { GenerarDocumento } from '../application/casosDeUso/generarDocumento';
 import { ActualizarExpediente, QuitarParte } from '../application/casosDeUso/gestionExpediente';
 import { ActualizarPersona, EliminarPersona } from '../application/casosDeUso/gestionPersona';
 import { ImportarModelo } from '../application/casosDeUso/importarModelo';
 import { Configuracion } from '../application/configuracion';
 import { Consultas } from '../application/consultas';
+import type { LectorDocx } from '../application/puertos/modelos';
 import { validarRutaCatalogo } from '../domain/catalogo';
 import { ArchivosTauri } from './archivos/adaptadorTauri';
 import { DbTauri } from './db/adaptadorTauri';
 import { ConstructorContextoDb } from './db/constructorContexto';
 import { RepositorioModelosDb } from './db/repositorioModelos';
 import { GeneradorDocxFflate } from './docx/generarDocx';
+import { IncrustadorFuentesDocx } from './docx/incrustarFuentes';
 import { LectorDocxFflate } from './docx/leerModelo';
 import { MotorDocx } from './docx/motor/motor';
 import { FormatoPaqueteFflate } from './docx/paqueteModelo';
-import { IncrustadorFuentesDocx } from './docx/incrustarFuentes';
 import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
-import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 
 export interface Servicios {
     raiz: string;
@@ -35,6 +37,7 @@ export interface Servicios {
     config: Configuracion;
     consultas: Consultas;
     contexto: ConstructorContextoDb;
+    lector: LectorDocx;
     crearExpediente: CrearExpediente;
     actualizarExpediente: ActualizarExpediente;
     crearPersona: CrearPersona;
@@ -50,6 +53,7 @@ export interface Servicios {
     duplicarModelo: DuplicarModelo;
     convertirModelo: ConvertirModeloAEditable;
     instalarPlantilla: InstalarPlantillaInicial;
+    actualizarModelo: ActualizarModeloDesdeDocumento;
     generarDocumento: GenerarDocumento;
     adjuntarVersion: AdjuntarVersionEditada;
     buscar: Buscar;
@@ -75,7 +79,7 @@ export async function crearServicios(): Promise<Servicios> {
     const importarModelo = new ImportarModelo({ db, archivos, motor, formato, modelos, generador });
 
     return {
-        raiz, db, archivos, config, contexto,
+        raiz, db, archivos, config, contexto, lector,
         consultas: new Consultas(db),
         crearExpediente: new CrearExpediente(db),
         actualizarExpediente: new ActualizarExpediente(db),
@@ -92,7 +96,8 @@ export async function crearServicios(): Promise<Servicios> {
         duplicarModelo: new DuplicarModelo({ db, modelos, importar: importarModelo }),
         convertirModelo: new ConvertirModeloAEditable({ db, modelos, lector, importar: importarModelo }),
         instalarPlantilla: new InstalarPlantillaInicial(importarModelo),
-        generarDocumento: new GenerarDocumento({ db, archivos, modelos, contexto, motor, incrustador }),
+        actualizarModelo: new ActualizarModeloDesdeDocumento({ modelos, generador, lector, motor, importar: importarModelo }),
+        generarDocumento: new GenerarDocumento({ db, archivos, modelos, contexto, motor, incrustador, generador }),
         adjuntarVersion: new AdjuntarVersionEditada({ db, archivos, motor }),
         buscar: new Buscar(db),
         eliminarDocumento: new EliminarDocumento(db),

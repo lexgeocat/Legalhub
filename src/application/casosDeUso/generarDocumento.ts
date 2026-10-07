@@ -1,10 +1,11 @@
 import type { DocumentoVersion } from '../../domain/entidades';
+import type { FuenteModelo } from '../../domain/fuenteModelo';
 import { nuevoId } from '../../domain/id';
 import { nombreSeguro } from '../../domain/nombreArchivo';
 import type { ArchivosPuerto } from '../puertos/archivos';
 import type { ConstructorContexto } from '../puertos/contexto';
 import type { DbPuerto, Sentencia } from '../puertos/db';
-import type { RepositorioModelos } from '../puertos/modelos';
+import type { GeneradorDocx, RepositorioModelos } from '../puertos/modelos';
 import type { IncrustadorFuentes } from '../puertos/fuentes';
 import type { EntradaVerificacion, MotorPlantillas } from '../puertos/motorPlantillas';
 
@@ -15,6 +16,7 @@ export interface DependenciasGenerarDocumento {
   contexto: ConstructorContexto;
   motor: MotorPlantillas;
   incrustador?: IncrustadorFuentes;
+  generador?: GeneradorDocx;
 }
 
 export interface DocumentoPreparado {
@@ -24,6 +26,7 @@ export interface DocumentoPreparado {
   titulo: string;
   datos: Record<string, unknown>;
   docx: Uint8Array;
+  editado?: boolean;
   texto: string;
   verificacion: EntradaVerificacion[];
 }
@@ -57,6 +60,15 @@ export class GenerarDocumento {
       expedienteId, codigoExpediente: exp.codigo, modeloVersionId, titulo: tituloLimpio,
       datos, docx, texto: motor.textoPlano(docx), verificacion,
     };
+  }
+
+  /** Rehace el .docx con un texto editado a mano (formato del editor). No toca disco ni BD. */
+  async conTextoEditado(p: DocumentoPreparado, fuente: FuenteModelo): Promise<DocumentoPreparado> {
+    const { generador, incrustador, motor } = this.dep;
+    if (!generador) throw new Error('La edición del documento no está disponible');
+    const crudo = generador.generar(fuente);
+    const docx = incrustador ? await incrustador.incrustar(crudo) : crudo;
+    return { ...p, docx, texto: motor.textoPlano(docx), editado: true };
   }
 
   async guardar(p: DocumentoPreparado): Promise<DocumentoVersion> {
@@ -105,7 +117,7 @@ export class GenerarDocumento {
       { sql: 'INSERT INTO fts_documento (documento_id, texto) VALUES (?1, ?2)', params: [documentoId, p.texto] },
     );
     await db.transaccion(sentencias, [
-      { accion: 'documento.generar', entidad: 'documento_version', entidadId: version.id, detalle: { expediente: p.codigoExpediente, nro: proximo, sha256 } },
+      { accion: 'documento.generar', entidad: 'documento_version', entidadId: version.id, detalle: { expediente: p.codigoExpediente, nro: proximo, sha256, ...(p.editado ? { editado: true } : {}) } },
     ]);
     return version;
   }

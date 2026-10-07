@@ -401,3 +401,119 @@
 .pc-pie .pc-ayuda {
     padding: 2px 0 0;
 }
+
+/* ===== Panel de campos: compacto + creador de campos ===== */
+.pc-ejemplo {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+}
+
+.pc-crear {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 6px 0 10px;
+    padding: 10px;
+    border: 1px solid #cfd8fb;
+    border-radius: 9px;
+    background: var(--primario-claro);
+}
+
+.pc-crear-fila {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.pc-error {
+    color: var(--err);
+    font-size: 12px;
+}
+
+.pc-acciones {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 6px 0 10px;
+}
+
+.pc-crear .pc-acciones {
+    margin: 0;
+}
+
+.pc-opc>summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--texto-2);
+}
+
+.pc-opc[open]>summary {
+    margin-bottom: 4px;
+}
+
+/* ===== Edición del documento dentro del asistente ===== */
+.asist-edit {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.asist-edit .ed-cinta {
+    padding: 6px 10px;
+}
+
+.asist-hoja {
+    height: min(58vh, 640px);
+    min-height: 360px;
+}
+
+/* ===== Lista de cambios al actualizar un modelo ===== */
+.cambio-modelo {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.cambio-modelo:hover {
+    border-color: var(--borde-fuerte);
+}
+
+.cambio-modelo input {
+    margin-top: 3px;
+}
+
+.cambio-cuerpo {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cambio-linea {
+    margin: 2px 0 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font: 12px/1.5 "Cascadia Mono", Consolas, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.cambio-linea.antes {
+    background: var(--err-bg);
+}
+
+.cambio-linea.despues {
+    background: var(--ok-bg);
+}
