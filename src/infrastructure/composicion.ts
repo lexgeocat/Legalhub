@@ -12,7 +12,7 @@ import { CrearInmueble } from '../application/casosDeUso/crearInmueble';
 import { CrearPersona } from '../application/casosDeUso/crearPersona';
 import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 import { GenerarDocumento } from '../application/casosDeUso/generarDocumento';
-import { ActualizarExpediente, QuitarParte } from '../application/casosDeUso/gestionExpediente';
+import { ActualizarDatosParte, ActualizarExpediente, QuitarParte } from '../application/casosDeUso/gestionExpediente';
 import { ActualizarPersona, EliminarPersona } from '../application/casosDeUso/gestionPersona';
 import { ImportarModelo } from '../application/casosDeUso/importarModelo';
 import { Configuracion } from '../application/configuracion';
@@ -30,6 +30,7 @@ import { MotorDocx } from './docx/motor/motor';
 import { FormatoPaqueteFflate } from './docx/paqueteModelo';
 import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
 
+
 export interface Servicios {
     raiz: string;
     db: DbTauri;
@@ -45,6 +46,7 @@ export interface Servicios {
     eliminarPersona: EliminarPersona;
     agregarParte: AgregarParte;
     quitarParte: QuitarParte;
+    actualizarDatosParte: ActualizarDatosParte;
     crearInmueble: CrearInmueble;
     importarModelo: ImportarModelo;
     verModelo: VerModelo;
@@ -88,6 +90,7 @@ export async function crearServicios(): Promise<Servicios> {
         eliminarPersona: new EliminarPersona(db),
         agregarParte: new AgregarParte(db),
         quitarParte: new QuitarParte(db),
+        actualizarDatosParte: new ActualizarDatosParte(db),
         crearInmueble: new CrearInmueble(db),
         importarModelo,
         verModelo: new VerModelo({ modelos, lector }),

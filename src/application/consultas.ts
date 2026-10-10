@@ -2,6 +2,7 @@ import { nombrePersona } from '../domain/personas';
 import { claveCampo, claveNormalizada, etiquetaRol } from '../domain/texto';
 import type { DatosPersona } from './casosDeUso/crearPersona';
 import type { DbPuerto, Fila } from './puertos/db';
+import { datoDeParteEnRuta } from '../domain/catalogo';
 
 const t = (v: unknown) => (v == null ? '' : String(v));
 
@@ -15,13 +16,26 @@ function datosCaso(v: unknown): Record<string, string> {
     }
 }
 
+/** Datos propios de una parte: viven en datos_override_json → { "datos": { clave: valor } }. */
+function datosParte(v: unknown): Record<string, string> {
+    try {
+        const o: unknown = JSON.parse(t(v) || '{}');
+        const d = typeof o === 'object' && o !== null ? (o as Record<string, unknown>).datos : null;
+        if (typeof d !== 'object' || d === null || Array.isArray(d)) return {};
+        return Object.fromEntries(Object.entries(d).map(([k, x]) => [k, String(x ?? '')]));
+    } catch {
+        return {};
+    }
+}
+
 export interface ExpedienteResumen {
     id: string; codigo: string; tipo: string; materia: string; referencia: string; estado: string;
     juzgado: string; nroCausa: string; clienteId: string; clienteNombre: string;
     datos: Record<string, string>; nPartes: number; nDocumentos: number; creadoEn: string;
 }
 export interface PersonaResumen { id: string; tipo: string; nombre: string; ci: string; nit: string; telefono: string }
-export interface ParteResumen { id: string; personaId: string; rol: string; orden: number; nombre: string; domicilioProcesal: string }
+export interface ParteResumen { id: string; personaId: string; rol: string; orden: number; nombre: string; domicilioProcesal: string; datos: Record<string, string> }
+export interface CampoParteResumen { rol: string; clave: string; etiqueta: string; tipo: string }
 export interface InmuebleResumen { id: string; tipo: string; ubicacion: string; matricula: string; codigoCatastral: string; superficieM2: string; titulares: string }
 export interface VersionResumen { id: string; nro: number; origen: string; creadoEn: string; ruta: string; sha256: string }
 export interface DocumentoResumen { id: string; titulo: string; estado: string; creadoEn: string; versiones: VersionResumen[] }
@@ -121,15 +135,15 @@ export class Consultas {
 
     async listarPartes(expedienteId: string): Promise<ParteResumen[]> {
         const filas = await this.db.consultar<Fila>(
-            `SELECT ep.id AS parte_id, ep.persona_id, ep.rol, ep.orden, ep.domicilio_procesal, p.tipo, p.nombres,
-              p.apellido_paterno, p.apellido_materno, p.apellido_casada, p.razon_social
+            `SELECT ep.id AS parte_id, ep.persona_id, ep.rol, ep.orden, ep.domicilio_procesal, ep.datos_override_json,
+              p.tipo, p.nombres, p.apellido_paterno, p.apellido_materno, p.apellido_casada, p.razon_social
        FROM expediente_parte ep JOIN persona p ON p.id = ep.persona_id
        WHERE ep.expediente_id = ?1 ORDER BY ep.rol, ep.orden`,
             [expedienteId],
         );
         return filas.map((f) => ({
             id: t(f.parte_id), personaId: t(f.persona_id), rol: t(f.rol), orden: Number(f.orden),
-            nombre: nombrePersona(f), domicilioProcesal: t(f.domicilio_procesal),
+            nombre: nombrePersona(f), domicilioProcesal: t(f.domicilio_procesal), datos: datosParte(f.datos_override_json),
         }));
     }
 
@@ -225,6 +239,30 @@ export class Consultas {
                 const clave = claveCampo(segs[1]);
                 if (!clave || salida.has(clave)) continue;
                 salida.set(clave, { clave, etiqueta: t(f.etiqueta) || etiquetaRol(clave), tipo: t(f.tipo) || 'texto' });
+            }
+        }
+        return [...salida.values()];
+    }
+    /** Datos propios de partes («vendedor.datos.x») que usan los modelos activos, con la etiqueta y el tipo que les dio el abogado. */
+    async camposDePartes(): Promise<CampoParteResumen[]> {
+        const salida = new Map<string, CampoParteResumen>();
+        for (const m of await this.listarModelos()) {
+            let esquema: unknown;
+            try {
+                esquema = JSON.parse(m.schemaJson);
+            } catch {
+                continue;
+            }
+            if (!Array.isArray(esquema)) continue;
+            for (const c of esquema as unknown[]) {
+                if (typeof c !== 'object' || c === null) continue;
+                const f = c as Record<string, unknown>;
+                const ambito = Array.isArray(f.ambito) ? f.ambito.map(String) : [];
+                const d = datoDeParteEnRuta(t(f.path), ambito);
+                if (!d?.rol) continue;
+                const k = `${d.rol}|${d.clave}`;
+                if (salida.has(k)) continue;
+                salida.set(k, { rol: d.rol, clave: d.clave, etiqueta: t(f.etiqueta) || etiquetaRol(d.clave), tipo: t(f.tipo) || 'texto' });
             }
         }
         return [...salida.values()];

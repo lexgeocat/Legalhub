@@ -61,6 +61,8 @@ export interface ContextoMarcadores {
     campos?: Readonly<Record<string, string>>;
     /** Roles propios del modelo (vendedor, comprador…): su orden decide el color. */
     partes?: readonly string[];
+    /** clave de un dato propio de una parte → etiqueta que le puso el abogado. */
+    camposPartes?: Readonly<Record<string, string>>;
 }
 export const SIN_CONTEXTO: ContextoMarcadores = {};
 
@@ -250,6 +252,23 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
     });
     const matizFijo = (r: RolResuelto) =>
         r.fijo ? (r.rol === 'cliente' ? MATIZ_CLIENTE : MATIZ_ABOGADO) : matizDeRol(r.rol, ctx);
+    // Dato propio de una parte: {{vendedor.datos.lugar}} o, dentro de un bloque, {{datos.lugar}}
+    if (segs.length >= 2 && claveNormalizada(segs[segs.length - 2]) === 'datos') {
+        const clave = claveCampo(segs[segs.length - 1]);
+        const etiqueta = ctx.camposPartes?.[clave] ?? humano(clave);
+        const corto = etiqueta.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        if (segs.length === 3) {
+            const r = resolverRol(segs[0], ctx);
+            const rol = r?.rol ?? normalizarRol(segs[0]);
+            return hecho(
+                'persona', corto, `${etiquetaRol(rol)} · ${etiqueta}`,
+                r ? matizFijo(r) : matizDeRol(rol, ctx), 'dato propio de la parte: se llena en el expediente',
+            );
+        }
+        if (segs.length === 2) {
+            return hecho('persona', corto, `${etiqueta} · de cada persona del bloque`, MATIZ_NEUTRO, 'dato propio de cada parte: se llena en el expediente');
+        }
+    }
 
     // Concordancia de género: «el/la/l@s»
     if (conc) {
@@ -333,8 +352,9 @@ const FORMATOS_FILTRO: { valor: Formato; etiqueta: string }[] = [
 export function formatosPara(ruta: string, actual: Formato = ''): { valor: Formato; etiqueta: string }[] {
     const segs = ruta.split('.');
     const ult = claveNormalizada(segs[segs.length - 1] ?? '');
+    const propio = claveNormalizada(segs[0] ?? '') === 'caso' || segs.some((s) => claveNormalizada(s) === 'datos');
     let l = FORMATOS_FILTRO;
-    if (claveNormalizada(segs[0] ?? '') !== 'caso') l = ult === 'fecha_nacimiento' ? FORMATOS_FILTRO.slice(0, 2) : FORMATOS_FILTRO.slice(0, 1);
+    if (!propio) l = ult === 'fecha_nacimiento' ? FORMATOS_FILTRO.slice(0, 2) : FORMATOS_FILTRO.slice(0, 1);
     return actual && !l.some((f) => f.valor === actual) ? [...l, ...FORMATOS_FILTRO.filter((f) => f.valor === actual)] : l;
 }
 

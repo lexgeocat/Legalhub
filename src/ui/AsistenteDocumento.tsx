@@ -21,6 +21,7 @@ import {
 import { EditorDocumento } from './EdicionDocumento';
 import { Hoja } from './Hoja';
 import { mensajeError, useCargar, useServicios } from './servicios';
+import { datoDeParteEnRuta } from '../domain/catalogo';
 
 interface Borrador {
     modelo: ModeloResumen;
@@ -291,6 +292,16 @@ export function AsistenteDocumento({ expediente, cerrar }: { expediente: Expedie
                     continue;
                 }
                 faltantes.push(c);
+            }
+            for (const c of esquema) {
+                const d = datoDeParteEnRuta(c.path, c.ambito ?? []);
+                if (!d?.relativo || !d.rol || !c.requerido) continue;
+                const personas = leerRuta(base, d.rol);
+                if (!Array.isArray(personas) || personas.length === 0) continue;
+                const sin = personas.filter((p) => sinValor(leerRuta(p, `datos.${d.clave}`))).length;
+                if (sin > 0) {
+                    avisos.push(`Falta «${c.etiqueta}» en ${sin} de ${personas.length} (${d.rol.replace(/_/g, ' ')}): complétalo en el expediente, pestaña Partes → Datos, o la generación se detendrá.`);
+                }
             }
             setError(null);
             setPaso({ n: 'formulario', b: { modelo: modeloSel, titulo: tituloFinal, faltantes, avisos, valores: {} } });

@@ -5,6 +5,7 @@ import type { DocumentoResumen, ExpedienteResumen, InmuebleResumen, ParteResumen
 import { claveCampo, etiquetaRol } from '../../domain/texto';
 import { ROLES_CONOCIDOS, TIPOS_EXPEDIENTE, obtenerTipo } from '../../domain/tiposExpediente';
 import { AsistenteDocumento } from '../AsistenteDocumento';
+import { mismoRol } from '../../domain/catalogo';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta, fechaHora, normalizarNumero,
@@ -207,6 +208,75 @@ function TabResumen({ e, recargar, setError }: { e: ExpedienteResumen; recargar:
     );
 }
 
+function EntradaDato({ nombre, tipo, valor }: { nombre: string; tipo: string; valor: string }) {
+    if (tipo === 'fecha' && (valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor))) {
+        return <input type="date" name={nombre} defaultValue={valor} />;
+    }
+    if (tipo === 'moneda' || tipo === 'superficie' || tipo === 'numero') {
+        return <input name={nombre} defaultValue={valor} inputMode="decimal" placeholder="1234,56" />;
+    }
+    if (tipo === 'texto_largo') return <textarea name={nombre} defaultValue={valor} />;
+    return <input name={nombre} defaultValue={valor} />;
+}
+
+function DatosParte({ p, campos, cerrar, guardado }: {
+    p: ParteResumen; campos: CampoDato[]; cerrar: () => void; guardado: () => void;
+}) {
+    const s = useServicios();
+    const [error, setError] = useState<string | null>(null);
+    const [trabajando, setTrabajando] = useState(false);
+    const conocidos = new Set(campos.map((c) => c.clave));
+    const lista: CampoDato[] = [
+        ...campos,
+        ...Object.keys(p.datos).filter((k) => !conocidos.has(k)).map((k) => ({ clave: k, etiqueta: etiquetaRol(k), tipo: tipoSugerido(k) })),
+    ];
+
+    async function enviar(ev: FormEvent<HTMLFormElement>) {
+        ev.preventDefault();
+        const f = datosDeForm(ev.currentTarget);
+        const datos: Record<string, string> = {};
+        for (const c of lista) {
+            const v = f[`datos.${c.clave}`];
+            if (v) datos[c.clave] = v;
+        }
+        if (f.nuevo_nombre && f.nuevo_valor) datos[claveCampo(f.nuevo_nombre)] = f.nuevo_valor;
+        setTrabajando(true);
+        try {
+            await s.actualizarDatosParte.ejecutar(p.id, datos);
+            guardado();
+        } catch (err) {
+            setError(mensajeError(err));
+        } finally {
+            setTrabajando(false);
+        }
+    }
+
+    return (
+        <Modal
+            titulo={`Datos de ${p.nombre} · ${etiquetaRol(p.rol)}`}
+            cerrar={cerrar}
+            pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button><button type="submit" form="form-datos-parte" className="btn btn-pri" disabled={trabajando}>Guardar</button></>}
+        >
+            <Aviso error={error} />
+            {campos.length === 0 && (
+                <Alerta tipo="info">
+                    Ningún modelo define datos propios para este rol todavía. Créalos en el editor de modelos
+                    (panel Campos → Partes → «Crear campo») o agrega uno suelto abajo.
+                </Alerta>
+            )}
+            <form id="form-datos-parte" className="form-grid" onSubmit={(ev) => void enviar(ev)}>
+                {lista.map((c) => (
+                    <Campo key={c.clave} etiqueta={c.etiqueta} ancho={c.tipo === 'texto_largo'} ayuda={`datos.${c.clave}`}>
+                        <EntradaDato nombre={`datos.${c.clave}`} tipo={c.tipo} valor={p.datos[c.clave] ?? ''} />
+                    </Campo>
+                ))}
+                <Campo etiqueta="Agregar otro dato (nombre)"><input name="nuevo_nombre" placeholder="Ej.: Lugar de nacimiento" /></Campo>
+                <Campo etiqueta="Valor"><input name="nuevo_valor" /></Campo>
+            </form>
+        </Modal>
+    );
+}
+
 /* ---------------- Partes ---------------- */
 function TabPartes({ e, partes, personas, recargar, setError }: {
     e: ExpedienteResumen; partes: ParteResumen[]; personas: PersonaResumen[]; recargar: () => void; setError: (m: string | null) => void;
@@ -214,6 +284,15 @@ function TabPartes({ e, partes, personas, recargar, setError }: {
     const s = useServicios();
     const t = obtenerTipo(e.tipo);
     const [rol, setRol] = useState(t.roles[0] ?? '');
+    const [datosDe, setDatosDe] = useState<ParteResumen | null>(null);
+    const deModelos = useCargar(() => s.consultas.camposDePartes(), []);
+
+    /** Datos propios que los modelos definen para el rol de esta parte (sin repetir). */
+    const camposDe = (p: ParteResumen): CampoDato[] => {
+        const m = new Map<string, CampoDato>();
+        for (const c of deModelos.datos ?? []) if (mismoRol(p.rol, c.rol) && !m.has(c.clave)) m.set(c.clave, c);
+        return [...m.values()];
+    };
 
     async function agregar(ev: FormEvent<HTMLFormElement>) {
         ev.preventDefault();
@@ -250,14 +329,25 @@ function TabPartes({ e, partes, personas, recargar, setError }: {
                     <table className="tabla">
                         <thead><tr><th>Rol</th><th>Persona</th><th>Domicilio procesal</th><th /></tr></thead>
                         <tbody>
-                            {partes.map((p) => (
-                                <tr key={p.id}>
-                                    <td><Insignia tono="violeta">{etiquetaRol(p.rol)}</Insignia></td>
-                                    <td className="celda-titulo">{p.nombre}</td>
-                                    <td>{p.domicilioProcesal || <span className="suave">—</span>}</td>
-                                    <td className="num"><button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar parte" onClick={() => void quitar(p)}><Icono n="papelera" tam={15} /></button></td>
-                                </tr>
-                            ))}
+                            {partes.map((p) => {
+                                const n = Object.keys(p.datos).length;
+                                return (
+                                    <tr key={p.id}>
+                                        <td><Insignia tono="violeta">{etiquetaRol(p.rol)}</Insignia></td>
+                                        <td className="celda-titulo">{p.nombre}</td>
+                                        <td>{p.domicilioProcesal || <span className="suave">—</span>}</td>
+                                        <td className="num">
+                                            <div className="acciones" style={{ justifyContent: 'flex-end' }}>
+                                                <button type="button" className="btn btn-sec btn-sm" title="Datos propios de esta parte (los que creaste en tus modelos)"
+                                                    onClick={() => setDatosDe(p)}>
+                                                    Datos{n > 0 ? ` (${n})` : ''}
+                                                </button>
+                                                <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar parte" onClick={() => void quitar(p)}><Icono n="papelera" tam={15} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -286,6 +376,16 @@ function TabPartes({ e, partes, personas, recargar, setError }: {
                 </div>
                 <div><button type="submit" className="btn btn-pri" disabled={personas.length === 0}>Agregar parte</button></div>
             </form>
+
+            {datosDe && (
+                <DatosParte
+                    key={datosDe.id}
+                    p={datosDe}
+                    campos={camposDe(datosDe)}
+                    cerrar={() => setDatosDe(null)}
+                    guardado={() => { setDatosDe(null); recargar(); avisar('Datos de la parte guardados'); }}
+                />
+            )}
         </>
     );
 }

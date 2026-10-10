@@ -11,6 +11,17 @@ export const TIPOS_CAMPO: { valor: TipoCampo; etiqueta: string }[] = [
 ];
 
 export interface CampoPropio { clave: string; etiqueta: string; tipo: TipoCampo; requerido: boolean }
+export interface CampoParte {
+    /** Rol en singular y normalizado: «vendedor». También «cliente» o «abogado». */
+    rol: string;
+    clave: string;
+    etiqueta: string;
+    tipo: TipoCampo;
+    requerido: boolean;
+    /** true: sale de la ficha de la persona (nombre, C.I., domicilio…). Si no, es un dato propio que se llena en el expediente. */
+    ficha?: boolean;
+    mayus?: boolean;
+}
 
 export type TamanoPagina = 'carta' | 'oficio' | 'a4';
 
@@ -26,7 +37,10 @@ export interface ConfigPagina {
     simetricos: boolean;
 }
 
-export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[]; partes?: string[] }
+export interface FuenteModelo {
+    version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[];
+    partes?: string[]; camposPartes?: CampoParte[];
+}
 
 export const FUENTES_PAGINA: string[] = NOMBRES_FUENTES;
 export const CATEGORIAS_MODELO = ['Escrito judicial', 'Contrato', 'Minuta', 'Documento privado', 'Poder', 'Carta o notificación', 'Otro'];
@@ -103,6 +117,7 @@ export const fuenteVacia = (): FuenteModelo => ({
     texto: '',
     campos: [],
     partes: [],
+    camposPartes: [],
 });
 export function leerFuente(json: string): FuenteModelo {
     const o: unknown = JSON.parse(json);
@@ -116,6 +131,9 @@ export function leerFuente(json: string): FuenteModelo {
         texto: typeof r.texto === 'string' ? r.texto : '',
         campos: Array.isArray(r.campos) ? r.campos.filter((c) => c && typeof c.clave === 'string') : [],
         partes: Array.isArray(r.partes) ? r.partes.filter((p): p is string => typeof p === 'string' && p.trim() !== '') : [],
+        camposPartes: Array.isArray(r.camposPartes)
+            ? r.camposPartes.filter((c) => c && typeof c.rol === 'string' && typeof c.clave === 'string' && typeof c.etiqueta === 'string')
+            : [],
     };
 }
 

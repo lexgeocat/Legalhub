@@ -73,3 +73,31 @@ export class QuitarParte {
         );
     }
 }
+
+/** Guarda los datos propios de una parte (los que el abogado creó en sus modelos) dentro de datos_override_json. */
+export class ActualizarDatosParte {
+    constructor(private readonly db: DbPuerto) { }
+
+    async ejecutar(parteId: string, datos: Record<string, string>): Promise<void> {
+        const [f] = await this.db.consultar<{ datos_override_json: string | null }>(
+            'SELECT datos_override_json FROM expediente_parte WHERE id = ?1',
+            [parteId],
+        );
+        if (!f) throw new ErrorDeDatos('La parte ya no existe');
+        let previo: Record<string, unknown> = {};
+        try {
+            const o: unknown = JSON.parse(f.datos_override_json || '{}');
+            if (typeof o === 'object' && o !== null && !Array.isArray(o)) previo = o as Record<string, unknown>;
+        } catch {
+            /* JSON dañado: se reemplaza */
+        }
+        const limpios = limpiarDatos(datos);
+        const nuevo: Record<string, unknown> = { ...previo };
+        if (Object.keys(limpios).length > 0) nuevo.datos = limpios;
+        else delete nuevo.datos;
+        await this.db.transaccion(
+            [actualizar('expediente_parte', parteId, { datos_override_json: JSON.stringify(nuevo) })],
+            [{ accion: 'parte.datos', entidad: 'expediente_parte', entidadId: parteId, detalle: { campos: Object.keys(limpios).length } }],
+        );
+    }
+}

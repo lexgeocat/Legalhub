@@ -789,3 +789,59 @@
     background: hsl(var(--h, 215) 70% 62%);
     flex: none;
 }
+
+/* ===== Partes: crear campos y redactar párrafos ===== */
+.cb-plan {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+}
+
+.cb-plan li {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cb-plan .ok {
+    color: var(--ok);
+}
+
+.cb-plan .ya {
+    color: var(--texto-3);
+}
+
+.cb-plan .no {
+    color: var(--err);
+}
+
+.cb-redaccion {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--borde);
+    background: #fff;
+    min-height: 40px;
+    font: 13px/1.8 "Times New Roman", serif;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.cb-redaccion .mk {
+    font-size: 12px;
+}
+
+.mk-falta {
+    padding: 0 4px;
+    border-radius: 5px;
+    background: var(--err-bg);
+    color: var(--err);
+    font-size: 12px;
+}
+
+.cb-edicion textarea {
+    min-height: 74px;
+}

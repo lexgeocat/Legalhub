@@ -1,4 +1,5 @@
-import type { CampoPropio, FuenteModelo, TipoCampo } from '../domain/fuenteModelo';
+import { datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
+import type { CampoParte, CampoPropio, FuenteModelo, TipoCampo } from '../domain/fuenteModelo';
 import { claveCampo, claveNormalizada } from '../domain/texto';
 import type { CampoEsquema } from './puertos/motorPlantillas';
 const USO_CASO = /\{\{\s*caso\.([\p{L}_][\p{L}\p{N}_]*)\s*(\?)?/giu;
@@ -75,9 +76,19 @@ export function analizarCampos(fuente: Pick<FuenteModelo, 'texto' | 'campos'>): 
 }
 
 /** Aplica etiqueta y tipo de los campos declarados sobre el esquema escaneado. El filtro del marcador (moneda, fecha…) manda sobre el tipo declarado. */
-export function aplicarCampos(esquema: CampoEsquema[], campos: CampoPropio[]): CampoEsquema[] {
+export function aplicarCampos(
+    esquema: CampoEsquema[], campos: CampoPropio[], camposPartes: readonly CampoParte[] = [],
+): CampoEsquema[] {
     const propios = new Map(campos.map((c) => [claveCampo(c.clave), c] as const));
     return esquema.map((e) => {
+        const d = datoDeParteEnRuta(e.path, e.ambito ?? []);
+        if (d) {
+            const cp = camposPartes.find(
+                (c) => !c.ficha && claveCampo(c.clave) === d.clave && (d.rol === null || mismoRol(c.rol, d.rol)),
+            );
+            if (!cp) return e;
+            return { ...e, etiqueta: cp.etiqueta.trim() || e.etiqueta, tipo: e.tipo === 'texto' ? cp.tipo : e.tipo };
+        }
         const partes = e.path.split('.');
         if (partes.length !== 2 || claveNormalizada(partes[0]) !== 'caso') return e;
         const propio = propios.get(claveNormalizada(partes[1]));
@@ -89,7 +100,6 @@ export function aplicarCampos(esquema: CampoEsquema[], campos: CampoPropio[]): C
         };
     });
 }
-
 /**
  * Campos que el formulario puede pedir: los de la raíz y los «caso.*» aunque estén
  * dentro de un bucle (el resolver los busca hacia arriba). Sin duplicados.

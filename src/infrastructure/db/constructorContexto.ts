@@ -43,6 +43,7 @@ function personaCtx(p: Fila, parte: Fila | null = null, representante: Fila | nu
         domicilio_procesal: s(parte?.domicilio_procesal),
         representante: representante ? personaCtx(representante) : null,
         porcentaje: '',
+        datos: {},
     };
     return fusionarProfundo(base, json(parte?.datos_override_json));
 }

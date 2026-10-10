@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { esTextoLargo, usosCaso } from '../application/camposModelo';
+import { esTextoLargo, tipoSugerido, usosCaso } from '../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
 import {
     AREA_MIN_CM, FUENTES_PAGINA, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES,
     fuenteVacia, margenesSeguros, presetDe,
-    type Alineacion, type CampoPropio, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
+    type Alineacion, type CampoPropio, type CampoParte, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
 } from '../domain/fuenteModelo';
 import { claveCampo, etiquetaRol } from '../domain/texto';
 import {
@@ -14,7 +14,7 @@ import {
 import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } from './HojaEditable';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
-import { etiquetaCampoCaso, rolesEnTexto } from '../domain/catalogo';
+import { etiquetaCampoCaso, mismoRol, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
 import { GRUPOS_FUENTES, buscarFuente, pilaCss, precargarFuentes } from '../domain/fuentes';
 import { ModalMarcador } from './EditorMarcador';
 import type { ContextoMarcadores } from '../domain/marcadores';
@@ -164,6 +164,8 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [partes, setPartes] = useState<string[]>(
         () => [...new Set([...(inicial.fuente.partes ?? []), ...rolesEnTexto(inicial.fuente.texto)])],
     );
+    const [camposPartes, setCamposPartes] = useState<CampoParte[]>(inicial.fuente.camposPartes ?? []);
+    const [ambito, setAmbito] = useState<string[]>([]);
     const [notas, setNotas] = useState('');
     const [formato, setFormato] = useState<FormatoActivo>(FORMATO_INICIAL);
     const [panel, setPanel] = useState(true);
@@ -179,8 +181,11 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         campos: Object.fromEntries(
             campos.map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
         ),
+        camposPartes: Object.fromEntries(
+            camposPartes.filter((c) => !c.ficha).map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
+        ),
         partes,
-    }), [campos, partes]);
+    }), [campos, camposPartes, partes]);
 
     const tocar = () => {
         setModificado(true);
@@ -209,6 +214,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         texto: hoja.current?.leerTexto() ?? inicial.fuente.texto,
         campos: normalizarCampos(campos),
         partes,
+        camposPartes,
     });
 
     /* ----- constructor de campos (panel único) ----- */
@@ -220,24 +226,32 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         setPartes(l);
         tocar();
     };
+    const cambiarCamposPartes = (l: CampoParte[]) => {
+        setCamposPartes(l);
+        tocar();
+    };
     const insertar = (texto: string, bloque: boolean) => hoja.current?.insertar(texto, bloque);
 
-    /** Declara los «caso.*» y roles que escribiste a mano en el texto. */
     function detectar() {
         const texto = hoja.current?.leerTexto() ?? '';
         const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
         const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
             .filter(([k]) => !declaradas.has(k))
             .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
-        const roles = rolesEnTexto(texto).filter((r) => !partes.includes(r));
-        if (nuevos.length === 0 && roles.length === 0) {
+        const propios: CampoParte[] = usosDatosParte(texto)
+            .filter((u) => !camposPartes.some((c) => !c.ficha && c.clave === u.clave && mismoRol(c.rol, u.rol)))
+            .map((u) => ({ rol: u.rol, clave: u.clave, etiqueta: etiquetaCampoCaso(u.clave), tipo: tipoSugerido(u.clave), requerido: !u.opcional }));
+        const roles = [...new Set([...rolesEnTexto(texto), ...propios.map((c) => c.rol)])]
+            .filter((r) => r !== 'cliente' && r !== 'abogado' && !partes.includes(r));
+        if (nuevos.length === 0 && propios.length === 0 && roles.length === 0) {
             avisar('No hay nada nuevo en el texto', 'info');
             return;
         }
         if (nuevos.length > 0) setCampos((l) => [...l, ...nuevos]);
+        if (propios.length > 0) setCamposPartes((l) => [...l, ...propios]);
         if (roles.length > 0) setPartes((l) => [...l, ...roles]);
         tocar();
-        avisar(`Se agregaron ${nuevos.length} dato(s) y ${roles.length} parte(s)`);
+        avisar(`Se agregaron ${nuevos.length + propios.length} dato(s) y ${roles.length} parte(s)`);
     }
 
     /* ----- verificar y guardar ----- */
@@ -262,6 +276,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
             setModeloId(r.modeloId);
             setUltima(r.version);
             setCampos(f.campos);
+            setCamposPartes(f.camposPartes ?? []);
             setModificado(false);
             setNotas('');
             setError(null);
@@ -412,6 +427,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         onMargenes={setMargen}
                         onConfigurarPagina={() => setDialogo({ n: 'pagina' })}
                         onPaginas={setPaginas}
+                        onAmbito={setAmbito}
                         contexto={contextoMarcadores}
                         verCodigos={verCodigos}
                     />
@@ -421,8 +437,11 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         <PanelCampos
                             campos={campos}
                             partes={partes}
+                            camposPartes={camposPartes}
+                            ambito={ambito}
                             onCampos={cambiarCampos}
                             onPartes={cambiarPartes}
+                            onCamposPartes={cambiarCamposPartes}
                             onInsertar={insertar}
                             onDetectar={detectar}
                         />

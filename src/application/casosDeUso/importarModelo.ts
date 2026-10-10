@@ -86,7 +86,7 @@ export class ImportarModelo {
             /no está en el catálogo|no es un rol conocido/.test(a) && propios.some((r) => a.includes(`«${r}»`));
         return {
             docx,
-            esquema: aplicarCampos(escaneo.esquema, fuente.campos),
+            esquema: aplicarCampos(escaneo.esquema, fuente.campos, fuente.camposPartes),
             errores: [...previo.errores, ...escaneo.errores.map(limpiar)],
             advertencias: [...previo.advertencias, ...escaneo.advertencias.map(limpiar)].filter((a) => !esDeParte(a)),
             info: escaneo.info,
