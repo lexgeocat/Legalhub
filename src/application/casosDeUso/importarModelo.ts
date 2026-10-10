@@ -9,6 +9,7 @@ import type { ArchivosPuerto } from '../puertos/archivos';
 import type { DbPuerto, Sentencia } from '../puertos/db';
 import type { FormatoPaquete, GeneradorDocx, RepositorioModelos } from '../puertos/modelos';
 import type { CampoEsquema, MotorPlantillas, ResultadoEscaneo } from '../puertos/motorPlantillas';
+import { ROL_PENDIENTE } from '../../domain/catalogo';
 import { actualizar, insertar } from '../sql';
 
 export interface DatosModelo {
@@ -81,7 +82,7 @@ export class ImportarModelo {
         const previo = analizarCampos(fuente);
         const docx = this.dep.generador.generar(fuente);
         const escaneo = this.dep.motor.escanear(docx);
-        const propios = (fuente.partes ?? []).flatMap((r) => [r, pluralRol(r)]);
+        const propios = [...(fuente.partes ?? []).flatMap((r) => [r, pluralRol(r)]), ROL_PENDIENTE];
         const esDeParte = (a: string) =>
             /no está en el catálogo|no es un rol conocido/.test(a) && propios.some((r) => a.includes(`«${r}»`));
         return {

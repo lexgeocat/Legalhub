@@ -18,6 +18,8 @@ const set = (l: readonly string[]) => new Set(l.map(claveNormalizada));
 const PERSONA = set(CAMPOS_PERSONA);
 const EXPEDIENTE = set(CAMPOS_EXPEDIENTE);
 const INMUEBLE = set(CAMPOS_INMUEBLE);
+/** Rol provisional de los datos de parte que aún no se asignaron: «{{sin_parte.nombre}}». */
+export const ROL_PENDIENTE = 'sin_parte';
 const COLINDANCIAS = set(['norte', 'sur', 'este', 'oeste']);
 const ROLES = set([...ROLES_CONOCIDOS.map(pluralRol), 'partes']);
 const SINGULARES = set(ROLES_CONOCIDOS);

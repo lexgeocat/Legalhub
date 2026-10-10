@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { esTextoLargo, tipoSugerido, usosCaso } from '../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
 import {
@@ -11,14 +11,16 @@ import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, TablaEsquema,
     avisar, confirmar,
 } from './comunes';
-import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } from './HojaEditable';
+import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo, type MenuCampoInfo } from './HojaEditable';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
-import { etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
+import { ROL_PENDIENTE, etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
 import { GRUPOS_FUENTES, buscarFuente, pilaCss, precargarFuentes } from '../domain/fuentes';
 import { ModalMarcador } from './EditorMarcador';
 import type { ContextoMarcadores } from '../domain/marcadores';
 import { nuevoId } from '../domain/id';
+import { datoAsignable, reasignarDato } from '../domain/camposParte';
+import { MenuCampo } from './MenuCampo';
 
 interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 
@@ -178,6 +180,9 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [modificado, setModificado] = useState(false);
     const [ultima, setUltima] = useState<number | null>(null);
     const [verCodigos, setVerCodigos] = useState(false);
+    const [pendientes, setPendientes] = useState(0);
+    const [menu, setMenu] = useState<MenuCampoInfo | null>(null);
+    const cerrarMenu = useCallback(() => setMenu(null), []);
     const contextoMarcadores = useMemo<ContextoMarcadores>(() => ({
         campos: Object.fromEntries(
             campos.map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
@@ -192,6 +197,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const tocar = () => {
         setModificado(true);
         setVerif(null);
+        setPendientes(hoja.current?.contarPendientes() ?? 0);
     };
     const cerrarDialogo = () => setDialogo(null);
 
@@ -235,12 +241,18 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const insertar = (texto: string, bloque: boolean) => hoja.current?.insertar(texto, bloque);
 
     /** Declara los «caso.*», datos de partes y roles que escribiste a mano en el texto. */
+    /** Declara los «caso.*», datos de partes y roles que escribiste a mano en el texto. */
     function detectar() {
         const texto = hoja.current?.leerTexto() ?? '';
+        const GRUPO = 'Datos detectados';
+        const idGrupo = grupos.find((g) => g.nombre === GRUPO)?.id ?? nuevoId();
+
         const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
         const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
             .filter(([k]) => !declaradas.has(k))
-            .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
+            .map(([k, u]) => ({
+                clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional, grupo: idGrupo,
+            }));
 
         const yaPropios = new Set(grupos.flatMap((g) => g.datos).filter((d) => !d.ficha).map((d) => d.clave));
         const usos = usosDatosParte(texto);
@@ -251,16 +263,16 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         }
 
         const roles = [...new Set([...rolesEnTexto(texto), ...usos.map((u) => u.rol)])]
-            .filter((r) => r !== 'cliente' && r !== 'abogado' && !partes.includes(r));
+            .filter((r) => r !== 'cliente' && r !== 'abogado' && r !== ROL_PENDIENTE && !partes.includes(r));
         if (nuevos.length === 0 && propios.length === 0 && roles.length === 0) {
             avisar('No hay nada nuevo en el texto', 'info');
             return;
         }
         if (nuevos.length > 0) setCampos((l) => [...l, ...nuevos]);
-        if (propios.length > 0) {
+        if (propios.length > 0 || nuevos.length > 0) {
             setGrupos((l) => {
-                const i = l.findIndex((g) => g.nombre === 'Datos detectados');
-                if (i < 0) return [...l, { id: nuevoId(), nombre: 'Datos detectados', datos: propios }];
+                const i = l.findIndex((g) => g.id === idGrupo);
+                if (i < 0) return [...l, { id: idGrupo, nombre: GRUPO, datos: propios }];
                 return l.map((g, k) => (k === i ? { ...g, datos: [...g.datos, ...propios] } : g));
             });
         }
@@ -269,6 +281,17 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         avisar(`Se agregaron ${nuevos.length + propios.length} dato(s) y ${roles.length} parte(s)`);
     }
 
+    /** Asigna a `rol` todos los datos de parte que siguen en ámbar. */
+    function asignarPendientes(rol: string) {
+        const n = hoja.current?.reasignar((m, amb) => {
+            const d = datoAsignable(m, partes);
+            return d && d.rol === null ? reasignarDato(m, rol, amb, partes) : null;
+        }) ?? 0;
+        avisar(
+            n > 0 ? `${n} dato(s) asignados a ${etiquetaRol(rol)}` : 'No hay datos pendientes',
+            n > 0 ? 'ok' : 'info',
+        );
+    }
     /* ----- verificar y guardar ----- */
     function verificar() {
         try {
@@ -321,6 +344,10 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
 
     useEffect(() => {
         precargarFuentes();
+    }, []);
+
+    useEffect(() => {
+        setPendientes(hoja.current?.contarPendientes() ?? 0);
     }, []);
 
     useEffect(() => {
@@ -445,6 +472,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         onAmbito={setAmbito}
                         contexto={contextoMarcadores}
                         verCodigos={verCodigos}
+                        onMenuCampo={setMenu}
                     />
                 </div>
                 {panel && (
@@ -459,6 +487,8 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                             onGrupos={cambiarGrupos}
                             onInsertar={insertar}
                             onDetectar={detectar}
+                            pendientes={pendientes}
+                            onAsignarPendientes={asignarPendientes}
                         />
                     </aside>
                 )}
@@ -528,6 +558,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                     </div>
                 </Modal>
             )}
+            {menu && <MenuCampo info={menu} partes={partes} contexto={contextoMarcadores} cerrar={cerrarMenu} />}
         </div>
     );
 }

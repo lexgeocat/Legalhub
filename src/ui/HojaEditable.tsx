@@ -57,6 +57,20 @@ export interface FormatoActivo {
 export const FORMATO_INICIAL: FormatoActivo = {
     negrita: false, cursiva: false, subrayado: false, alineacion: 'both', estilo: 'normal',
 };
+export interface MenuCampoInfo {
+    marcador: string;
+    x: number;
+    y: number;
+    /** Bloques «{{#…}}» abiertos donde está el campo. */
+    ambito: string[];
+    /** Marcadores de los campos que toca la selección (solo si son más de uno y el campo clicado está dentro). */
+    seleccion: string[];
+    /** Reemplaza el campo por otro marcador ('' = quitarlo). */
+    reemplazar: (nuevo: string) => void;
+    reemplazarSeleccion: (fn: (marcador: string, ambito: string[]) => string | null) => number;
+    editar: () => void;
+}
+
 
 export interface ControlHoja {
     leerTexto(): string;
@@ -68,6 +82,9 @@ export interface ControlHoja {
     deshacer(): void;
     rehacer(): void;
     enfocar(): void;
+    contarPendientes(): number;
+    /** Aplica `fn` a todos los campos del documento; si devuelve un marcador lo reemplaza. Devuelve cuántos cambió. */
+    reasignar(fn: (marcador: string, ambito: string[]) => string | null): number;
 }
 
 /* ================= DOM ⇄ bloques ================ */
@@ -678,6 +695,19 @@ function ambitoEn(raiz: HTMLElement, nodo: Node, offset: number): string[] {
     return pila;
 }
 
+function ambitoDeChip(raiz: HTMLElement, chip: HTMLElement): string[] {
+    const padre = chip.parentNode;
+    return padre ? ambitoEn(raiz, padre, Array.prototype.indexOf.call(padre.childNodes, chip)) : [];
+}
+
+/** Campos que toca la selección actual; vacío si el cursor está colapsado. */
+function chipsSeleccionados(raiz: HTMLElement): HTMLElement[] {
+    const s = window.getSelection();
+    if (!s || s.rangeCount === 0 || s.isCollapsed || !s.anchorNode || !raiz.contains(s.anchorNode)) return [];
+    const r = s.getRangeAt(0);
+    return Array.from(raiz.querySelectorAll<HTMLElement>('.mk')).filter((c) => r.intersectsNode(c));
+}
+
 /* ================= Pegado ================= */
 function lineasDePegado(crudo: string): string[] {
     const lineas = crudo
@@ -838,7 +868,7 @@ const instantanea = (el: HTMLElement) => el.innerHTML.replace(/ style="height: [
 
 export function HojaEditable({
     ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito,
-    contexto, verCodigos,
+    onMenuCampo, contexto, verCodigos,
 }: {
     ref?: Ref<ControlHoja>;
     textoInicial: string;
@@ -855,6 +885,7 @@ export function HojaEditable({
     contexto?: ContextoMarcadores;
     /** Muestra el código {{…}} de cada campo en vez de su etiqueta corta. */
     verCodigos?: boolean;
+    onMenuCampo?: (info: MenuCampoInfo) => void;
 }) {
     const raizRef = useRef<HTMLDivElement>(null);
     const lienzo = useRef<HTMLDivElement>(null);
@@ -865,8 +896,7 @@ export function HojaEditable({
     const ultimoAmbito = useRef('');
     const pegando = useRef(false);
     const cuadro = useRef(0);
-    const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito });
-    const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void } | null>(null);
+    const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo }); const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void } | null>(null);
     const [tip, setTip] = useState<Tip | null>(null);
     const chipTip = useRef<HTMLElement | null>(null);
 
@@ -1263,6 +1293,11 @@ export function HojaEditable({
         ref,
         () => ({
             leerTexto, insertar, comando, alinear, estilo, saltoPagina, deshacer, rehacer, enfocar: foco,
+            contarPendientes: () => raizRef.current?.querySelectorAll('.mk[data-k="pendiente"]').length ?? 0,
+            reasignar: (fn) => {
+                const el = raizRef.current;
+                return el ? reemplazarVarios(Array.from(el.querySelectorAll<HTMLElement>('.mk')), fn) : 0;
+            },
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [],
@@ -1270,7 +1305,7 @@ export function HojaEditable({
 
     /* ----- ciclo de vida ----- */
     useEffect(() => {
-        cb.current = { onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito };
+        cb.current = { onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo };
         acc.current = { deshacer, rehacer, parrafo: nuevoParrafo, salto: saltoSuave };
     });
 
@@ -1428,24 +1463,66 @@ export function HojaEditable({
         mostrarCursor(el);
     }
 
+    /** Reemplaza un campo del texto (o lo quita si `nuevo` está vacío). */
+    function reemplazarChip(chip: HTMLElement, nuevo: string) {
+        if (!raizRef.current?.contains(chip)) return;
+        registrar();
+        const limpio = nuevo.trim();
+        if (!limpio) chip.remove();
+        else pintarChip(chip, /^\{\{[\s\S]*\}\}$/.test(limpio) ? limpio : `{{${limpio}}}`);
+        tras(true);
+    }
+
+    function reemplazarVarios(chips: HTMLElement[], fn: (marcador: string, ambito: string[]) => string | null): number {
+        const el = raizRef.current;
+        if (!el) return 0;
+        const cambios: [HTMLElement, string][] = [];
+        for (const chip of chips) {
+            if (!el.contains(chip)) continue;
+            const nuevo = fn(chip.dataset.mk ?? '', ambitoDeChip(el, chip));
+            if (nuevo) cambios.push([chip, nuevo]);
+        }
+        if (cambios.length === 0) return 0;
+        registrar();
+        for (const [chip, nuevo] of cambios) pintarChip(chip, nuevo);
+        tras(true);
+        return cambios.length;
+    }
+
+    function editarChip(chip: HTMLElement) {
+        cb.current.onEditarCampo(chip.dataset.mk ?? '', (nuevo) => reemplazarChip(chip, nuevo));
+    }
+
     /** Doble clic en un campo del texto: pide al padre que lo edite. */
     function alDobleClic(e: MouseEvent<HTMLDivElement>) {
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
         if (!chip) return;
         e.preventDefault();
         ocultarTip();
-        cb.current.onEditarCampo(chip.dataset.mk ?? '', (nuevo) => {
-            registrar();
-            const limpio = nuevo.trim();
-            if (!limpio) {
-                chip.remove();
-            } else {
-                pintarChip(chip, /^\{\{[\s\S]*\}\}$/.test(limpio) ? limpio : `{{${limpio}}}`);
-            }
-            tras(true);
-        });
+        editarChip(chip);
     }
 
+    /** Clic derecho en un campo: menú para asignarlo a una parte, editarlo o quitarlo. */
+    function alMenuContextual(e: MouseEvent<HTMLDivElement>) {
+        const abrir = cb.current.onMenuCampo;
+        const el = raizRef.current;
+        const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
+        if (!abrir || !el || !chip) return;
+        e.preventDefault();
+        ocultarTip();
+        const sel = chipsSeleccionados(el);
+        const grupo = sel.length > 1 && sel.includes(chip) ? sel : [];
+        abrir({
+            marcador: chip.dataset.mk ?? '',
+            x: e.clientX,
+            y: e.clientY,
+            ambito: ambitoDeChip(el, chip),
+            seleccion: grupo.map((c) => c.dataset.mk ?? ''),
+            reemplazar: (nuevo) => reemplazarChip(chip, nuevo),
+            reemplazarSeleccion: (fn) => reemplazarVarios(grupo, fn),
+            editar: () => editarChip(chip),
+        });
+    }
     /* ----- render ----- */
     const cm = (n: number) => `${(n * escala).toFixed(3)}cm`;
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
@@ -1504,6 +1581,7 @@ export function HojaEditable({
                         onKeyDown={alTeclear}
                         onPaste={alPegar}
                         onDoubleClick={alDobleClic}
+                        onContextMenu={alMenuContextual}
                         onMouseOver={alPasar}
                         onMouseLeave={ocultarTip}
                     />

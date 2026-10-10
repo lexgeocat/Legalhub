@@ -10,7 +10,14 @@ export const TIPOS_CAMPO: { valor: TipoCampo; etiqueta: string }[] = [
     { valor: 'superficie', etiqueta: 'Superficie (m²)' },
 ];
 
-export interface CampoPropio { clave: string; etiqueta: string; tipo: TipoCampo; requerido: boolean }
+export interface CampoPropio {
+    clave: string;
+    etiqueta: string;
+    tipo: TipoCampo;
+    requerido: boolean;
+    /** Id del grupo del panel (GrupoDatos) al que pertenece. Sin valor = «Sin grupo». */
+    grupo?: string;
+}
 /** Un dato que se pide de las partes (nombre, C.I., lugar de nacimiento…). Sirve para cualquier parte: se elige de quién al insertarlo. */
 export interface DatoParte {
     clave: string;

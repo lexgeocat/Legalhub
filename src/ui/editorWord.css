@@ -921,3 +921,144 @@
     vertical-align: middle;
     margin: 0 2px;
 }
+
+/* ===== Datos de parte sin asignar (ámbar) ===== */
+.mk[data-k="pendiente"] {
+    --h: 45;
+    border-style: dashed;
+    border-color: #d99a1f;
+    background: repeating-linear-gradient(135deg, #fff4d6 0 6px, #ffe9b0 6px 12px);
+    color: #7a4a00;
+}
+
+.mk[data-k="pendiente"]::before {
+    content: "?\00a0";
+    font-weight: 700;
+    color: #b26a00;
+}
+
+.hoja-ed .mk[data-k="pendiente"]:hover {
+    background: #ffe29a;
+}
+
+/* ===== Panel: pendientes, chips por tipo ===== */
+.pc-pendientes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 6px 0 10px;
+    padding: 10px;
+    border: 1px dashed #d99a1f;
+    border-radius: 9px;
+    background: #fff8e6;
+    color: #7a4a00;
+    font-size: 12.5px;
+}
+
+.pc-pendientes b {
+    font-size: 13px;
+}
+
+.pc-ambar {
+    color: #9a5b00;
+    font-weight: 600;
+}
+
+.chip.chip-parte {
+    border-style: dashed;
+    border-color: #d99a1f;
+    background: #fff8e6;
+    color: #7a4a00;
+}
+
+.chip.chip-caso {
+    border-color: #9db4ff;
+    background: #eef2ff;
+    color: #2a3f9e;
+}
+
+.cb-nombre .mk {
+    font-size: 12.5px;
+}
+
+/* ===== Menú de clic derecho sobre un campo ===== */
+.mk-menu {
+    position: fixed;
+    z-index: 90;
+    min-width: 230px;
+    max-width: 320px;
+    padding: 6px;
+    background: #fff;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 10px;
+    box-shadow: var(--sombra-lg);
+    font-size: 13px;
+}
+
+.mk-menu-cab {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.mk-menu-cab span {
+    color: var(--texto-3);
+    font-size: 12px;
+}
+
+.mk-menu-tit {
+    padding: 4px 8px;
+    font-size: 11.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--texto-3);
+}
+
+.mk-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--texto);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.mk-menu-item:hover {
+    background: var(--primario-claro);
+}
+
+.mk-menu-item.peligro {
+    color: var(--err);
+}
+
+.mk-menu-item.peligro:hover {
+    background: var(--err-bg);
+}
+
+.mk-menu-ok {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--ok);
+}
+
+.mk-menu-sep {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--borde);
+}
+
+.mk-menu-nota {
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--texto-3);
+}

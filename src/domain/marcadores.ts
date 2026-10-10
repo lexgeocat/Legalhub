@@ -1,4 +1,4 @@
-import { etiquetaCampoCaso } from './catalogo';
+import { ROL_PENDIENTE, etiquetaCampoCaso } from './catalogo';
 import { formasConcordancia, type FormasConcordancia } from './concordancia';
 import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from './texto';
 import { ROLES_CONOCIDOS } from './tiposExpediente';
@@ -71,6 +71,7 @@ const MATIZ_SISTEMA = 165;
 export const MATIZ_CLIENTE = 28;
 export const MATIZ_ABOGADO = 262;
 const MATIZ_NEUTRO = 232;
+const MATIZ_PENDIENTE = 45;
 const MATIZ_COND = 40;
 const PALETA = [340, 90, 190, 300, 55, 130, 10];
 
@@ -144,7 +145,7 @@ export function compactarGenero(f: FormasConcordancia, varias: boolean): string 
 
 /* ---------------- Descripción para el documento y el tooltip ---------------- */
 export interface InfoMarcador {
-    tipo: 'dato' | 'persona' | 'genero' | 'bloque' | 'cierre' | 'sistema' | 'otro';
+    tipo: 'dato' | 'persona' | 'genero' | 'bloque' | 'cierre' | 'sistema' | 'pendiente' | 'otro';
     /** Lo que se ve dentro del texto. */
     corto: string;
     /** Primera línea del tooltip. */
@@ -252,6 +253,20 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
     });
     const matizFijo = (r: RolResuelto) =>
         r.fijo ? (r.rol === 'cliente' ? MATIZ_CLIENTE : MATIZ_ABOGADO) : matizDeRol(r.rol, ctx);
+    // Dato de parte sin asignar: {{sin_parte.nombre}} o {{sin_parte.datos.lugar}}
+    if (raiz === ROL_PENDIENTE && segs.length >= 2 && segs.length <= 3) {
+        const propio = segs.length === 3 && claveNormalizada(segs[1]) === 'datos';
+        const clave = claveCampo(segs[segs.length - 1]);
+        let corto: string;
+        let largo: string;
+        if (propio) {
+            largo = ctx.camposPartes?.[clave] ?? humano(clave);
+            corto = largo.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        } else {
+            [corto, largo] = PERSONA_CAMPO[clave] ?? [humano(clave), etiquetaRol(clave)];
+        }
+        return hecho('pendiente', corto, `Sin asignar · ${largo}`, MATIZ_PENDIENTE, 'Clic derecho para asignarlo a una parte');
+    }
     // Dato propio de una parte: {{vendedor.datos.lugar}} o, dentro de un bloque, {{datos.lugar}}
     if (segs.length >= 2 && claveNormalizada(segs[segs.length - 2]) === 'datos') {
         const clave = claveCampo(segs[segs.length - 1]);

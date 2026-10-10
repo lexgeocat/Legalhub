@@ -1,4 +1,4 @@
-import { datoDeParteEnRuta } from '../domain/catalogo';
+import { ROL_PENDIENTE, datoDeParteEnRuta } from '../domain/catalogo';
 import type { CampoPropio, FuenteModelo, GrupoDatos, TipoCampo } from '../domain/fuenteModelo';
 import { claveCampo, claveNormalizada } from '../domain/texto';
 import type { CampoEsquema } from './puertos/motorPlantillas';
@@ -42,11 +42,23 @@ export interface AnalisisCampos {
     advertencias: string[];
 }
 
+/** Datos de parte insertados pero aún sin asignar a una parte: «{{sin_parte.nombre}}». */
+export function contarPendientes(texto: string): number {
+    return [...texto.matchAll(new RegExp(`\\{\\{\\s*${ROL_PENDIENTE}\\.`, 'giu'))].length;
+}
 export function analizarCampos(fuente: Pick<FuenteModelo, 'texto' | 'campos'>): AnalisisCampos {
     const errores: string[] = [];
     const advertencias: string[] = [];
     const usos = usosCaso(fuente.texto);
     const vistas = new Set<string>();
+    const pendientes = contarPendientes(fuente.texto);
+    if (pendientes > 0) {
+        // Si prefieres poder guardar borradores con pendientes, cambia «errores» por «advertencias».
+        errores.push(
+            `Hay ${pendientes} dato${pendientes === 1 ? '' : 's'} de parte sin asignar (se ven en ámbar). `
+            + 'Clic derecho sobre cada uno → «Asignar a…», o usa «Asignarle los pendientes» en la pestaña Partes.',
+        );
+    }
 
     for (const c of fuente.campos) {
         const clave = claveCampo(c.clave);
