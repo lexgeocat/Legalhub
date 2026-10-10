@@ -2,7 +2,7 @@ import { ErrorDeDatos } from '../../domain/errores';
 import type { FuenteModelo } from '../../domain/fuenteModelo';
 import { nuevoId } from '../../domain/id';
 import { nombreSeguro } from '../../domain/nombreArchivo';
-import { claveCampo } from '../../domain/texto';
+import { claveCampo, pluralRol } from '../../domain/texto';
 import { VERSION_APP } from '../../domain/version';
 import { analizarCampos, aplicarCampos } from '../camposModelo';
 import type { ArchivosPuerto } from '../puertos/archivos';
@@ -81,11 +81,14 @@ export class ImportarModelo {
         const previo = analizarCampos(fuente);
         const docx = this.dep.generador.generar(fuente);
         const escaneo = this.dep.motor.escanear(docx);
+        const propios = (fuente.partes ?? []).flatMap((r) => [r, pluralRol(r)]);
+        const esDeParte = (a: string) =>
+            /no está en el catálogo|no es un rol conocido/.test(a) && propios.some((r) => a.includes(`«${r}»`));
         return {
             docx,
             esquema: aplicarCampos(escaneo.esquema, fuente.campos),
             errores: [...previo.errores, ...escaneo.errores.map(limpiar)],
-            advertencias: [...previo.advertencias, ...escaneo.advertencias.map(limpiar)],
+            advertencias: [...previo.advertencias, ...escaneo.advertencias.map(limpiar)].filter((a) => !esDeParte(a)),
             info: escaneo.info,
         };
     }

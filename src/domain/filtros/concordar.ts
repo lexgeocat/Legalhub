@@ -9,7 +9,7 @@ export function concordar(
 ): string {
   const partes = Array.isArray(entrada) ? entrada : [entrada];
   if (partes.length === 0) return '';
-  if (partes.some((p) => p.genero === null)) {
+  if (partes.some((p) => p?.genero !== 'M' && p?.genero !== 'F')) {
     throw new ErrorDeDatos('Falta el género de una de las partes');
   }
   const pm = plurM ?? singM + 's';

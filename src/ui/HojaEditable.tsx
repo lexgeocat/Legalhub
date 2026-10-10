@@ -11,6 +11,7 @@ import { usePaginacion } from './Paginacion';
 import './editorWord.css';
 import { pilaCss } from '../domain/fuentes';
 import { htmlABloques } from './pegadoHtml';
+import { SIN_CONTEXTO, describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
 
 const PX_POR_CM = 37.7953;
 const MARGEN_LIENZO = 48;
@@ -78,14 +79,40 @@ const esSalto = (n: Node | null): boolean => n instanceof HTMLElement && n.datas
 const esBr = (n: Node | null | undefined): boolean => !!n && n.nodeName === 'BR';
 const estiloDe = (b: Element): EstiloParrafo => (b.tagName === 'H1' ? 'titulo' : b.tagName === 'H2' ? 'subtitulo' : 'normal');
 
+interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo: string; detalle: string; codigo: string }
+
+/** Etiquetas y colores del modelo que se está editando (lo fija el componente al montarse). */
+let CONTEXTO: ContextoMarcadores = SIN_CONTEXTO;
+
+/** Un campo se ve como etiqueta corta; el código real vive en data-mk y se muestra con «Códigos». */
+function pintarChip(chip: HTMLElement, marcador: string): void {
+    const i = describirMarcador(marcador, CONTEXTO);
+    const clave = `${i.tipo}|${i.matiz}|${i.corto}`;
+    if (chip.dataset.mk === marcador && chip.dataset.v === clave && chip.childElementCount === 2) return;
+    chip.className = 'mk';
+    chip.contentEditable = 'false';
+    chip.dataset.mk = marcador;
+    chip.dataset.k = i.tipo;
+    chip.dataset.v = clave;
+    chip.style.setProperty('--h', String(i.matiz));
+    chip.setAttribute('aria-label', i.titulo);
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'mk-e';
+    etiqueta.textContent = i.corto;
+    const codigo = document.createElement('span');
+    codigo.className = 'mk-c';
+    codigo.textContent = marcador;
+    chip.replaceChildren(etiqueta, codigo);
+}
+
 function crearChip(texto: string): HTMLElement {
     const s = document.createElement('span');
-    s.className = 'mk';
-    s.contentEditable = 'false';
-    s.dataset.mk = texto;
-    s.textContent = texto;
-    s.title = 'Doble clic para editar este campo';
+    pintarChip(s, texto);
     return s;
+}
+
+function repintar(raiz: HTMLElement): void {
+    for (const chip of Array.from(raiz.querySelectorAll<HTMLElement>('.mk'))) pintarChip(chip, chip.dataset.mk ?? '');
 }
 
 function envolver(tag: 'b' | 'i' | 'u', hijo: Node): HTMLElement {
@@ -811,6 +838,7 @@ const instantanea = (el: HTMLElement) => el.innerHTML.replace(/ style="height: [
 
 export function HojaEditable({
     ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito,
+    contexto, verCodigos,
 }: {
     ref?: Ref<ControlHoja>;
     textoInicial: string;
@@ -821,8 +849,12 @@ export function HojaEditable({
     onMargenes: (lado: keyof Margenes, cm: number) => void;
     onConfigurarPagina: () => void;
     onPaginas: (n: number) => void;
-    /** Bloques «{{#…}}» abiertos donde está el cursor (para que el panel ofrezca campos sin prefijo). */
+    /** Bloques «{{#…}}» abiertos donde está el cursor. */
     onAmbito?: (ambito: string[]) => void;
+    /** Nombres y colores de los campos del modelo (datos propios y partes). */
+    contexto?: ContextoMarcadores;
+    /** Muestra el código {{…}} de cada campo en vez de su etiqueta corta. */
+    verCodigos?: boolean;
 }) {
     const raizRef = useRef<HTMLDivElement>(null);
     const lienzo = useRef<HTMLDivElement>(null);
@@ -835,6 +867,33 @@ export function HojaEditable({
     const cuadro = useRef(0);
     const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito });
     const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void } | null>(null);
+    const [tip, setTip] = useState<Tip | null>(null);
+    const chipTip = useRef<HTMLElement | null>(null);
+
+    function ocultarTip() {
+        chipTip.current = null;
+        setTip(null);
+    }
+
+    function alPasar(e: MouseEvent<HTMLDivElement>) {
+        const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
+        if (!chip) {
+            if (chipTip.current) ocultarTip();
+            return;
+        }
+        if (chipTip.current === chip) return;
+        chipTip.current = chip;
+        const m = chip.dataset.mk ?? '';
+        const i = describirMarcador(m, CONTEXTO);
+        const r = chip.getBoundingClientRect();
+        const debajo = r.top < 120;
+        setTip({
+            izq: Math.max(8, Math.min(r.left, window.innerWidth - 350)),
+            arriba: debajo ? r.bottom + 8 : null,
+            abajo: debajo ? null : window.innerHeight - r.top + 8,
+            titulo: i.titulo, detalle: i.detalle, codigo: m,
+        });
+    }
 
     /* ----- geometría y paginación ----- */
     const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
@@ -951,6 +1010,7 @@ export function HojaEditable({
         window.clearTimeout(h.timer);
         h.pendiente = false;
         el.innerHTML = s.html;
+        repintar(el);
         el.focus({ preventScroll: true });
         ponerSel(el, s.sel);
         guardada.current = null;
@@ -1215,6 +1275,32 @@ export function HojaEditable({
     });
 
     useEffect(() => {
+        CONTEXTO = contexto ?? SIN_CONTEXTO;
+        const el = raizRef.current;
+        if (el) {
+            repintar(el);
+            pg.remedir();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [contexto]);
+
+    useEffect(() => {
+        pg.remedir();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [verCodigos]);
+
+    useEffect(() => {
+        const f = () => {
+            if (chipTip.current) {
+                chipTip.current = null;
+                setTip(null);
+            }
+        };
+        window.addEventListener('scroll', f, true);
+        return () => window.removeEventListener('scroll', f, true);
+    }, []);
+
+    useEffect(() => {
         const el = raizRef.current;
         if (!el) return;
         el.replaceChildren(...bloquesADom(textoInicial));
@@ -1283,7 +1369,9 @@ export function HojaEditable({
 
     function alTeclear(e: KeyboardEvent<HTMLDivElement>) {
         // No interferir con tildes por tecla muerta (´ + a) ni con IME.
+
         if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+        if (chipTip.current) ocultarTip();
 
         if (e.key === 'Enter') {
             if (e.ctrlKey || e.metaKey) { e.preventDefault(); saltoPagina(); }       // Ctrl+Enter: salto de página
@@ -1340,20 +1428,19 @@ export function HojaEditable({
         mostrarCursor(el);
     }
 
-    /** Doble clic en una etiqueta de campo: pide al padre que la edite. */
+    /** Doble clic en un campo del texto: pide al padre que lo edite. */
     function alDobleClic(e: MouseEvent<HTMLDivElement>) {
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
         if (!chip) return;
         e.preventDefault();
-        cb.current.onEditarCampo(chip.dataset.mk ?? chip.textContent ?? '', (nuevo) => {
+        ocultarTip();
+        cb.current.onEditarCampo(chip.dataset.mk ?? '', (nuevo) => {
             registrar();
             const limpio = nuevo.trim();
             if (!limpio) {
                 chip.remove();
             } else {
-                const marcador = /^\{\{[\s\S]*\}\}$/.test(limpio) ? limpio : `{{${limpio}}}`;
-                chip.dataset.mk = marcador;
-                chip.textContent = marcador;
+                pintarChip(chip, /^\{\{[\s\S]*\}\}$/.test(limpio) ? limpio : `{{${limpio}}}`);
             }
             tras(true);
         });
@@ -1404,7 +1491,7 @@ export function HojaEditable({
                     <div className="pg-excl" ref={pg.refExcl} aria-hidden="true" />
                     <div
                         ref={raizRef}
-                        className={`hoja-ed${config.sangria ? ' con-sangria' : ''}`}
+                        className={`hoja-ed${config.sangria ? ' con-sangria' : ''}${verCodigos ? ' ver-codigos' : ''}`}
                         style={estiloHoja}
                         contentEditable
                         suppressContentEditableWarning
@@ -1417,9 +1504,20 @@ export function HojaEditable({
                         onKeyDown={alTeclear}
                         onPaste={alPegar}
                         onDoubleClick={alDobleClic}
+                        onMouseOver={alPasar}
+                        onMouseLeave={ocultarTip}
                     />
                 </div>
             </div>
+            {tip && (
+                <div className="mk-tip" role="tooltip"
+                    style={{ left: tip.izq, top: tip.arriba ?? undefined, bottom: tip.abajo ?? undefined }}>
+                    <b>{tip.titulo}</b>
+                    {tip.detalle && <span>{tip.detalle}</span>}
+                    <code>{tip.codigo}</code>
+                    <em>Doble clic para editar</em>
+                </div>
+            )}
         </div>
     );
 }

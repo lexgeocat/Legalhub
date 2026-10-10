@@ -26,7 +26,7 @@ export interface ConfigPagina {
     simetricos: boolean;
 }
 
-export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[] }
+export interface FuenteModelo { version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[]; partes?: string[] }
 
 export const FUENTES_PAGINA: string[] = NOMBRES_FUENTES;
 export const CATEGORIAS_MODELO = ['Escrito judicial', 'Contrato', 'Minuta', 'Documento privado', 'Poder', 'Carta o notificación', 'Otro'];
@@ -102,8 +102,8 @@ export const fuenteVacia = (): FuenteModelo => ({
     config: { ...CONFIG_POR_DEFECTO, margenes: { ...CONFIG_POR_DEFECTO.margenes } },
     texto: '',
     campos: [],
+    partes: [],
 });
-
 export function leerFuente(json: string): FuenteModelo {
     const o: unknown = JSON.parse(json);
     const r = (typeof o === 'object' && o !== null ? o : {}) as Partial<FuenteModelo>;
@@ -115,6 +115,7 @@ export function leerFuente(json: string): FuenteModelo {
         config,
         texto: typeof r.texto === 'string' ? r.texto : '',
         campos: Array.isArray(r.campos) ? r.campos.filter((c) => c && typeof c.clave === 'string') : [],
+        partes: Array.isArray(r.partes) ? r.partes.filter((p): p is string => typeof p === 'string' && p.trim() !== '') : [],
     };
 }
 

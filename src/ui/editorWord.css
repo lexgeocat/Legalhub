@@ -517,3 +517,275 @@
 .cambio-linea.despues {
     background: var(--ok-bg);
 }
+
+/* ===== Constructor de campos (panel único) ===== */
+.pc-tabs.tres {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.cb-form,
+.cb-edicion {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid #cfd8fb;
+    border-radius: 9px;
+    background: var(--primario-claro);
+    margin: 6px 0 12px;
+}
+
+.cb-edicion {
+    background: var(--superficie-2);
+    border-color: var(--borde-fuerte);
+    margin: 4px 0;
+}
+
+.cb-fila-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.cb-titulo {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 6px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--borde);
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.cb-fila {
+    display: flex;
+    gap: 2px;
+    align-items: stretch;
+    padding: 2px 0;
+}
+
+.cb-insertar {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cb-insertar:hover {
+    background: var(--primario-claro);
+    border-color: #cfd8fb;
+}
+
+.cb-insertar:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: -2px;
+}
+
+.cb-nombre {
+    font-size: 13px;
+    font-weight: 550;
+}
+
+.cb-meta {
+    font-size: 11.5px;
+    color: var(--texto-3);
+}
+
+.cb-tarjeta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 10px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.cb-tarjeta-cab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cb-datos,
+.cb-formas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+}
+
+.cb-sub {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--texto-2);
+}
+
+.cb-prev {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid var(--borde);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+}
+
+.cb-ejemplo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 6px;
+}
+
+.cb-ejemplo div {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.cb-ejemplo span {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--texto-3);
+}
+
+/* ===== Campos compactos (tipo controles de contenido de Word) ===== */
+.mk[data-k] {
+    --h: 215;
+    display: inline;
+    margin: 0 1px;
+    padding: 0 5px 1px;
+    border: 1px solid hsl(var(--h) 65% 78%);
+    border-radius: 5px;
+    background: hsl(var(--h) 90% 94%);
+    color: hsl(var(--h) 60% 26%);
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    font-size: .82em;
+    font-weight: 500;
+    letter-spacing: 0;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: all;
+    box-decoration-break: clone;
+}
+
+.hoja-ed .mk[data-k]:hover {
+    background: hsl(var(--h) 90% 88%);
+}
+
+.mk[data-k="genero"] {
+    border-style: dashed;
+}
+
+.mk[data-k="bloque"],
+.mk[data-k="cierre"] {
+    border-style: dashed;
+    background: hsl(var(--h) 80% 96%);
+}
+
+.mk .mk-c {
+    display: none;
+}
+
+.hoja-ed p.mk-bloque,
+.hoja-lectura p.mk-bloque {
+    font-size: inherit;
+}
+
+/* Modo «Códigos»: se ve el {{…}} real en vez de la etiqueta corta */
+.hoja-ed.ver-codigos .mk .mk-e {
+    display: none;
+}
+
+.hoja-ed.ver-codigos .mk .mk-c {
+    display: inline;
+}
+
+.hoja-ed.ver-codigos .mk[data-k] {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: .88em;
+    font-weight: 400;
+    white-space: pre-wrap;
+}
+
+/* Tooltip de un campo */
+.mk-tip {
+    position: fixed;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-width: 330px;
+    padding: 8px 11px;
+    border-radius: 9px;
+    background: #1b2340;
+    color: #fff;
+    font: 12px/1.4 "Segoe UI", system-ui, sans-serif;
+    box-shadow: var(--sombra-lg);
+    pointer-events: none;
+}
+
+.mk-tip b {
+    font-size: 12.5px;
+}
+
+.mk-tip span {
+    color: #d5dcf5;
+}
+
+.mk-tip code {
+    margin-top: 2px;
+    padding: 3px 6px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .1);
+    color: #c9d4ff;
+    font-size: 11px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.mk-tip em {
+    color: #8f9bc7;
+    font-size: 11px;
+    font-style: normal;
+}
+
+/* Vista previa en el editor de campos y punto de color de las partes */
+.cb-vista {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: var(--superficie-2);
+}
+
+.cb-vista .mk {
+    font-size: 14px;
+}
+
+.cb-punto {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: hsl(var(--h, 215) 70% 62%);
+    flex: none;
+}

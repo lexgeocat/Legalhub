@@ -210,6 +210,11 @@ export function htmlABloques(html: string): Bloque[] {
         if (IGNORAR.has(tag)) return;
         const d = declaraciones(el, reglas);
         if (d['display'] === 'none' || d['mso-hide'] === 'all') return;
+        const marcador = el.getAttribute('data-mk');
+        if (marcador && el.classList.contains('mk')) {
+            poner(marcador, c.f, c.alin);
+            return;
+        }
 
         // Marcador de lista de Word («1.», «·»…): se conserva como texto + tabulación.
         if (d['mso-list'] === 'ignore') {

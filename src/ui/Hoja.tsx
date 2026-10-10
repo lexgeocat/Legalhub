@@ -5,29 +5,39 @@ import {
 } from '../domain/fuenteModelo';
 import { usePaginacion } from './Paginacion';
 import { pilaCss } from '../domain/fuentes';
+import { describirMarcador } from '../domain/marcadores';
 const PX_POR_CM = 37.7953;
 
 function Tramos({ tramos, estilo, resaltar }: { tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean }) {
     if (tramos.length === 0) return <>{'\u00A0'}</>;
     return (
         <>
-            {tramos.map((t, i) => (
-                <span
-                    key={i}
-                    className={resaltar && t.marcador ? 'mk' : undefined}
-                    style={{
-                        fontWeight: t.negrita || estilo !== 'normal' ? 700 : undefined,
-                        fontStyle: t.cursiva ? 'italic' : undefined,
-                        textDecoration: t.subrayado ? 'underline' : undefined,
-                    }}
-                >
-                    {t.texto}
-                </span>
-            ))}
+            {tramos.map((t, i) => {
+                if (resaltar && t.marcador) {
+                    const m = describirMarcador(t.texto);
+                    return (
+                        <span key={i} className="mk" data-k={m.tipo} style={{ '--h': m.matiz } as CSSProperties}
+                            title={`${m.titulo}${m.detalle ? ` — ${m.detalle}` : ''}`}>
+                            <span className="mk-e">{m.corto}</span>
+                        </span>
+                    );
+                }
+                return (
+                    <span
+                        key={i}
+                        style={{
+                            fontWeight: t.negrita || estilo !== 'normal' ? 700 : undefined,
+                            fontStyle: t.cursiva ? 'italic' : undefined,
+                            textDecoration: t.subrayado ? 'underline' : undefined,
+                        }}
+                    >
+                        {t.texto}
+                    </span>
+                );
+            })}
         </>
     );
 }
-
 function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: ConfigPagina; escala: number; resaltar: boolean }) {
     const titulo = b.estilo === 'titulo';
     const sub = b.estilo === 'subtitulo';

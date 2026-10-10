@@ -1,27 +1,27 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { esTextoLargo, usosCaso } from '../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
 import {
-    AREA_MIN_CM, FUENTES_PAGINA, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES, TIPOS_CAMPO,
-    fuenteVacia, marcadorDeCampo, margenesSeguros, presetDe,
+    AREA_MIN_CM, FUENTES_PAGINA, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES,
+    fuenteVacia, margenesSeguros, presetDe,
     type Alineacion, type CampoPropio, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
 } from '../domain/fuenteModelo';
 import { claveCampo, etiquetaRol } from '../domain/texto';
 import {
-    Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, TablaEsquema, Vacio,
+    Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, TablaEsquema,
     avisar, confirmar,
 } from './comunes';
 import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } from './HojaEditable';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
-import { etiquetaCampoCaso } from '../domain/catalogo';
+import { etiquetaCampoCaso, rolesEnTexto } from '../domain/catalogo';
 import { GRUPOS_FUENTES, buscarFuente, pilaCss, precargarFuentes } from '../domain/fuentes';
+import { ModalMarcador } from './EditorMarcador';
+import type { ContextoMarcadores } from '../domain/marcadores';
 
 interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 
 type Dialogo =
-    | { n: 'campos' }
-    | { n: 'nuevoCampo' }
     | { n: 'datos' }
     | { n: 'pagina' }
     | { n: 'verificacion' }
@@ -161,6 +161,9 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [descripcion, setDescripcion] = useState(inicial.descripcion);
     const [config, setConfig] = useState<ConfigPagina>(inicial.fuente.config);
     const [campos, setCampos] = useState<CampoPropio[]>(inicial.fuente.campos);
+    const [partes, setPartes] = useState<string[]>(
+        () => [...new Set([...(inicial.fuente.partes ?? []), ...rolesEnTexto(inicial.fuente.texto)])],
+    );
     const [notas, setNotas] = useState('');
     const [formato, setFormato] = useState<FormatoActivo>(FORMATO_INICIAL);
     const [panel, setPanel] = useState(true);
@@ -171,7 +174,13 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [guardando, setGuardando] = useState(false);
     const [modificado, setModificado] = useState(false);
     const [ultima, setUltima] = useState<number | null>(null);
-    const [ambito, setAmbito] = useState<string[]>([]);
+    const [verCodigos, setVerCodigos] = useState(false);
+    const contextoMarcadores = useMemo<ContextoMarcadores>(() => ({
+        campos: Object.fromEntries(
+            campos.map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
+        ),
+        partes,
+    }), [campos, partes]);
 
     const tocar = () => {
         setModificado(true);
@@ -199,67 +208,36 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         config,
         texto: hoja.current?.leerTexto() ?? inicial.fuente.texto,
         campos: normalizarCampos(campos),
+        partes,
     });
 
-    /* ----- campos propios ----- */
-    const actualizarCampo = (i: number, cambios: Partial<CampoPropio>) => {
-        setCampos((l) => l.map((c, k) => (k === i ? { ...c, ...cambios } : c)));
+    /* ----- constructor de campos (panel único) ----- */
+    const cambiarCampos = (l: CampoPropio[]) => {
+        setCampos(l);
         tocar();
     };
-    const cambiarEtiqueta = (i: number, etiqueta: string) => {
-        setCampos((l) => l.map((c, k) => {
-            if (k !== i) return c;
-            const auto = !c.clave || c.clave === claveCampo(c.etiqueta);
-            return { ...c, etiqueta, clave: auto ? claveCampo(etiqueta) : c.clave };
-        }));
+    const cambiarPartes = (l: string[]) => {
+        setPartes(l);
         tocar();
     };
-    const agregarCampo = () => {
-        setCampos((l) => [...l, { clave: '', etiqueta: '', tipo: 'texto', requerido: true }]);
-        tocar();
-    };
-    const quitarCampo = (i: number) => {
-        setCampos((l) => l.filter((_, k) => k !== i));
-        tocar();
-    };
-    const insertarCampo = (c: CampoPropio) => {
-        hoja.current?.insertar(marcadorDeCampo({ ...c, clave: claveCampo(c.clave) }), false);
-        cerrarDialogo();
-    };
-    function crearEInsertar(c: CampoPropio) {
-        const existente = campos.find((x) => claveCampo(x.clave) === c.clave);
-        if (!existente) {
-            setCampos((l) => [...l, c]);
-            tocar();
-        }
-        hoja.current?.insertar(marcadorDeCampo(existente ?? c), false);
-        cerrarDialogo();
-    }
+    const insertar = (texto: string, bloque: boolean) => hoja.current?.insertar(texto, bloque);
+
+    /** Declara los «caso.*» y roles que escribiste a mano en el texto. */
     function detectar() {
         const texto = hoja.current?.leerTexto() ?? '';
         const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
         const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
             .filter(([k]) => !declaradas.has(k))
             .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
-        if (nuevos.length === 0) {
-            avisar('No hay campos nuevos en el texto', 'info');
+        const roles = rolesEnTexto(texto).filter((r) => !partes.includes(r));
+        if (nuevos.length === 0 && roles.length === 0) {
+            avisar('No hay nada nuevo en el texto', 'info');
             return;
         }
-        setCampos((l) => [...l, ...nuevos]);
+        if (nuevos.length > 0) setCampos((l) => [...l, ...nuevos]);
+        if (roles.length > 0) setPartes((l) => [...l, ...roles]);
         tocar();
-        avisar(`Se agregaron ${nuevos.length} campo(s)`);
-    }
-
-    /** Inserta desde el panel y declara los «caso.*» que el texto usa y aún no existen. */
-    function insertarDesdePanel(texto: string, bloque: boolean) {
-        hoja.current?.insertar(texto, bloque);
-        const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
-        const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
-            .filter(([k]) => !declaradas.has(k))
-            .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
-        if (nuevos.length === 0) return;
-        setCampos((l) => [...l, ...nuevos]);
-        tocar();
+        avisar(`Se agregaron ${nuevos.length} dato(s) y ${roles.length} parte(s)`);
     }
 
     /* ----- verificar y guardar ----- */
@@ -415,13 +393,10 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 </select>
                 <Tb titulo="Configurar página: papel y márgenes en cm" onClick={() => setDialogo({ n: 'pagina' })}>Página…</Tb>
                 <Tb titulo="Sangría de primera línea" activo={config.sangria} onClick={() => setCfg({ sangria: !config.sangria })}>Sangría</Tb>
-                <Sep />
-                <Tb titulo="Crear un campo nuevo e insertarlo en el cursor" onClick={() => setDialogo({ n: 'nuevoCampo' })}>
-                    <Icono n="mas" tam={14} /> Campo nuevo
-                </Tb>
-                <Tb titulo="Administrar los campos del caso" onClick={() => setDialogo({ n: 'campos' })}>Campos del caso ({campos.length})</Tb>
                 <div className="espacio" />
-                <Tb titulo="Mostrar u ocultar el panel de campos" activo={panel} onClick={() => setPanel(!panel)}>Panel de campos</Tb>
+                <Tb titulo="Mostrar el código {{…}} de cada campo en vez de su etiqueta corta" activo={verCodigos}
+                    onClick={() => setVerCodigos((v) => !v)}>{'{ }'} Códigos</Tb>
+                <Tb titulo="Mostrar u ocultar el constructor de campos (datos, partes y género)" activo={panel} onClick={() => setPanel(!panel)}>Campos</Tb>
             </div>
 
             {/* ===== Hoja + panel ===== */}
@@ -432,20 +407,25 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         textoInicial={inicial.fuente.texto}
                         config={config}
                         onCambio={tocar}
-                        onAmbito={setAmbito}
                         onFormato={setFormato}
                         onEditarCampo={(actual, aplicar) => setDialogo({ n: 'marcador', actual, aplicar })}
                         onMargenes={setMargen}
                         onConfigurarPagina={() => setDialogo({ n: 'pagina' })}
                         onPaginas={setPaginas}
+                        contexto={contextoMarcadores}
+                        verCodigos={verCodigos}
                     />
                 </div>
                 {panel && (
                     <aside className="ed-panel">
-                        <PanelCampos campos={campos} ambito={ambito} materia={materia}
-                            onInsertar={insertarDesdePanel}
-                            onCrearCampo={crearEInsertar}
-                            onAdministrar={() => setDialogo({ n: 'campos' })} />
+                        <PanelCampos
+                            campos={campos}
+                            partes={partes}
+                            onCampos={cambiarCampos}
+                            onPartes={cambiarPartes}
+                            onInsertar={insertar}
+                            onDetectar={detectar}
+                        />
                     </aside>
                 )}
             </div>
@@ -456,7 +436,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                     márgenes sup {coma(mg.superior)} · inf {coma(mg.inferior)} · izq {coma(mg.izquierdo)} · der {coma(mg.derecho)} cm ·
                     ≈ {paginas} pág.
                 </span>
-                <span>Arrastra los márgenes en la regla · doble clic en la regla: configurar página · Ctrl+S guardar</span>
+                <span>Pasa el mouse sobre un campo para ver qué es · doble clic: editarlo · Ctrl+G guardar</span>
             </footer>
 
             {/* ===== Diálogos ===== */}
@@ -465,11 +445,27 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
             )}
 
             {dialogo?.n === 'marcador' && (
-                <ModalMarcador actual={dialogo.actual} aplicar={dialogo.aplicar} cerrar={cerrarDialogo} />
-            )}
-
-            {dialogo?.n === 'nuevoCampo' && (
-                <ModalNuevoCampo cerrar={cerrarDialogo} crear={crearEInsertar} />
+                <ModalMarcador
+                    actual={dialogo.actual}
+                    contexto={contextoMarcadores}
+                    campos={campos}
+                    cerrar={cerrarDialogo}
+                    aplicar={(marcador, cambio) => {
+                        dialogo.aplicar(marcador);
+                        if (cambio) {
+                            setCampos((l) => l.map((c) => (
+                                claveCampo(c.clave) === claveCampo(cambio.clave)
+                                    ? {
+                                        ...c,
+                                        ...(cambio.tipo ? { tipo: cambio.tipo } : {}),
+                                        ...(cambio.requerido !== undefined ? { requerido: cambio.requerido } : {}),
+                                    }
+                                    : c
+                            )));
+                        }
+                        tocar();
+                    }}
+                />
             )}
 
             {dialogo?.n === 'verificacion' && verif && (
@@ -496,54 +492,6 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                             <input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Qué cambió en esta versión" />
                         </Campo>
                     </div>
-                </Modal>
-            )}
-
-            {dialogo?.n === 'campos' && (
-                <Modal titulo="Campos del caso" ancho="grande" cerrar={cerrarDialogo}
-                    pie={<><span className="espacio" /><button type="button" className="btn btn-pri" onClick={cerrarDialogo}>Listo</button></>}>
-                    <div className="tarjeta-cab">
-                        <p className="suave">Datos propios de este documento que no vienen de personas ni de inmuebles (precio, plazo, hechos…). Se toman del expediente o el asistente los pide al generar.</p>
-                        <div className="acciones">
-                            <button type="button" className="btn btn-sec btn-sm" onClick={detectar}>Detectar del texto</button>
-                            <button type="button" className="btn btn-pri btn-sm" onClick={agregarCampo}><Icono n="mas" tam={15} /> Agregar campo</button>
-                        </div>
-                    </div>
-                    {campos.length === 0 ? (
-                        <Vacio titulo="Sin campos propios" texto="Usa «Campo nuevo» en la cinta, o «Detectar del texto» si ya escribiste marcadores {{caso.…}}." />
-                    ) : (
-                        <div className="tabla-wrap">
-                            <table className="tabla tabla-densa">
-                                <thead><tr><th>Etiqueta</th><th>Clave</th><th>Tipo</th><th>Obligatorio</th><th /></tr></thead>
-                                <tbody>
-                                    {campos.map((c, i) => (
-                                        <tr key={i}>
-                                            <td><input value={c.etiqueta} placeholder="Ej.: Lugar de firma" onChange={(e) => cambiarEtiqueta(i, e.target.value)} /></td>
-                                            <td>
-                                                <input className="mono" value={c.clave} placeholder="lugar_firma"
-                                                    onChange={(e) => actualizarCampo(i, { clave: e.target.value })}
-                                                    onBlur={(e) => actualizarCampo(i, { clave: claveCampo(e.target.value) })} />
-                                            </td>
-                                            <td>
-                                                <select value={c.tipo} onChange={(e) => actualizarCampo(i, { tipo: e.target.value as TipoCampo })}>
-                                                    {TIPOS_CAMPO.map((t) => <option key={t.valor} value={t.valor}>{t.etiqueta}</option>)}
-                                                </select>
-                                            </td>
-                                            <td><input type="checkbox" checked={c.requerido} onChange={(e) => actualizarCampo(i, { requerido: e.target.checked })} /></td>
-                                            <td>
-                                                <div className="acciones">
-                                                    <button type="button" className="btn btn-sec btn-sm" disabled={!claveCampo(c.clave)} onClick={() => insertarCampo(c)}>Insertar</button>
-                                                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar campo" onClick={() => quitarCampo(i)}>
-                                                        <Icono n="papelera" tam={15} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
                 </Modal>
             )}
         </div>
@@ -664,79 +612,6 @@ function ModalPagina({ config, aplicar, cerrar }: {
                     </p>
                 </div>
                 <MiniPagina w={pag.w} h={pag.h} m={valido ? nums : null} />
-            </form>
-        </Modal>
-    );
-}
-
-/* ---------------- Diálogos pequeños ---------------- */
-function ModalMarcador({ actual, aplicar, cerrar }: {
-    actual: string; aplicar: (nuevo: string) => void; cerrar: () => void;
-}) {
-    const [valor, setValor] = useState(actual);
-    const enviar = (ev: FormEvent<HTMLFormElement>) => {
-        ev.preventDefault();
-        aplicar(valor);
-        cerrar();
-    };
-    return (
-        <Modal titulo="Editar campo" ancho="chica" cerrar={cerrar}
-            pie={
-                <>
-                    <button type="button" className="btn btn-peligro" onClick={() => { aplicar(''); cerrar(); }}>Quitar campo</button>
-                    <span className="espacio" />
-                    <button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button>
-                    <button type="submit" form="form-marcador" className="btn btn-pri">Aplicar</button>
-                </>
-            }>
-            <form id="form-marcador" onSubmit={enviar}>
-                <Campo etiqueta="Marcador" ayuda="Ej.: {{caso.precio | moneda}}. Un «?» al final del nombre lo hace opcional.">
-                    <input className="mono" autoFocus value={valor} onChange={(e) => setValor(e.target.value)} />
-                </Campo>
-            </form>
-        </Modal>
-    );
-}
-
-function ModalNuevoCampo({ cerrar, crear }: { cerrar: () => void; crear: (c: CampoPropio) => void }) {
-    const [etiqueta, setEtiqueta] = useState('');
-    const [tipo, setTipo] = useState<TipoCampo>('texto');
-    const [requerido, setRequerido] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const clave = claveCampo(etiqueta);
-
-    const enviar = (ev: FormEvent<HTMLFormElement>) => {
-        ev.preventDefault();
-        if (!clave) {
-            setError('Escribe un nombre para el campo (letras o números)');
-            return;
-        }
-        crear({ clave, etiqueta: etiqueta.trim(), tipo, requerido });
-    };
-
-    return (
-        <Modal titulo="Nuevo campo del caso" ancho="chica" cerrar={cerrar}
-            pie={
-                <>
-                    <span className="espacio" />
-                    <button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button>
-                    <button type="submit" form="form-nuevo-campo" className="btn btn-pri">Crear e insertar</button>
-                </>
-            }>
-            <Aviso error={error} />
-            <form id="form-nuevo-campo" className="form-grid" onSubmit={enviar}>
-                <Campo etiqueta="Nombre del campo" ancho ayuda={clave ? `Se insertará como caso.${clave}` : 'Ej.: Lugar de firma, Precio, Plazo'}>
-                    <input autoFocus value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} />
-                </Campo>
-                <Campo etiqueta="Tipo">
-                    <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoCampo)}>
-                        {TIPOS_CAMPO.map((t) => <option key={t.valor} value={t.valor}>{t.etiqueta}</option>)}
-                    </select>
-                </Campo>
-                <label className="casilla">
-                    <input type="checkbox" checked={requerido} onChange={(e) => setRequerido(e.target.checked)} />
-                    Obligatorio
-                </label>
             </form>
         </Modal>
     );

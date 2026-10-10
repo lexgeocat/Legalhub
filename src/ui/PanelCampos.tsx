@@ -1,197 +1,65 @@
-import {
-    memo, useCallback, useEffect, useMemo, useRef, useState,
-    type FormEvent, type KeyboardEvent, type ReactNode,
-} from 'react';
-import { camposSugeridos, tipoSugerido } from '../application/camposModelo';
-import {
-    SECCIONES_PANEL, construirGrupoPropios, construirGrupoSugeridos, construirPanel, construirPanelAmbito,
-    describirBloque, rolDesdeTexto,
-    type FuentePersona, type GrupoPanel, type ItemPanel, type SeccionPanel,
-} from '../domain/catalogo';
-import { TIPOS_CAMPO, hacerOpcional, type CampoPropio, type TipoCampo } from '../domain/fuenteModelo';
-import { claveCampo, claveNormalizada, etiquetaRol } from '../domain/texto';
-import { ROLES_CONOCIDOS, TIPOS_EXPEDIENTE } from '../domain/tiposExpediente';
-import { Icono, copiarConAviso } from './comunes';
+import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { tipoSugerido } from '../application/camposModelo';
+import { rolDesdeTexto } from '../domain/catalogo';
+import { formasConcordancia, type FormasConcordancia } from '../domain/concordancia';
+import { TIPOS_CAMPO, marcadorDeCampo, type CampoPropio, type TipoCampo } from '../domain/fuenteModelo';
+import { claveCampo, etiquetaRol, pluralRol } from '../domain/texto';
+import { ROLES_CONOCIDOS } from '../domain/tiposExpediente';
+import { Campo, Icono, Segmentado } from './comunes';
+import { matizDePersona } from '../domain/marcadores';
 
-const ROLES_RAPIDOS = ['demandante', 'demandado', 'vendedor', 'comprador', 'arrendador', 'arrendatario', 'poderdante', 'apoderado'];
-const CLAVE_RECIENTES = 'legalhub.panel.recientes';
-const PREF_BLANCO = 'legalhub.panel.enBlanco';
-const PREF_CODIGO = 'legalhub.panel.verCodigo';
-const MAX_RECIENTES = 5;
-const SIN_AMBITO: readonly string[] = [];
+type Pestana = 'datos' | 'partes' | 'genero';
+type Insertar = (texto: string, bloque: boolean) => void;
+type Modo = 'cada' | 'una';
 
-function leerRecientes(): ItemPanel[] {
-    try {
-        const o: unknown = JSON.parse(localStorage.getItem(CLAVE_RECIENTES) ?? '[]');
-        if (!Array.isArray(o)) return [];
-        return o
-            .filter((x) => !!x && typeof x.etiqueta === 'string' && typeof x.texto === 'string')
-            .map((x) => ({
-                etiqueta: x.etiqueta as string, texto: x.texto as string, bloque: !!x.bloque,
-                ejemplo: typeof x.ejemplo === 'string' ? (x.ejemplo as string) : undefined,
-            }))
-            .slice(0, MAX_RECIENTES);
-    } catch {
-        return [];
-    }
+/** Evita que el botón le quite el foco (y el cursor) a la hoja. */
+const quieto = (e: { preventDefault(): void }) => e.preventDefault();
+const nombreTipo = (t: string) => TIPOS_CAMPO.find((x) => x.valor === t)?.etiqueta ?? t;
+
+/* ---------------- Personas disponibles ---------------- */
+interface Persona {
+    id: string;
+    etiqueta: string;
+    /** Expresión para «todas las personas con este rol» (vendedores) o la única (cliente). */
+    plural: string;
+    /** Expresión para «la primera persona» (vendedor). */
+    singular: string;
+    varias: boolean;
+    fija: boolean;
 }
 
-function guardarRecientes(l: ItemPanel[]): void {
-    try {
-        localStorage.setItem(CLAVE_RECIENTES, JSON.stringify(l));
-    } catch {
-        /* sin almacenamiento: no pasa nada */
-    }
-}
-
-function usePreferencia(clave: string, inicial: boolean): [boolean, (v: boolean) => void] {
-    const [valor, setValor] = useState<boolean>(() => {
-        try {
-            const g = localStorage.getItem(clave);
-            return g === null ? inicial : g === '1';
-        } catch {
-            return inicial;
-        }
-    });
-    const poner = useCallback((v: boolean) => {
-        setValor(v);
-        try {
-            localStorage.setItem(clave, v ? '1' : '0');
-        } catch {
-            /* sin almacenamiento */
-        }
-    }, [clave]);
-    return [valor, poner];
-}
-
-/** Marca como opcionales («?») todos los campos de un texto; los bloques no se tocan. */
-const volverOpcional = (t: string) => t.replace(/\{\{[^}]*\}\}/g, (m) => hacerOpcional(m));
-
-const rolesSugeridos = (materia?: string): string[] => {
-    const t = TIPOS_EXPEDIENTE.find((x) => x.clave === materia);
-    return t && t.roles.length > 0 ? [...t.roles] : ROLES_RAPIDOS;
-};
-
-const tipoBloque = (texto: string) => (/\{\{#hay_/.test(texto) ? 'Condicional' : 'Se repite');
-
-/* ---------------- Fila: etiqueta + ejemplo en una línea; la ayuda va en el tooltip ---------------- */
-const Fila = memo(function Fila({ item, onUsar, verCodigo }: {
-    item: ItemPanel; onUsar: (i: ItemPanel) => void; verCodigo: boolean;
-}) {
-    return (
-        <div className="pc-item">
-            <button type="button" className="pc-insertar"
-                title={item.ayuda ?? 'Clic para insertar en el cursor'}
-                onMouseDown={(e) => e.preventDefault()} onClick={() => onUsar(item)}>
-                <span className="pc-etiq">
-                    {item.etiqueta}
-                    {item.bloque && <span className={`pc-tag${/\{\{#hay_/.test(item.texto) ? ' cond' : ''}`}>{tipoBloque(item.texto)}</span>}
-                </span>
-                {item.ejemplo && <span className="pc-ejemplo">Ej.: {item.ejemplo}</span>}
-                {verCodigo && <code className="pc-codigo">{item.texto}</code>}
-            </button>
-            <button type="button" className="btn btn-fan btn-icono btn-sm" title="Copiar el código para pegarlo en otro lugar"
-                aria-label="Copiar código" onMouseDown={(e) => e.preventDefault()} onClick={() => void copiarConAviso(item.texto)}>
-                <Icono n="copiar" tam={15} />
-            </button>
-        </div>
-    );
+const CLIENTE: Persona = { id: '@cliente', etiqueta: 'Cliente', plural: 'cliente', singular: 'cliente', varias: false, fija: true };
+const ABOGADO: Persona = { id: '@abogado', etiqueta: 'Abogado (yo)', plural: 'abogado', singular: 'abogado', varias: false, fija: true };
+const dePersona = (rol: string): Persona => ({
+    id: rol, etiqueta: etiquetaRol(rol), plural: pluralRol(rol), singular: rol, varias: true, fija: false,
 });
 
-function Grupo({ g, abierto, forzar, alternar, onUsar, verCodigo, pie }: {
-    g: GrupoPanel; abierto: boolean; forzar: boolean;
-    alternar: (id: string, porDefecto: boolean) => void; onUsar: (i: ItemPanel) => void; verCodigo: boolean;
-    pie?: ReactNode;
+const DATOS_PERSONA: { id: string; etiqueta: string; antes?: string; filtro?: string }[] = [
+    { id: 'nombre', etiqueta: 'Nombre completo' },
+    { id: 'ci', etiqueta: 'C.I.', antes: 'con C.I. N° ' },
+    { id: 'domicilio', etiqueta: 'Domicilio', antes: 'con domicilio en ' },
+    { id: 'estado_civil', etiqueta: 'Estado civil' },
+    { id: 'nacionalidad', etiqueta: 'Nacionalidad' },
+    { id: 'profesion', etiqueta: 'Profesión' },
+    { id: 'fecha_nacimiento', etiqueta: 'Fecha de nacimiento', antes: 'nacimiento: ', filtro: ' | fecha' },
+    { id: 'telefono', etiqueta: 'Teléfono', antes: 'teléfono ' },
+    { id: 'correo', etiqueta: 'Correo', antes: 'correo ' },
+];
+
+const PALABRAS_RAPIDAS = ['el', 'el señor', 'del', 'al', 'un', 'señor', 'domiciliado', 'portador', 'mayor de edad'];
+
+/* ================= Pestaña DATOS ================= */
+function EditarDato({ c, onGuardar, onCancelar }: {
+    c: CampoPropio; onGuardar: (c: CampoPropio) => void; onCancelar: () => void;
 }) {
-    const [mas, setMas] = useState(false);
-    const visible = forzar || abierto;
-    const principales = g.items.filter((i) => !i.avanzado);
-    const extra = g.items.filter((i) => i.avanzado);
-    const verExtra = forzar || mas || principales.length === 0;
-    const fila = (i: ItemPanel, k: number) => <Fila key={`${i.texto}:${k}`} item={i} onUsar={onUsar} verCodigo={verCodigo} />;
+    const [etiqueta, setEtiqueta] = useState(c.etiqueta);
+    const [tipo, setTipo] = useState<TipoCampo>(c.tipo);
+    const [requerido, setRequerido] = useState(c.requerido);
     return (
-        <section className="pc-grupo">
-            <button type="button" className="pc-grupo-tit" aria-expanded={visible}
-                onMouseDown={(e) => e.preventDefault()} onClick={() => alternar(g.id, !!g.abierto)}>
-                <span>{g.titulo}</span>
-                <span className="suave">{visible ? '−' : '+'}</span>
-            </button>
-            {visible && (
-                <>
-                    {g.ayuda && <p className="pc-ayuda">{g.ayuda}</p>}
-                    {principales.map(fila)}
-                    {extra.length > 0 && !verExtra && (
-                        <button type="button" className="pc-mas" onMouseDown={(e) => e.preventDefault()} onClick={() => setMas(true)}>
-                            Más datos ({extra.length})…
-                        </button>
-                    )}
-                    {verExtra && extra.map(fila)}
-                    {pie}
-                </>
-            )}
-        </section>
-    );
-}
-
-/* ---------------- Creador de campos propios ---------------- */
-function CrearCampo({ total, declaradas, onCrear, onAdministrar }: {
-    total: number;
-    declaradas: ReadonlySet<string>;
-    onCrear: (c: CampoPropio) => void;
-    onAdministrar?: () => void;
-}) {
-    const [abierto, setAbierto] = useState(total === 0);
-    const [etiqueta, setEtiqueta] = useState('');
-    const [tipo, setTipo] = useState<TipoCampo>('texto');
-    const [manual, setManual] = useState(false);
-    const [requerido, setRequerido] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const entrada = useRef<HTMLInputElement>(null);
-    const clave = claveCampo(etiqueta);
-    const existe = !!clave && declaradas.has(clave);
-
-    function cambiarNombre(v: string) {
-        setEtiqueta(v);
-        setError(null);
-        if (!manual) setTipo(tipoSugerido(claveCampo(v)));
-    }
-
-    function enviar(ev: FormEvent<HTMLFormElement>) {
-        ev.preventDefault();
-        if (!clave) {
-            setError('Escribe un nombre (letras o números)');
-            return;
-        }
-        onCrear({ clave, etiqueta: etiqueta.trim(), tipo, requerido });
-        setEtiqueta('');
-        setTipo('texto');
-        setManual(false);
-        setError(null);
-    }
-
-    function abrir() {
-        setAbierto(true);
-        window.setTimeout(() => entrada.current?.focus(), 0);
-    }
-
-    if (!abierto) {
-        return (
-            <div className="pc-acciones">
-                <button type="button" className="btn btn-sec btn-sm" onClick={abrir}><Icono n="mas" tam={14} /> Crear campo</button>
-                {onAdministrar && total > 0 && (
-                    <button type="button" className="btn btn-fan btn-sm" onClick={onAdministrar}>Administrar ({total})…</button>
-                )}
-            </div>
-        );
-    }
-
-    return (
-        <form className="pc-crear" onSubmit={enviar}>
-            <input ref={entrada} aria-label="Nombre del campo" placeholder="Nombre: Plazo de entrega, Monto, Lugar…"
-                value={etiqueta} onChange={(e) => cambiarNombre(e.target.value)} />
-            <div className="pc-crear-fila">
-                <select aria-label="Tipo de dato" value={tipo}
-                    onChange={(e) => { setTipo(e.target.value as TipoCampo); setManual(true); }}>
+        <div className="cb-edicion">
+            <input aria-label="Nombre del dato" value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} />
+            <div className="cb-fila-form">
+                <select aria-label="Tipo de dato" value={tipo} onChange={(e) => setTipo(e.target.value as TipoCampo)}>
                     {TIPOS_CAMPO.map((t) => <option key={t.valor} value={t.valor}>{t.etiqueta}</option>)}
                 </select>
                 <label className="casilla">
@@ -199,203 +67,394 @@ function CrearCampo({ total, declaradas, onCrear, onAdministrar }: {
                     Obligatorio
                 </label>
             </div>
-            <p className="pc-nota">
-                {existe
-                    ? `Ya tienes «caso.${clave}»: se insertará el que ya existe.`
-                    : clave ? `Se insertará como caso.${clave}` : 'Si no está en el expediente, el asistente lo pide al generar.'}
-            </p>
-            {error && <p className="pc-error">{error}</p>}
+            <p className="pc-nota">Clave interna: <code>caso.{c.clave}</code>. Lo que ya insertaste en el texto no cambia.</p>
             <div className="pc-acciones">
-                <button type="submit" className="btn btn-pri btn-sm">Crear e insertar</button>
-                {total > 0 && <button type="button" className="btn btn-fan btn-sm" onClick={() => setAbierto(false)}>Cancelar</button>}
-                {onAdministrar && total > 0 && (
-                    <button type="button" className="btn btn-fan btn-sm" onClick={onAdministrar}>Administrar ({total})…</button>
-                )}
+                <button type="button" className="btn btn-pri btn-sm"
+                    onClick={() => onGuardar({ ...c, etiqueta: etiqueta.trim() || etiquetaRol(claveCampo(c.clave)), tipo, requerido })}>
+                    Guardar
+                </button>
+                <button type="button" className="btn btn-fan btn-sm" onClick={onCancelar}>Cancelar</button>
             </div>
-        </form>
+        </div>
     );
 }
 
-/* ---------------- Panel ---------------- */
-export function PanelCampos({ campos, ambito = SIN_AMBITO, materia, onInsertar, onCrearCampo, onAdministrar }: {
+function TabDatos({ campos, onCampos, onInsertar, onDetectar }: {
     campos: CampoPropio[];
-    /** Bloques «{{#…}}» abiertos donde está el cursor del editor. */
-    ambito?: readonly string[];
-    /** Tipo de expediente del modelo: sugiere roles y campos habituales. */
-    materia?: string;
-    onInsertar: (texto: string, bloque: boolean) => void;
-    /** Declara el campo (si no existe) y lo inserta en el cursor. */
-    onCrearCampo: (c: CampoPropio) => void;
-    /** Abre el diálogo «Campos del caso». */
-    onAdministrar?: () => void;
+    onCampos: (c: CampoPropio[]) => void;
+    onInsertar: Insertar;
+    onDetectar: () => void;
 }) {
-    const rolesSug = useMemo(() => rolesSugeridos(materia), [materia]);
-    const [rolElegido, setRolElegido] = useState<string | null>(null);
-    const [fuente, setFuente] = useState<FuentePersona>('rol');
-    const rol = rolElegido ?? rolesSug[0] ?? 'demandante';
-    const rolActual = rolDesdeTexto(rol);
-    const [seccion, setSeccion] = useState<SeccionPanel>('personas');
-    const [q, setQ] = useState('');
-    const [abiertos, setAbiertos] = useState<Record<string, boolean>>({});
-    const [recientes, setRecientes] = useState<ItemPanel[]>(leerRecientes);
-    const [enBlanco, setEnBlanco] = usePreferencia(PREF_BLANCO, false);
-    const [verCodigo, setVerCodigo] = usePreferencia(PREF_CODIGO, false);
-    const cuerpo = useRef<HTMLDivElement>(null);
-    const buscador = useRef<HTMLInputElement>(null);
-    const insertar = useRef(onInsertar);
+    const [etiqueta, setEtiqueta] = useState('');
+    const [tipo, setTipo] = useState<TipoCampo>('texto');
+    const [manual, setManual] = useState(false);
+    const [requerido, setRequerido] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [editando, setEditando] = useState<number | null>(null);
+    const clave = claveCampo(etiqueta);
+    const existente = clave ? campos.find((c) => claveCampo(c.clave) === clave) : undefined;
 
-    useEffect(() => {
-        insertar.current = onInsertar;
-    });
-    useEffect(() => {
-        guardarRecientes(recientes);
-    }, [recientes]);
+    function cambiarNombre(v: string) {
+        setEtiqueta(v);
+        setError(null);
+        if (!manual) setTipo(tipoSugerido(claveCampo(v)));
+    }
 
-    const usar = useCallback((item: ItemPanel) => {
-        insertar.current(enBlanco && !item.bloque ? volverOpcional(item.texto) : item.texto, !!item.bloque);
-        setRecientes((l) => [
-            { etiqueta: item.etiqueta, texto: item.texto, bloque: !!item.bloque, ejemplo: item.ejemplo },
-            ...l.filter((x) => x.texto !== item.texto),
-        ].slice(0, MAX_RECIENTES));
-    }, [enBlanco]);
-
-    const alternar = useCallback((id: string, porDefecto: boolean) => {
-        setAbiertos((a) => ({ ...a, [id]: !(a[id] ?? porDefecto) }));
-    }, []);
-
-    const ctx = useMemo(() => construirPanelAmbito(ambito), [ambito]);
-    const declaradas = useMemo(() => new Set(campos.map((c) => claveCampo(c.clave))), [campos]);
-    const camposSug = useMemo(() => camposSugeridos(materia, campos), [materia, campos]);
-    const grupos = useMemo<GrupoPanel[]>(() => {
-        const sug = construirGrupoSugeridos(camposSug);
-        return [
-            ...(ctx ? [ctx] : []),
-            construirGrupoPropios(campos),
-            ...(sug ? [sug] : []),
-            ...construirPanel(rol, fuente),
-        ];
-    }, [ctx, campos, camposSug, rol, fuente]);
-
-    const tokens = claveNormalizada(q.trim()).split(/\s+/).filter(Boolean);
-    const buscando = tokens.length > 0;
-    const coincide = (i: ItemPanel) => {
-        const h = claveNormalizada(`${i.etiqueta} ${i.ejemplo ?? ''} ${i.ayuda ?? ''} ${i.claves ?? ''} ${i.texto}`);
-        return tokens.every((t) => h.includes(t));
-    };
-    const nombreSeccion = (s: SeccionPanel) => SECCIONES_PANEL.find((x) => x.id === s)?.etiqueta ?? '';
-
-    const delTab = buscando ? grupos : grupos.filter((g) => g === ctx || g.seccion === seccion);
-    const reciente: GrupoPanel[] = !buscando && recientes.length > 0
-        ? [{ id: 'recientes', seccion, titulo: 'Usados hace poco', abierto: true, items: recientes }]
-        : [];
-    const orden = [...delTab.filter((g) => g === ctx), ...reciente, ...delTab.filter((g) => g !== ctx)];
-    const visibles = orden
-        .map((g) => ({
-            ...g,
-            titulo: buscando && g !== ctx ? `${nombreSeccion(g.seccion)} · ${g.titulo}` : g.titulo,
-            items: buscando ? g.items.filter(coincide) : g.items,
-        }))
-        .filter((g) => (buscando ? g.items.length > 0 : g.items.length > 0 || !!g.ayuda));
-
-    function teclasBuscador(e: KeyboardEvent<HTMLInputElement>) {
-        if (e.key === 'Escape') {
-            setQ('');
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            cuerpo.current?.querySelector<HTMLButtonElement>('.pc-insertar')?.focus();
-        } else if (e.key === 'Enter') {
-            const primero = visibles[0]?.items[0];
-            if (primero) {
-                e.preventDefault();
-                usar(primero);
-            }
+    function crear(ev: FormEvent<HTMLFormElement>) {
+        ev.preventDefault();
+        if (!clave) {
+            setError('Escribe un nombre (letras o números)');
+            return;
         }
+        const c: CampoPropio = existente ?? { clave, etiqueta: etiqueta.trim(), tipo, requerido };
+        if (!existente) onCampos([...campos, c]);
+        onInsertar(marcadorDeCampo({ ...c, clave: claveCampo(c.clave) }), false);
+        setEtiqueta('');
+        setTipo('texto');
+        setManual(false);
+        setRequerido(true);
+        setError(null);
     }
 
-    function teclasLista(e: KeyboardEvent<HTMLDivElement>) {
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-        const botones = Array.from(cuerpo.current?.querySelectorAll<HTMLButtonElement>('.pc-insertar') ?? []);
-        const i = botones.indexOf(document.activeElement as HTMLButtonElement);
-        if (i < 0) return;
-        e.preventDefault();
-        if (e.key === 'ArrowUp' && i === 0) buscador.current?.focus();
-        else botones[Math.max(0, Math.min(botones.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+    return (
+        <>
+            <p className="pc-ayuda">
+                Crea aquí los datos que cambian en cada documento (precio, plazo, lugar, hechos…).
+                Se completan en el expediente o cuando generas el documento.
+            </p>
+
+            <form className="cb-form" onSubmit={crear}>
+                <input aria-label="Nombre del dato" placeholder="Nombre: Precio, Plazo de entrega, Lugar de firma…"
+                    value={etiqueta} onChange={(e) => cambiarNombre(e.target.value)} />
+                <div className="cb-fila-form">
+                    <select aria-label="Tipo de dato" value={tipo}
+                        onChange={(e) => { setTipo(e.target.value as TipoCampo); setManual(true); }}>
+                        {TIPOS_CAMPO.map((t) => <option key={t.valor} value={t.valor}>{t.etiqueta}</option>)}
+                    </select>
+                    <label className="casilla">
+                        <input type="checkbox" checked={requerido} onChange={(e) => setRequerido(e.target.checked)} />
+                        Obligatorio
+                    </label>
+                </div>
+                <p className="pc-nota">
+                    {existente
+                        ? `Ya existe «caso.${clave}»: se insertará el que ya tienes.`
+                        : clave ? `Se insertará como caso.${clave}` : 'El nombre puede llevar espacios y tildes.'}
+                </p>
+                {error && <p className="pc-error">{error}</p>}
+                <div><button type="submit" className="btn btn-pri btn-sm">{existente ? 'Insertar el existente' : 'Crear e insertar'}</button></div>
+            </form>
+
+            <div className="cb-titulo">
+                <span>Mis datos ({campos.length})</span>
+                <button type="button" className="btn btn-fan btn-sm" onMouseDown={quieto} onClick={onDetectar}
+                    title="Busca en el texto los {{caso.…}} y roles que escribiste a mano">
+                    Detectar del texto
+                </button>
+            </div>
+
+            {campos.length === 0 && <p className="pc-ayuda">Aún no creaste ningún dato. Empieza con el formulario de arriba.</p>}
+
+            {campos.map((c, i) => editando === i ? (
+                <EditarDato key={i} c={c}
+                    onCancelar={() => setEditando(null)}
+                    onGuardar={(nuevo) => { onCampos(campos.map((x, k) => (k === i ? nuevo : x))); setEditando(null); }} />
+            ) : (
+                <div key={i} className="cb-fila">
+                    <button type="button" className="cb-insertar" title="Insertar en el cursor" onMouseDown={quieto}
+                        onClick={() => onInsertar(marcadorDeCampo({ ...c, clave: claveCampo(c.clave) }), false)}>
+                        <span className="cb-nombre">{c.etiqueta || etiquetaRol(c.clave)}</span>
+                        <span className="cb-meta">{nombreTipo(c.tipo)}{c.requerido ? '' : ' · opcional'}</span>
+                    </button>
+                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Editar dato" onMouseDown={quieto}
+                        onClick={() => setEditando(i)}><Icono n="editar" tam={15} /></button>
+                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar dato" onMouseDown={quieto}
+                        onClick={() => onCampos(campos.filter((_, k) => k !== i))}><Icono n="papelera" tam={15} /></button>
+                </div>
+            ))}
+        </>
+    );
+}
+
+/* ================= Pestaña PARTES ================= */
+function Ficha({ p, onInsertar }: { p: Persona; onInsertar: Insertar }) {
+    const [sel, setSel] = useState<ReadonlySet<string>>(() => new Set(['nombre', 'ci']));
+    const [mayus, setMayus] = useState(true);
+    const [modo, setModo] = useState<Modo>('cada');
+    const puedeUna = !p.varias || p.singular !== p.plural;
+    const repetir = p.varias && (modo === 'cada' || !puedeUna);
+
+    function alternar(id: string) {
+        const n = new Set(sel);
+        if (n.has(id)) n.delete(id);
+        else n.add(id);
+        setSel(n);
     }
+
+    const prefijo = repetir ? '' : `${p.singular}.`;
+    const linea = DATOS_PERSONA
+        .filter((d) => sel.has(d.id))
+        .map((d) => `${d.antes ?? ''}{{${prefijo}${d.id}${d.id === 'nombre' && mayus ? ' | mayus' : (d.filtro ?? '')}}}`)
+        .join(', ');
+    const texto = repetir ? `{{#${p.plural}}}\n${linea}\n{{/${p.plural}}}` : linea;
+
+    return (
+        <div className="cb-edicion">
+            <span className="cb-sub">¿Qué datos quieres mostrar?</span>
+            <div className="cb-datos">
+                {DATOS_PERSONA.map((d) => (
+                    <label key={d.id} className="casilla">
+                        <input type="checkbox" checked={sel.has(d.id)} onChange={() => alternar(d.id)} />
+                        {d.etiqueta}
+                    </label>
+                ))}
+            </div>
+            {sel.has('nombre') && (
+                <label className="casilla">
+                    <input type="checkbox" checked={mayus} onChange={(e) => setMayus(e.target.checked)} />
+                    Nombre en MAYÚSCULAS
+                </label>
+            )}
+            {p.varias && puedeUna && (
+                <Segmentado<Modo>
+                    valor={modo} cambiar={setModo}
+                    opciones={[{ id: 'cada', etiqueta: 'Cada persona' }, { id: 'una', etiqueta: 'Solo la primera' }]}
+                />
+            )}
+            <span className="cb-sub">Así se insertará</span>
+            <code className="cb-prev">{linea ? texto : 'Elige al menos un dato'}</code>
+            <p className="pc-nota">
+                {repetir
+                    ? 'Se repite sola: una línea por cada persona con este rol. Ajusta la redacción después, en el documento.'
+                    : 'Escribe después el texto que quieras alrededor.'}
+            </p>
+            <div>
+                <button type="button" className="btn btn-pri btn-sm" disabled={!linea} onMouseDown={quieto}
+                    onClick={() => onInsertar(texto, repetir)}>
+                    Insertar en el cursor
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function TarjetaPersona({ p, matiz, abierta, alternar, quitar, onInsertar, irAGenero }: {
+    p: Persona; matiz: number; abierta: boolean; alternar: () => void; quitar?: () => void; onInsertar: Insertar; irAGenero: () => void;
+}) {
+    return (
+        <div className="cb-tarjeta">
+            <div className="cb-tarjeta-cab">
+                <i className="cb-punto" style={{ '--h': matiz } as CSSProperties} />
+                <b>{p.etiqueta}</b>
+                <span className="suave">
+                    {p.varias ? 'una o varias personas' : p.id === CLIENTE.id ? 'quien contrata tus servicios' : 'tus datos (Configuración)'}
+                </span>
+                <span className="espacio" />
+                {quitar && (
+                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar parte" onMouseDown={quieto}
+                        onClick={quitar}><Icono n="papelera" tam={15} /></button>
+                )}
+            </div>
+            <div className="pc-acciones">
+                <button type="button" className="btn btn-sec btn-sm" onMouseDown={quieto}
+                    title={p.varias ? 'Todos los nombres en una línea: «Juan y María»' : 'Nombre completo'}
+                    onClick={() => onInsertar(p.varias ? `{{${p.plural} | lista}}` : `{{${p.singular}.nombre}}`, false)}>
+                    {p.varias ? 'Nombres' : 'Nombre'}
+                </button>
+                <button type="button" className="btn btn-sec btn-sm" onMouseDown={quieto} onClick={alternar}>
+                    {abierta ? 'Cerrar ficha' : 'Armar ficha…'}
+                </button>
+                <button type="button" className="btn btn-sec btn-sm" onClick={irAGenero}>Género…</button>
+            </div>
+            {abierta && <Ficha p={p} onInsertar={onInsertar} />}
+        </div>
+    );
+}
+
+function TabPartes({ partes, personas, onPartes, onInsertar, irAGenero }: {
+    partes: string[]; personas: Persona[]; onPartes: (p: string[]) => void; onInsertar: Insertar; irAGenero: (id: string) => void;
+}) {
+    const [nuevo, setNuevo] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [abierta, setAbierta] = useState<string | null>(null);
+
+    function agregar(ev: FormEvent<HTMLFormElement>) {
+        ev.preventDefault();
+        const r = rolDesdeTexto(nuevo);
+        if (!r) {
+            setError('Escribe el rol: vendedor, demandante, testigo…');
+            return;
+        }
+        if (!partes.includes(r)) onPartes([...partes, r]);
+        setNuevo('');
+        setError(null);
+        setAbierta(r);
+    }
+
+    return (
+        <>
+            <p className="pc-ayuda">
+                Las personas que intervienen. Crea cada rol con el nombre que uses (vendedor, comodante, testigo…):
+                los datos salen de la pestaña Partes del expediente.
+            </p>
+            <form className="cb-form" onSubmit={agregar}>
+                <div className="cb-fila-form">
+                    <input list="roles-constructor" aria-label="Rol de la parte" placeholder="Rol: vendedor, demandante…"
+                        value={nuevo} onChange={(e) => { setNuevo(e.target.value); setError(null); }} />
+                    <button type="submit" className="btn btn-pri btn-sm">Agregar</button>
+                </div>
+                <datalist id="roles-constructor">{ROLES_CONOCIDOS.map((r) => <option key={r} value={r} />)}</datalist>
+                {error && <p className="pc-error">{error}</p>}
+            </form>
+
+            {personas.map((p) => (
+                <TarjetaPersona key={p.id} p={p} matiz={matizDePersona(p.id, partes)} abierta={abierta === p.id}
+                    alternar={() => setAbierta(abierta === p.id ? null : p.id)}
+                    quitar={p.fija ? undefined : () => onPartes(partes.filter((x) => x !== p.id))}
+                    onInsertar={onInsertar} irAGenero={() => irAGenero(p.id)} />
+            ))}
+        </>
+    );
+}
+
+/* ================= Pestaña GÉNERO ================= */
+function TabGenero({ personas, fuenteId, cambiarFuente, onInsertar }: {
+    personas: Persona[]; fuenteId: string; cambiarFuente: (id: string) => void; onInsertar: Insertar;
+}) {
+    const p = personas.find((x) => x.id === fuenteId) ?? personas[0];
+    const [palabra, setPalabra] = useState('el');
+    const [manual, setManual] = useState<Partial<FormasConcordancia>>({});
+    const auto = useMemo(() => formasConcordancia(palabra), [palabra]);
+    const rapidas = useMemo(() => {
+        const rol = p.fija || p.singular.includes('_')
+            ? []
+            : [`el ${p.singular}`, `EL ${p.singular.toUpperCase()}`, p.singular.toUpperCase()];
+        return [...PALABRAS_RAPIDAS, ...rol];
+    }, [p]);
+    const f: FormasConcordancia = { ...auto, ...manual };
+
+    const limpio = (s: string) => s.replace(/"/g, '').trim();
+    const sm = limpio(f.sm);
+    const sf = limpio(f.sf);
+    const pm = limpio(f.pm) || limpio(auto.pm);
+    const pf = limpio(f.pf) || limpio(auto.pf);
+    const listo = sm !== '' && sf !== '';
+    const marcador = `{{${p.plural} | concordar:"${sm}":"${sf}":"${pm}":"${pf}"}}`;
+
+    const cambiar = (v: string) => {
+        setPalabra(v);
+        setManual({});
+    };
+    const forma = (k: keyof FormasConcordancia, etiqueta: string) => (
+        <Campo etiqueta={etiqueta}>
+            <input value={f[k]} onChange={(e) => setManual((m) => ({ ...m, [k]: e.target.value }) as Partial<FormasConcordancia>)} />
+        </Campo>
+    );
+
+    return (
+        <>
+            <p className="pc-ayuda">
+                El documento elige solo la forma correcta según el género registrado de la persona (o personas):
+                el/la, los/las, señor/señora, domiciliado/domiciliada…
+            </p>
+
+            <div className="cb-form">
+                <Campo etiqueta="¿De quién se habla?">
+                    <select value={p.id} onChange={(e) => cambiarFuente(e.target.value)}>
+                        {personas.map((x) => <option key={x.id} value={x.id}>{x.etiqueta}</option>)}
+                    </select>
+                </Campo>
+
+                <Campo etiqueta="Palabra en masculino" ayuda="Escribe la que necesites o toca una de abajo.">
+                    <input value={palabra} placeholder="el, señor, domiciliado, mayor de edad…" onChange={(e) => cambiar(e.target.value)} />
+                </Campo>
+                <div className="chips">
+                    {rapidas.map((w) => (
+                        <button key={w} type="button" className={`chip${palabra.trim() === w ? ' sel' : ''}`}
+                            onMouseDown={quieto} onClick={() => cambiar(w)}>{w}</button>
+                    ))}
+                </div>
+
+                <div className="cb-formas">
+                    {forma('sm', 'Masculino')}
+                    {forma('sf', 'Femenino')}
+                    {p.varias && forma('pm', 'Masculino (varios)')}
+                    {p.varias && forma('pf', 'Femenino (varias)')}
+                </div>
+
+                <span className="cb-sub">Resultado en el documento</span>
+                <div className="cb-ejemplo">
+                    <div><span>{p.varias ? 'Un hombre' : 'Si es hombre'}</span>{sm || '—'}</div>
+                    <div><span>{p.varias ? 'Una mujer' : 'Si es mujer'}</span>{sf || '—'}</div>
+                    {p.varias && <div><span>Varios (o mixto)</span>{pm || '—'}</div>}
+                    {p.varias && <div><span>Varias mujeres</span>{pf || '—'}</div>}
+                </div>
+
+                <div>
+                    <button type="button" className="btn btn-pri btn-sm" disabled={!listo} onMouseDown={quieto}
+                        onClick={() => onInsertar(marcador, false)}>
+                        Insertar en el cursor
+                    </button>
+                </div>
+            </div>
+            <p className="pc-nota">
+                Con hombres y mujeres juntos se usa el masculino plural. Si alguien no tiene género registrado,
+                la generación se detiene y te avisa.
+            </p>
+        </>
+    );
+}
+
+/* ================= Panel ================= */
+export function PanelCampos({ campos, partes, onCampos, onPartes, onInsertar, onDetectar }: {
+    campos: CampoPropio[];
+    partes: string[];
+    onCampos: (c: CampoPropio[]) => void;
+    onPartes: (p: string[]) => void;
+    onInsertar: Insertar;
+    onDetectar: () => void;
+}) {
+    const [pestana, setPestana] = useState<Pestana>('datos');
+    const [generoDe, setGeneroDe] = useState<string>(partes[0] ?? CLIENTE.id);
+    const personas = useMemo<Persona[]>(() => [...partes.map(dePersona), CLIENTE, ABOGADO], [partes]);
+
+    const irAGenero = (id: string) => {
+        setGeneroDe(id);
+        setPestana('genero');
+    };
+
+    const items: { id: Pestana; etiqueta: string }[] = [
+        { id: 'datos', etiqueta: `Datos${campos.length ? ` (${campos.length})` : ''}` },
+        { id: 'partes', etiqueta: `Partes${partes.length ? ` (${partes.length})` : ''}` },
+        { id: 'genero', etiqueta: 'Género' },
+    ];
 
     return (
         <div className="pc">
             <div className="pc-cab">
-                <h3>Insertar en el documento</h3>
-                <input ref={buscador} type="search" aria-label="Buscar dato" value={q}
-                    placeholder="Buscar: cédula, domicilio, precio… (Enter inserta)"
-                    onChange={(e) => setQ(e.target.value)} onKeyDown={teclasBuscador} />
-                {!buscando && (
-                    <div className="pc-tabs" role="tablist" aria-label="Tipo de dato">
-                        {SECCIONES_PANEL.map((s) => (
-                            <button key={s.id} type="button" role="tab" aria-selected={s.id === seccion}
-                                className={`pc-tab${s.id === seccion ? ' activa' : ''}`}
-                                onMouseDown={(e) => e.preventDefault()} onClick={() => setSeccion(s.id)}>
-                                {s.etiqueta}
-                            </button>
-                        ))}
-                    </div>
-                )}
-                {ambito.length > 0 && <div className="pc-ctx">Cursor dentro de: {ambito.map(describirBloque).join(' › ')}</div>}
+                <h3>Campos del documento</h3>
+                <div className="pc-tabs tres" role="tablist" aria-label="Constructor de campos">
+                    {items.map((i) => (
+                        <button key={i.id} type="button" role="tab" aria-selected={i.id === pestana}
+                            className={`pc-tab${i.id === pestana ? ' activa' : ''}`}
+                            onMouseDown={quieto} onClick={() => setPestana(i.id)}>
+                            {i.etiqueta}
+                        </button>
+                    ))}
+                </div>
             </div>
 
-            <div className="pc-cuerpo" ref={cuerpo} onKeyDown={teclasLista}>
-                {(seccion === 'personas' || buscando) && (
-                    <div className="pc-rol">
-                        <span className="campo-etiq">¿De quién hablas?</span>
-                        <div className="chips">
-                            {rolesSug.slice(0, 12).map((r) => (
-                                <button key={r} type="button" className={`chip${fuente === 'rol' && rolActual === r ? ' sel' : ''}`}
-                                    onClick={() => { setRolElegido(r); setFuente('rol'); }}>
-                                    {etiquetaRol(r)}
-                                </button>
-                            ))}
-                            <button type="button" className={`chip${fuente === 'cliente' ? ' sel' : ''}`} onClick={() => setFuente('cliente')}>Cliente</button>
-                            <button type="button" className={`chip${fuente === 'abogado' ? ' sel' : ''}`} onClick={() => setFuente('abogado')}>Abogado (yo)</button>
-                        </div>
-                        {fuente === 'rol' && (
-                            <>
-                                <input list="roles-panel" aria-label="Rol de las partes" value={rol}
-                                    placeholder="Otro rol: fiador, testigo…" onChange={(e) => setRolElegido(e.target.value)} />
-                                <datalist id="roles-panel">{ROLES_CONOCIDOS.map((r) => <option key={r} value={r} />)}</datalist>
-                            </>
-                        )}
-                    </div>
+            <div className="pc-cuerpo">
+                {pestana === 'datos' && <TabDatos campos={campos} onCampos={onCampos} onInsertar={onInsertar} onDetectar={onDetectar} />}
+                {pestana === 'partes' && (
+                    <TabPartes partes={partes} personas={personas} onPartes={onPartes} onInsertar={onInsertar} irAGenero={irAGenero} />
                 )}
-
-                {visibles.length === 0 && (
-                    <p className="pc-ayuda">
-                        {buscando
-                            ? `No encontré «${q.trim()}». Prueba otra palabra (cédula, domicilio, fecha, precio…) o cambia «¿De quién hablas?».`
-                            : 'Nada para mostrar aquí.'}
-                    </p>
+                {pestana === 'genero' && (
+                    <TabGenero personas={personas} fuenteId={generoDe} cambiarFuente={setGeneroDe} onInsertar={onInsertar} />
                 )}
-                {visibles.map((g) => (
-                    <Grupo key={g.id} g={g} abierto={abiertos[g.id] ?? !!g.abierto} forzar={buscando}
-                        alternar={alternar} onUsar={usar} verCodigo={verCodigo}
-                        pie={g.id === 'propios' && !buscando
-                            ? <CrearCampo total={campos.length} declaradas={declaradas} onCrear={onCrearCampo} onAdministrar={onAdministrar} />
-                            : undefined} />
-                ))}
             </div>
 
             <div className="pc-pie">
-                <details className="pc-opc">
-                    <summary>Opciones</summary>
-                    <label className="casilla"
-                        title="Normalmente, si falta un dato la generación se detiene y te lo avisa (es lo más seguro). Con esta opción, lo insertado queda en blanco; la hoja de verificación te lo marca antes de generar.">
-                        <input type="checkbox" checked={enBlanco} onChange={(e) => setEnBlanco(e.target.checked)} />
-                        Si falta un dato, dejarlo en blanco
-                    </label>
-                    <label className="casilla">
-                        <input type="checkbox" checked={verCodigo} onChange={(e) => setVerCodigo(e.target.checked)} />
-                        Mostrar el código de cada campo
-                    </label>
-                </details>
                 <p className="pc-ayuda">Clic: inserta en el cursor · Doble clic sobre un campo del texto: editarlo.</p>
             </div>
         </div>

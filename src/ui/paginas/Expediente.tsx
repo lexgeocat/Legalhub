@@ -1,6 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { useState, type FormEvent } from 'react';
-import { esTextoLargo } from '../../application/camposModelo';
+import { tipoSugerido } from '../../application/camposModelo';
 import type { DocumentoResumen, ExpedienteResumen, InmuebleResumen, ParteResumen, PersonaResumen } from '../../application/consultas';
 import { claveCampo, etiquetaRol } from '../../domain/texto';
 import { ROLES_CONOCIDOS, TIPOS_EXPEDIENTE, obtenerTipo } from '../../domain/tiposExpediente';
@@ -117,14 +117,37 @@ function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactN
     return <div className="dato"><dt>{etiqueta}</dt><dd>{children || '—'}</dd></div>;
 }
 
+interface CampoDato { clave: string; etiqueta: string; tipo: string }
+
+function EntradaCaso({ c, valor }: { c: CampoDato; valor: string }) {
+    const nombre = `caso.${c.clave}`;
+    // Una fecha guardada a mano que no sea AAAA-MM-DD se muestra como texto para no perderla al guardar.
+    if (c.tipo === 'fecha' && (valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor))) {
+        return <input type="date" name={nombre} defaultValue={valor} />;
+    }
+    if (c.tipo === 'moneda' || c.tipo === 'superficie' || c.tipo === 'numero') {
+        return <input name={nombre} defaultValue={valor} inputMode="decimal" placeholder="1234,56" />;
+    }
+    if (c.tipo === 'texto_largo') return <textarea name={nombre} defaultValue={valor} />;
+    return <input name={nombre} defaultValue={valor} />;
+}
+
 function TabResumen({ e, recargar, setError }: { e: ExpedienteResumen; recargar: () => void; setError: (m: string | null) => void }) {
     const s = useServicios();
+    const deModelos = useCargar(() => s.consultas.camposDeModelos(), []);
     const t = obtenerTipo(e.tipo);
-    const conocidos = new Set(t.campos.map((c) => c.clave));
-    const campos = [
-        ...t.campos,
-        ...Object.keys(e.datos).filter((k) => !conocidos.has(k)).map((k) => ({ clave: k, etiqueta: etiquetaRol(k) })),
-    ];
+
+    const mod = new Map((deModelos.datos ?? []).map((c) => [c.clave, c] as const));
+    const campos: CampoDato[] = [];
+    const vistos = new Set<string>();
+    const poner = (c: CampoDato) => {
+        if (vistos.has(c.clave)) return;
+        vistos.add(c.clave);
+        campos.push(c);
+    };
+    for (const c of t.campos) poner({ clave: c.clave, etiqueta: c.etiqueta, tipo: mod.get(c.clave)?.tipo ?? tipoSugerido(c.clave) });
+    for (const c of mod.values()) poner(c);
+    for (const k of Object.keys(e.datos)) poner({ clave: k, etiqueta: etiquetaRol(k), tipo: tipoSugerido(k) });
 
     async function guardar(ev: FormEvent<HTMLFormElement>) {
         ev.preventDefault();
@@ -163,15 +186,16 @@ function TabResumen({ e, recargar, setError }: { e: ExpedienteResumen; recargar:
                 <div className="tarjeta-cab">
                     <div>
                         <h3>Datos del caso</h3>
-                        <p className="suave">Se usan en los modelos como {'{{caso.clave}}'}. Lo que dejes aquí no se vuelve a pedir al generar documentos.</p>
+                        <p className="suave">
+                            Aquí se completan los datos que creaste en tus modelos (se usan como {'{{caso.clave}}'}).
+                            Lo que dejes aquí no se vuelve a pedir al generar documentos.
+                        </p>
                     </div>
                 </div>
                 <div className="form-grid">
                     {campos.map((c) => (
-                        <Campo key={c.clave} etiqueta={c.etiqueta} ancho={esTextoLargo(c.clave)} ayuda={`caso.${c.clave}`}>
-                            {esTextoLargo(c.clave)
-                                ? <textarea name={`caso.${c.clave}`} defaultValue={e.datos[c.clave] ?? ''} />
-                                : <input name={`caso.${c.clave}`} defaultValue={e.datos[c.clave] ?? ''} />}
+                        <Campo key={c.clave} etiqueta={c.etiqueta} ancho={c.tipo === 'texto_largo'} ayuda={`caso.${c.clave}`}>
+                            <EntradaCaso c={c} valor={e.datos[c.clave] ?? ''} />
                         </Campo>
                     ))}
                     <Campo etiqueta="Agregar otro dato (nombre)"><input name="nuevo_nombre" placeholder="Ej.: Fecha de entrega" /></Campo>

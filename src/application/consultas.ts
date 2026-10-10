@@ -1,4 +1,5 @@
 import { nombrePersona } from '../domain/personas';
+import { claveCampo, claveNormalizada, etiquetaRol } from '../domain/texto';
 import type { DatosPersona } from './casosDeUso/crearPersona';
 import type { DbPuerto, Fila } from './puertos/db';
 
@@ -29,6 +30,7 @@ export interface ModeloResumen {
     versionId: string; version: number; editable: boolean; schemaJson: string; numCampos: number; actualizadoEn: string;
 }
 export interface VersionModeloResumen { id: string; version: number; editable: boolean; notas: string; creadoEn: string }
+export interface CampoModeloResumen { clave: string; etiqueta: string; tipo: string }
 
 const SQL_EXPEDIENTE = `
   SELECT e.id, e.codigo, e.tipo, e.materia, e.referencia, e.estado, e.juzgado, e.nro_causa, e.cliente_id,
@@ -202,5 +204,29 @@ export class Consultas {
             id: t(f.id), version: Number(f.version), editable: Number(f.editable) === 1,
             notas: t(f.notas), creadoEn: t(f.created_at),
         }));
+    }
+
+    /** Datos «caso.*» que usan los modelos activos, con la etiqueta y el tipo que les dio el abogado. */
+    async camposDeModelos(): Promise<CampoModeloResumen[]> {
+        const salida = new Map<string, CampoModeloResumen>();
+        for (const m of await this.listarModelos()) {
+            let esquema: unknown;
+            try {
+                esquema = JSON.parse(m.schemaJson);
+            } catch {
+                continue;
+            }
+            if (!Array.isArray(esquema)) continue;
+            for (const c of esquema as unknown[]) {
+                if (typeof c !== 'object' || c === null) continue;
+                const f = c as Record<string, unknown>;
+                const segs = t(f.path).split('.');
+                if (segs.length !== 2 || claveNormalizada(segs[0]) !== 'caso') continue;
+                const clave = claveCampo(segs[1]);
+                if (!clave || salida.has(clave)) continue;
+                salida.set(clave, { clave, etiqueta: t(f.etiqueta) || etiquetaRol(clave), tipo: t(f.tipo) || 'texto' });
+            }
+        }
+        return [...salida.values()];
     }
 }

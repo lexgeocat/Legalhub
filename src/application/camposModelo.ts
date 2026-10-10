@@ -1,7 +1,5 @@
-import type { SugerenciaCampo } from '../domain/catalogo';
 import type { CampoPropio, FuenteModelo, TipoCampo } from '../domain/fuenteModelo';
 import { claveCampo, claveNormalizada } from '../domain/texto';
-import { TIPOS_EXPEDIENTE } from '../domain/tiposExpediente';
 import type { CampoEsquema } from './puertos/motorPlantillas';
 const USO_CASO = /\{\{\s*caso\.([\p{L}_][\p{L}\p{N}_]*)\s*(\?)?/giu;
 
@@ -20,25 +18,6 @@ export function tipoSugerido(clave: string): TipoCampo {
     if (/(^|_)fecha(_|$)/.test(k)) return 'fecha';
     if (/superficie/.test(k)) return 'superficie';
     return esTextoLargo(k) ? 'texto_largo' : 'texto';
-}
-
-/** Campos habituales que el modelo aún no declara: primero los de su tipo de expediente, luego los demás. */
-export function camposSugeridos(materia: string | undefined, declarados: readonly CampoPropio[]): SugerenciaCampo[] {
-    const ya = new Set(declarados.map((c) => claveCampo(c.clave)));
-    const tipo = TIPOS_EXPEDIENTE.find((t) => t.clave === materia);
-    const delTipo = new Set((tipo?.campos ?? []).map((c) => claveCampo(c.clave)));
-    const vistos = new Set<string>();
-    const salida: SugerenciaCampo[] = [];
-    for (const s of [...(tipo?.campos ?? []), ...TIPOS_EXPEDIENTE.flatMap((t) => t.campos)]) {
-        const clave = claveCampo(s.clave);
-        if (!clave || ya.has(clave) || vistos.has(clave)) continue;
-        vistos.add(clave);
-        salida.push({
-            campo: { clave, etiqueta: s.etiqueta, tipo: tipoSugerido(clave), requerido: true },
-            delTipo: delTipo.has(clave),
-        });
-    }
-    return salida;
 }
 
 export function esCampoCaso(path: string): boolean {

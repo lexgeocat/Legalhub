@@ -68,6 +68,12 @@ const sinValor = (v: unknown) => v === undefined || v === null || v === '';
 const ultimo = (ruta: string) => ruta.split('.').pop() ?? ruta;
 const rutaNormal = (ruta: string) => ruta.split('.').map(claveNormalizada).join('.');
 const pad = (n: number) => String(n).padStart(2, '0');
+const sinGenero = (v: unknown): boolean =>
+    (Array.isArray(v) ? v : [v]).some((p) => {
+        const g = (p as { genero?: unknown } | null)?.genero;
+        return g !== 'M' && g !== 'F';
+    });
+const esLargo = (c: CampoEsquema) => c.tipo === 'texto_largo' || esTextoLargo(ultimo(c.path));
 
 function leerEsquema(json: string): CampoEsquema[] {
     try {
@@ -106,7 +112,7 @@ function Entrada({ c, valor }: { c: CampoEsquema; valor: string }) {
     if (NUMERICOS.has(c.tipo)) {
         return <input name={c.path} defaultValue={valor} required={c.requerido} inputMode="decimal" placeholder="1234,56" />;
     }
-    if (esTextoLargo(ultimo(c.path))) return <textarea name={c.path} defaultValue={valor} required={c.requerido} />;
+    if (esLargo(c)) return <textarea name={c.path} defaultValue={valor} required={c.requerido} />;
     return <input name={c.path} defaultValue={valor} required={c.requerido} />;
 }
 
@@ -271,15 +277,17 @@ export function AsistenteDocumento({ expediente, cerrar }: { expediente: Expedie
             const avisos: string[] = [];
             for (const c of camposParaFormulario(esquema)) {
                 const actual = leerRuta(base, c.path);
-                if (Array.isArray(actual)) {
-                    if (actual.length === 0) {
-                        avisos.push(`«${c.path}» no tiene partes en este expediente: agrégalas en la pestaña Partes o la generación se detendrá.`);
-                    }
+                if (Array.isArray(actual) && actual.length === 0) {
+                    avisos.push(`«${c.path}» no tiene partes en este expediente: agrégalas en la pestaña Partes o la generación se detendrá.`);
                     continue;
                 }
-                if (!sinValor(actual)) continue;
-                if (c.tipo === 'lista' || c.tipo === 'ci') {
-                    avisos.push(`«${c.path}» no se puede completar a mano aquí: revisa los datos del expediente.`);
+                if (c.tipo === 'concordancia' && actual !== undefined && actual !== null && sinGenero(actual)) {
+                    avisos.push(`«${c.path}»: falta el género de alguna persona. Edítala en Personas o la generación se detendrá.`);
+                    continue;
+                }
+                if (Array.isArray(actual) || !sinValor(actual)) continue;
+                if (c.tipo === 'lista' || c.tipo === 'ci' || c.tipo === 'concordancia') {
+                    avisos.push(`«${c.path}» sale de las personas del expediente y no está registrado: agrega la parte con ese rol (pestaña Partes) o revisa los datos.`);
                     continue;
                 }
                 faltantes.push(c);
@@ -571,7 +579,7 @@ export function AsistenteDocumento({ expediente, cerrar }: { expediente: Expedie
                                 <Campo
                                     key={c.path}
                                     etiqueta={`${c.etiqueta}${c.requerido ? ' *' : ' (opcional)'}`}
-                                    ancho={esTextoLargo(ultimo(c.path))}
+                                    ancho={esLargo(c)}
                                     ayuda={c.path}
                                 >
                                     <Entrada c={c} valor={paso.b.valores[c.path] ?? ''} />
@@ -579,7 +587,7 @@ export function AsistenteDocumento({ expediente, cerrar }: { expediente: Expedie
                             ))}
                         </form>
                         {paso.b.faltantes.some((c) => NUMERICOS.has(c.tipo)) && (
-                            <p className="suave">Los números admiten punto o coma decimal (10000,50). No uses separador de miles.</p>
+                            <p className="suave">Escribe los números como quieras: 15000,50 · 15.000,50 · 15000.50.</p>
                         )}
                         {paso.b.faltantes.some((c) => esCampoCaso(c.path) && c.path.split('.').length === 2) && (
                             <label className="casilla">

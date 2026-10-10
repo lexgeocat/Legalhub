@@ -13,7 +13,7 @@ const MARCADOR = /\{\{([\s\S]*?)\}\}/g;
 
 const TIPO_POR_FILTRO: Record<string, string> = {
   moneda: 'moneda', fecha: 'fecha', superficie: 'superficie', literal: 'numero',
-  ci: 'ci', lista: 'lista', concordar: 'texto', mayus: 'texto', minus: 'texto', titulo: 'texto',
+  ci: 'ci', lista: 'lista', concordar: 'concordancia', mayus: 'texto', minus: 'texto', titulo: 'texto',
 };
 
 function invalido(error: string): ResultadoEscaneo {

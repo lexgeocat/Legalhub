@@ -25,7 +25,7 @@ export class CrearInmueble {
         }
         for (const t of d.titulares ?? []) {
             if (!t.porcentaje) continue;
-            const p = aDecimal(t.porcentaje, 'porcentaje');
+            const p = aDecimal(t.porcentaje, 'porcentaje', { miles: false });
             if (p.isNegative() || p.greaterThan(100)) throw new ErrorDeDatos('El porcentaje debe estar entre 0 y 100');
         }
         const id = nuevoId();
