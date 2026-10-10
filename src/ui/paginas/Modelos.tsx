@@ -4,11 +4,15 @@ import { CATEGORIAS_MODELO } from '../../domain/fuenteModelo';
 import { PLANTILLAS_INICIALES } from '../../domain/plantillasIniciales';
 import { claveNormalizada } from '../../domain/texto';
 import {
-    Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, Vacio, avisar, confirmar, etiquetaTipo,
+    Alerta, Aviso, Campo, Icono, Insignia, Modal, Pestanas, SelectCategoria, SelectMateria, Vacio,
+    avisar, confirmar, etiquetaTipo, fechaCorta,
 } from '../comunes';
 import { EditorModelo } from '../EditorModelo';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 import { VisorModelo } from '../VisorModelo';
+import { open } from '@tauri-apps/plugin-dialog';
+import type { ResultadoImportacion } from '../../application/casosDeUso/importarModelo';
+import type { PlantillaGuardada } from '../../application/casosDeUso/plantillas';
 
 type Vista =
     | { n: 'lista' }
@@ -101,7 +105,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
                     <p className="subtitulo">Plantillas de documentos con campos que se completan desde el expediente.</p>
                 </div>
                 <div className="acciones">
-                    <button type="button" className="btn btn-sec" onClick={() => setPlantillas(true)}>Plantillas iniciales</button>
+                    <button type="button" className="btn btn-sec" onClick={() => setPlantillas(true)}>Plantillas</button>
                     <button type="button" className="btn btn-sec" onClick={() => setImportando(true)}>Importar Word</button>
                     <button type="button" className="btn btn-pri" onClick={nuevo}><Icono n="mas" tam={16} /> Nuevo modelo</button>
                 </div>
@@ -129,7 +133,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
                     {lista.datos.length === 0 && (
                         <>
                             <button type="button" className="btn btn-pri" onClick={nuevo}>Nuevo modelo</button>
-                            <button type="button" className="btn btn-sec" onClick={() => setPlantillas(true)}>Ver plantillas iniciales</button>
+                            <button type="button" className="btn btn-sec" onClick={() => setPlantillas(true)}>Ver plantillas</button>
                         </>
                     )}
                 </Vacio>
@@ -166,7 +170,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
             </div>
 
             {importando && <ImportarWord cerrar={() => setImportando(false)} hecho={(id) => { setImportando(false); ver(id); }} />}
-            {plantillas && <PlantillasIniciales cerrar={() => setPlantillas(false)} hecho={(id) => { setPlantillas(false); ver(id); }} />}
+            {plantillas && <Plantillas cerrar={() => setPlantillas(false)} hecho={(id) => { setPlantillas(false); ver(id); }} />}
         </div>
     );
 }
@@ -227,15 +231,19 @@ function ImportarWord({ cerrar, hecho }: { cerrar: () => void; hecho: (modeloId:
     );
 }
 
-function PlantillasIniciales({ cerrar, hecho }: { cerrar: () => void; hecho: (modeloId: string) => void }) {
+type PestanaPlantillas = 'incluidas' | 'mias';
+
+function Plantillas({ cerrar, hecho }: { cerrar: () => void; hecho: (modeloId: string) => void }) {
     const s = useServicios();
-    const [ocupado, setOcupado] = useState<number | null>(null);
+    const [pestana, setPestana] = useState<PestanaPlantillas>('incluidas');
+    const mias = useCargar(() => s.plantillas.listar(), []);
+    const [ocupado, setOcupado] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    async function instalar(i: number) {
-        setOcupado(i);
+    async function instalar(clave: string, correr: () => Promise<ResultadoImportacion>) {
+        setOcupado(clave);
         try {
-            const r = await s.instalarPlantilla.ejecutar(i);
+            const r = await correr();
             avisar('Plantilla instalada. Revísala y ajústala antes de usarla.');
             hecho(r.modeloId);
         } catch (e) {
@@ -245,24 +253,114 @@ function PlantillasIniciales({ cerrar, hecho }: { cerrar: () => void; hecho: (mo
         }
     }
 
+    async function importarArchivo() {
+        try {
+            const ruta = await open({ multiple: false, filters: [{ name: 'Modelo de Legal-Hub', extensions: ['lhmodel'] }] });
+            if (!ruta) return;
+            setOcupado('archivo');
+            await s.plantillas.agregarDeArchivo(ruta);
+            setError(null);
+            mias.recargar();
+            setPestana('mias');
+            avisar('Plantilla agregada a «Mis plantillas»');
+        } catch (e) {
+            setError(mensajeError(e));
+        } finally {
+            setOcupado(null);
+        }
+    }
+
+    async function quitar(p: PlantillaGuardada) {
+        if (!(await confirmar(`¿Quitar la plantilla «${p.nombre}» de tu lista? Los modelos ya instalados no cambian.`, 'Quitar plantilla'))) return;
+        try {
+            await s.plantillas.eliminar(p.id);
+            setError(null);
+            mias.recargar();
+            avisar('Plantilla quitada');
+        } catch (e) {
+            setError(mensajeError(e));
+        }
+    }
+
     return (
-        <Modal titulo="Plantillas iniciales" cerrar={cerrar} pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cerrar</button></>}>
-            <Alerta tipo="adv">Son borradores de ejemplo para empezar. Revisa su contenido jurídico antes de usarlos en un caso real.</Alerta>
-            <Aviso error={error} />
-            <div className="lista-opciones">
-                {PLANTILLAS_INICIALES.map((p, i) => (
-                    <div key={p.nombre} className="opcion">
-                        <div style={{ flex: 1 }}>
-                            <div className="fila-chica"><Insignia tono="azul">{p.categoria}</Insignia></div>
-                            <b>{p.nombre}</b>
-                            <span className="suave">{p.descripcion}</span>
-                        </div>
-                        <button type="button" className="btn btn-pri btn-sm" disabled={ocupado !== null} onClick={() => void instalar(i)}>
-                            {ocupado === i ? 'Instalando…' : 'Instalar'}
-                        </button>
+        <Modal
+            titulo="Plantillas"
+            cerrar={cerrar}
+            pie={
+                <>
+                    <button type="button" className="btn btn-sec" disabled={ocupado !== null} onClick={() => void importarArchivo()}>
+                        {ocupado === 'archivo' ? 'Importando…' : 'Importar archivo .lhmodel…'}
+                    </button>
+                    <span className="espacio" />
+                    <button type="button" className="btn btn-pri" onClick={cerrar}>Cerrar</button>
+                </>
+            }
+        >
+            <Pestanas<PestanaPlantillas>
+                activa={pestana}
+                cambiar={setPestana}
+                items={[
+                    { id: 'incluidas', etiqueta: 'Incluidas', contador: PLANTILLAS_INICIALES.length },
+                    { id: 'mias', etiqueta: 'Mis plantillas', contador: mias.datos?.length },
+                ]}
+            />
+            <Aviso error={error ?? mias.error} />
+
+            {pestana === 'incluidas' && (
+                <>
+                    <Alerta tipo="adv">Son borradores de ejemplo para empezar. Revisa su contenido jurídico antes de usarlos en un caso real.</Alerta>
+                    <div className="lista-opciones">
+                        {PLANTILLAS_INICIALES.map((p, i) => (
+                            <div key={p.nombre} className="opcion">
+                                <div style={{ flex: 1 }}>
+                                    <div className="fila-chica"><Insignia tono="azul">{p.categoria}</Insignia></div>
+                                    <b>{p.nombre}</b>
+                                    <span className="suave">{p.descripcion}</span>
+                                </div>
+                                <button type="button" className="btn btn-pri btn-sm" disabled={ocupado !== null}
+                                    onClick={() => void instalar(`i${i}`, () => s.instalarPlantilla.ejecutar(i))}>
+                                    {ocupado === `i${i}` ? 'Instalando…' : 'Instalar'}
+                                </button>
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
+                </>
+            )}
+
+            {pestana === 'mias' && (
+                mias.datos && mias.datos.length === 0 ? (
+                    <Vacio
+                        titulo="Aún no tienes plantillas propias"
+                        texto="Abre un modelo terminado y usa «Guardar como plantilla», o importa un archivo .lhmodel que te hayan pasado."
+                    />
+                ) : (
+                    <div className="lista-opciones">
+                        {(mias.datos ?? []).map((p) => (
+                            <div key={p.id} className="opcion">
+                                <div style={{ flex: 1 }}>
+                                    <div className="fila-chica">
+                                        {p.categoria && <Insignia tono="azul">{p.categoria}</Insignia>}
+                                        {p.materia && <Insignia tono="violeta">{etiquetaTipo(p.materia)}</Insignia>}
+                                        <Insignia tono={p.editable ? 'verde' : 'gris'}>{p.editable ? 'Editable' : 'Word'}</Insignia>
+                                    </div>
+                                    <b>{p.nombre}</b>
+                                    <span className="suave">
+                                        {p.descripcion || `${p.numCampos} campos`} · guardada {fechaCorta(p.creadaEn)}
+                                    </span>
+                                </div>
+                                <button type="button" className="btn btn-pri btn-sm" disabled={ocupado !== null}
+                                    onClick={() => void instalar(`p${p.id}`, () => s.plantillas.instalar(p.id))}>
+                                    {ocupado === `p${p.id}` ? 'Instalando…' : 'Instalar'}
+                                </button>
+                                <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar plantilla" title="Quitar de mis plantillas"
+                                    disabled={ocupado !== null} onClick={() => void quitar(p)}>
+                                    <Icono n="papelera" tam={15} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )
+            )}
         </Modal>
     );
 }

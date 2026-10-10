@@ -4,7 +4,7 @@ import type { ResultadoImportacion, ResultadoValidacion } from '../application/c
 import {
     AREA_MIN_CM, FUENTES_PAGINA, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES,
     fuenteVacia, margenesSeguros, presetDe,
-    type Alineacion, type CampoPropio, type CampoParte, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
+    type Alineacion, type CampoPropio, type DatoParte, type GrupoDatos, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
 } from '../domain/fuenteModelo';
 import { claveCampo, etiquetaRol } from '../domain/texto';
 import {
@@ -14,10 +14,11 @@ import {
 import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } from './HojaEditable';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
-import { etiquetaCampoCaso, mismoRol, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
+import { etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
 import { GRUPOS_FUENTES, buscarFuente, pilaCss, precargarFuentes } from '../domain/fuentes';
 import { ModalMarcador } from './EditorMarcador';
 import type { ContextoMarcadores } from '../domain/marcadores';
+import { nuevoId } from '../domain/id';
 
 interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 
@@ -164,7 +165,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     const [partes, setPartes] = useState<string[]>(
         () => [...new Set([...(inicial.fuente.partes ?? []), ...rolesEnTexto(inicial.fuente.texto)])],
     );
-    const [camposPartes, setCamposPartes] = useState<CampoParte[]>(inicial.fuente.camposPartes ?? []);
+    const [grupos, setGrupos] = useState<GrupoDatos[]>(inicial.fuente.grupos ?? []);
     const [ambito, setAmbito] = useState<string[]>([]);
     const [notas, setNotas] = useState('');
     const [formato, setFormato] = useState<FormatoActivo>(FORMATO_INICIAL);
@@ -182,10 +183,11 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
             campos.map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
         ),
         camposPartes: Object.fromEntries(
-            camposPartes.filter((c) => !c.ficha).map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
+            grupos.flatMap((g) => g.datos).filter((d) => !d.ficha)
+                .map((d) => [claveCampo(d.clave), d.etiqueta.trim() || etiquetaRol(claveCampo(d.clave))]),
         ),
         partes,
-    }), [campos, camposPartes, partes]);
+    }), [campos, grupos, partes]);
 
     const tocar = () => {
         setModificado(true);
@@ -214,7 +216,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         texto: hoja.current?.leerTexto() ?? inicial.fuente.texto,
         campos: normalizarCampos(campos),
         partes,
-        camposPartes,
+        grupos,
     });
 
     /* ----- constructor de campos (panel único) ----- */
@@ -226,29 +228,42 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
         setPartes(l);
         tocar();
     };
-    const cambiarCamposPartes = (l: CampoParte[]) => {
-        setCamposPartes(l);
+    const cambiarGrupos = (l: GrupoDatos[]) => {
+        setGrupos(l);
         tocar();
     };
     const insertar = (texto: string, bloque: boolean) => hoja.current?.insertar(texto, bloque);
 
+    /** Declara los «caso.*», datos de partes y roles que escribiste a mano en el texto. */
     function detectar() {
         const texto = hoja.current?.leerTexto() ?? '';
         const declaradas = new Set(campos.map((c) => claveCampo(c.clave)));
         const nuevos: CampoPropio[] = [...usosCaso(texto).entries()]
             .filter(([k]) => !declaradas.has(k))
             .map(([k, u]) => ({ clave: k, etiqueta: etiquetaCampoCaso(k), tipo: tipoDesdeUso(texto, k), requerido: !u.opcional }));
-        const propios: CampoParte[] = usosDatosParte(texto)
-            .filter((u) => !camposPartes.some((c) => !c.ficha && c.clave === u.clave && mismoRol(c.rol, u.rol)))
-            .map((u) => ({ rol: u.rol, clave: u.clave, etiqueta: etiquetaCampoCaso(u.clave), tipo: tipoSugerido(u.clave), requerido: !u.opcional }));
-        const roles = [...new Set([...rolesEnTexto(texto), ...propios.map((c) => c.rol)])]
+
+        const yaPropios = new Set(grupos.flatMap((g) => g.datos).filter((d) => !d.ficha).map((d) => d.clave));
+        const usos = usosDatosParte(texto);
+        const propios: DatoParte[] = [];
+        for (const u of usos) {
+            if (yaPropios.has(u.clave) || propios.some((d) => d.clave === u.clave)) continue;
+            propios.push({ clave: u.clave, etiqueta: etiquetaCampoCaso(u.clave), tipo: tipoSugerido(u.clave), requerido: !u.opcional });
+        }
+
+        const roles = [...new Set([...rolesEnTexto(texto), ...usos.map((u) => u.rol)])]
             .filter((r) => r !== 'cliente' && r !== 'abogado' && !partes.includes(r));
         if (nuevos.length === 0 && propios.length === 0 && roles.length === 0) {
             avisar('No hay nada nuevo en el texto', 'info');
             return;
         }
         if (nuevos.length > 0) setCampos((l) => [...l, ...nuevos]);
-        if (propios.length > 0) setCamposPartes((l) => [...l, ...propios]);
+        if (propios.length > 0) {
+            setGrupos((l) => {
+                const i = l.findIndex((g) => g.nombre === 'Datos detectados');
+                if (i < 0) return [...l, { id: nuevoId(), nombre: 'Datos detectados', datos: propios }];
+                return l.map((g, k) => (k === i ? { ...g, datos: [...g.datos, ...propios] } : g));
+            });
+        }
         if (roles.length > 0) setPartes((l) => [...l, ...roles]);
         tocar();
         avisar(`Se agregaron ${nuevos.length + propios.length} dato(s) y ${roles.length} parte(s)`);
@@ -276,7 +291,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
             setModeloId(r.modeloId);
             setUltima(r.version);
             setCampos(f.campos);
-            setCamposPartes(f.camposPartes ?? []);
+            setGrupos(f.grupos ?? []);
             setModificado(false);
             setNotas('');
             setError(null);
@@ -437,11 +452,11 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                         <PanelCampos
                             campos={campos}
                             partes={partes}
-                            camposPartes={camposPartes}
+                            grupos={grupos}
                             ambito={ambito}
                             onCampos={cambiarCampos}
                             onPartes={cambiarPartes}
-                            onCamposPartes={cambiarCamposPartes}
+                            onGrupos={cambiarGrupos}
                             onInsertar={insertar}
                             onDetectar={detectar}
                         />

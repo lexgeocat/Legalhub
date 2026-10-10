@@ -29,6 +29,7 @@ import { LectorDocxFflate } from './docx/leerModelo';
 import { MotorDocx } from './docx/motor/motor';
 import { FormatoPaqueteFflate } from './docx/paqueteModelo';
 import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
+import { Plantillas } from '../application/casosDeUso/plantillas';
 
 
 export interface Servicios {
@@ -55,6 +56,7 @@ export interface Servicios {
     duplicarModelo: DuplicarModelo;
     convertirModelo: ConvertirModeloAEditable;
     instalarPlantilla: InstalarPlantillaInicial;
+    plantillas: Plantillas;
     actualizarModelo: ActualizarModeloDesdeDocumento;
     generarDocumento: GenerarDocumento;
     adjuntarVersion: AdjuntarVersionEditada;
@@ -99,6 +101,7 @@ export async function crearServicios(): Promise<Servicios> {
         duplicarModelo: new DuplicarModelo({ db, modelos, importar: importarModelo }),
         convertirModelo: new ConvertirModeloAEditable({ db, modelos, lector, importar: importarModelo }),
         instalarPlantilla: new InstalarPlantillaInicial(importarModelo),
+        plantillas: new Plantillas({ db, archivos, modelos, formato, importar: importarModelo }),
         actualizarModelo: new ActualizarModeloDesdeDocumento({ modelos, generador, lector, motor, importar: importarModelo }),
         generarDocumento: new GenerarDocumento({ db, archivos, modelos, contexto, motor, incrustador, generador }),
         adjuntarVersion: new AdjuntarVersionEditada({ db, archivos, motor }),

@@ -96,8 +96,6 @@ function FormGenero({ e, contexto, aplicar }: {
     const opciones = useMemo(() => {
         const l = [
             ...(contexto.partes ?? []).map((p) => ({ valor: pluralRol(p), etiqueta: `${etiquetaRol(pluralRol(p))} (una o varias personas)` })),
-            { valor: 'cliente', etiqueta: 'Cliente' },
-            { valor: 'abogado', etiqueta: 'Abogado (yo)' },
         ];
         return l.some((o) => claveNormalizada(o.valor) === claveNormalizada(e.ruta))
             ? l : [...l, { valor: e.ruta, etiqueta: etiquetaRol(e.ruta) }];

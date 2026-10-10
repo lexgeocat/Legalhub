@@ -9,4 +9,7 @@ export interface ArchivosPuerto {
     sha256Bytes(datos: Uint8Array): Promise<string>;
     abrir(ruta: string): Promise<void>;
     mostrarEnCarpeta(ruta: string): Promise<void>;
+    rutaPlantilla(nombreArchivo: string): Promise<string>;
+    /** Escribe en una ruta elegida por la persona (diálogo «Guardar como»); sobrescribe. */
+    escribir(ruta: string, contenido: Uint8Array): Promise<void>;
 }

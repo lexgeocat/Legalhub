@@ -2,6 +2,8 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectCategoria, SelectMateria, TablaEsquema, avisar, confirmar, etiquetaTipo, fechaHora } from './comunes';
 import { Hoja } from './Hoja';
 import { mensajeError, useCargar, useServicios } from './servicios';
+import { save } from '@tauri-apps/plugin-dialog';
+import { nombreSeguro } from '../domain/nombreArchivo';
 
 type PestanaVisor = 'campos' | 'versiones' | 'datos';
 
@@ -74,6 +76,34 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
             const r = await s.duplicarModelo.ejecutar(activa);
             avisar('Modelo duplicado');
             abrir(r.modeloId);
+        });
+    }
+
+    async function aPlantilla() {
+        if (!activa) return;
+        await correr(async () => {
+            await s.plantillas.guardar(activa);
+            avisar('Guardado en «Plantillas → Mis plantillas»');
+        });
+    }
+
+    async function exportar() {
+        if (!activa || !m) return;
+        let destino: string | null = null;
+        try {
+            destino = await save({
+                defaultPath: `${nombreSeguro(m.nombre)}.lhmodel`,
+                filters: [{ name: 'Modelo de Legal-Hub', extensions: ['lhmodel'] }],
+            });
+        } catch (e) {
+            setError(mensajeError(e));
+            return;
+        }
+        if (!destino) return;
+        const ruta = destino;
+        await correr(async () => {
+            await s.plantillas.exportar(activa, ruta);
+            avisar('Modelo exportado');
         });
     }
 
@@ -155,6 +185,8 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
                         </>
                     )}
                     <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void duplicar()}>Duplicar</button>
+                    <button type="button" className="btn btn-sec" disabled={ocupado || !activa} onClick={() => void aPlantilla()}>Guardar como plantilla</button>
+                    <button type="button" className="btn btn-sec" disabled={ocupado || !activa} onClick={() => void exportar()}>Exportar…</button>
                     <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void alternar()}>{m.activo ? 'Archivar' : 'Restaurar'}</button>
                     <button type="button" className="btn btn-peligro" disabled={ocupado} onClick={() => void eliminar()}>Eliminar</button>
                 </div>

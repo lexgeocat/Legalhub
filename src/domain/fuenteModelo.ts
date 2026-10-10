@@ -11,9 +11,8 @@ export const TIPOS_CAMPO: { valor: TipoCampo; etiqueta: string }[] = [
 ];
 
 export interface CampoPropio { clave: string; etiqueta: string; tipo: TipoCampo; requerido: boolean }
-export interface CampoParte {
-    /** Rol en singular y normalizado: «vendedor». También «cliente» o «abogado». */
-    rol: string;
+/** Un dato que se pide de las partes (nombre, C.I., lugar de nacimiento…). Sirve para cualquier parte: se elige de quién al insertarlo. */
+export interface DatoParte {
     clave: string;
     etiqueta: string;
     tipo: TipoCampo;
@@ -22,6 +21,9 @@ export interface CampoParte {
     ficha?: boolean;
     mayus?: boolean;
 }
+
+/** Categoría de datos de las partes: «Generales de ley», «Datos del vehículo»… */
+export interface GrupoDatos { id: string; nombre: string; datos: DatoParte[] }
 
 export type TamanoPagina = 'carta' | 'oficio' | 'a4';
 
@@ -39,7 +41,7 @@ export interface ConfigPagina {
 
 export interface FuenteModelo {
     version: 1; config: ConfigPagina; texto: string; campos: CampoPropio[];
-    partes?: string[]; camposPartes?: CampoParte[];
+    partes?: string[]; grupos?: GrupoDatos[];
 }
 
 export const FUENTES_PAGINA: string[] = NOMBRES_FUENTES;
@@ -117,11 +119,50 @@ export const fuenteVacia = (): FuenteModelo => ({
     texto: '',
     campos: [],
     partes: [],
-    camposPartes: [],
+    grupos: [],
 });
+
+const textoLimpio = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+
+function leerDato(x: unknown): DatoParte | null {
+    if (typeof x !== 'object' || x === null) return null;
+    const d = x as Record<string, unknown>;
+    const clave = textoLimpio(d.clave);
+    const etiqueta = textoLimpio(d.etiqueta);
+    if (!clave || !etiqueta) return null;
+    const tipo = TIPOS_CAMPO.some((t) => t.valor === d.tipo) ? (d.tipo as TipoCampo) : 'texto';
+    return {
+        clave, etiqueta, tipo, requerido: d.requerido !== false,
+        ...(d.ficha === true ? { ficha: true } : {}),
+        ...(d.mayus === true ? { mayus: true } : {}),
+    };
+}
+
+function leerGrupos(grupos: unknown, antiguos: unknown): GrupoDatos[] {
+    if (Array.isArray(grupos)) {
+        return grupos.flatMap((g, i): GrupoDatos[] => {
+            if (typeof g !== 'object' || g === null) return [];
+            const o = g as Record<string, unknown>;
+            const datos = (Array.isArray(o.datos) ? o.datos : []).map(leerDato).filter((d): d is DatoParte => d !== null);
+            return [{ id: textoLimpio(o.id) || `g${i + 1}`, nombre: textoLimpio(o.nombre) || 'Datos', datos }];
+        });
+    }
+    // Modelos de la versión anterior (datos por rol): se juntan en un solo grupo, sin repetidos.
+    if (Array.isArray(antiguos)) {
+        const vistos = new Map<string, DatoParte>();
+        for (const x of antiguos) {
+            const d = leerDato(x);
+            if (!d) continue;
+            const k = `${d.ficha ? 'f' : 'd'}:${d.clave}`;
+            if (!vistos.has(k)) vistos.set(k, d);
+        }
+        if (vistos.size > 0) return [{ id: 'g1', nombre: 'Datos de las partes', datos: [...vistos.values()] }];
+    }
+    return [];
+}
 export function leerFuente(json: string): FuenteModelo {
     const o: unknown = JSON.parse(json);
-    const r = (typeof o === 'object' && o !== null ? o : {}) as Partial<FuenteModelo>;
+    const r = (typeof o === 'object' && o !== null ? o : {}) as Partial<FuenteModelo> & { camposPartes?: unknown };
     const config = { ...CONFIG_POR_DEFECTO, ...(r.config ?? {}) };
     config.margenes = margenesSeguros(r.config?.margenes, config.tamano);
     config.simetricos = r.config?.simetricos === true;
@@ -131,9 +172,7 @@ export function leerFuente(json: string): FuenteModelo {
         texto: typeof r.texto === 'string' ? r.texto : '',
         campos: Array.isArray(r.campos) ? r.campos.filter((c) => c && typeof c.clave === 'string') : [],
         partes: Array.isArray(r.partes) ? r.partes.filter((p): p is string => typeof p === 'string' && p.trim() !== '') : [],
-        camposPartes: Array.isArray(r.camposPartes)
-            ? r.camposPartes.filter((c) => c && typeof c.rol === 'string' && typeof c.clave === 'string' && typeof c.etiqueta === 'string')
-            : [],
+        grupos: leerGrupos(r.grupos, r.camposPartes),
     };
 }
 

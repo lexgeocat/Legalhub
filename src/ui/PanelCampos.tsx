@@ -1,9 +1,12 @@
 import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { tipoSugerido } from '../application/camposModelo';
-import { DATOS_FICHA, mismoRol, rolDesdeTexto } from '../domain/catalogo';
-import { armarFrase, marcadorCampoParte, partirFrase, planCampos } from '../domain/camposParte';
+import { mismoRol, rolDesdeTexto } from '../domain/catalogo';
+import { armarFrase, datosDe, marcadorDato, partirFrase, planDatos, type PlanDato } from '../domain/camposParte';
 import { formasConcordancia, type FormasConcordancia } from '../domain/concordancia';
-import { TIPOS_CAMPO, marcadorDeCampo, type CampoParte, type CampoPropio, type TipoCampo } from '../domain/fuenteModelo';
+import {
+    TIPOS_CAMPO, marcadorDeCampo, type CampoPropio, type DatoParte, type GrupoDatos, type TipoCampo,
+} from '../domain/fuenteModelo';
+import { nuevoId } from '../domain/id';
 import { matizDePersona } from '../domain/marcadores';
 import { claveCampo, etiquetaRol, pluralRol } from '../domain/texto';
 import { Campo, Icono, Segmentado, confirmar } from './comunes';
@@ -11,31 +14,28 @@ import { Campo, Icono, Segmentado, confirmar } from './comunes';
 type Pestana = 'datos' | 'partes' | 'genero';
 type Insertar = (texto: string, bloque: boolean) => void;
 type Modo = 'cada' | 'una';
-type ModoTarjeta = null | 'crear' | 'redactar' | number;
 
 const SIN_AMBITO: readonly string[] = [];
+/** Nombres que el sistema ya usa para otra cosa (el cliente del expediente, los datos del abogado…). */
+const RESERVADOS = new Set(['cliente', 'abogado', 'caso', 'expediente', 'hoy', 'partes', 'inmuebles']);
 
 /** Evita que el botón le quite el foco (y el cursor) a la hoja. */
 const quieto = (e: { preventDefault(): void }) => e.preventDefault();
 const nombreTipo = (t: string) => TIPOS_CAMPO.find((x) => x.valor === t)?.etiqueta ?? t;
+const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
-/* ---------------- Personas disponibles ---------------- */
-interface Persona {
+/* ---------------- Partes ---------------- */
+interface Parte {
+    /** Rol en singular: «vendedor». */
     id: string;
     etiqueta: string;
-    /** Expresión para «todas las personas con este rol» (vendedores) o la única (cliente). */
+    /** «vendedores»: todas las personas con ese rol. */
     plural: string;
-    /** Expresión para «la primera persona» (vendedor). También es la clave del rol en los campos. */
-    singular: string;
-    varias: boolean;
-    fija: boolean;
+    matiz: number;
 }
 
-const CLIENTE: Persona = { id: '@cliente', etiqueta: 'Cliente', plural: 'cliente', singular: 'cliente', varias: false, fija: true };
-const ABOGADO: Persona = { id: '@abogado', etiqueta: 'Abogado (yo)', plural: 'abogado', singular: 'abogado', varias: false, fija: true };
-const dePersona = (rol: string): Persona => ({
-    id: rol, etiqueta: etiquetaRol(rol), plural: pluralRol(rol), singular: rol, varias: true, fija: false,
-});
+const dePartes = (roles: string[]): Parte[] =>
+    roles.map((r) => ({ id: r, etiqueta: etiquetaRol(r), plural: pluralRol(r), matiz: matizDePersona(r, roles) }));
 
 const PALABRAS_RAPIDAS = ['el', 'el señor', 'del', 'al', 'un', 'señor', 'domiciliado', 'portador', 'mayor de edad'];
 
@@ -167,9 +167,125 @@ function TabDatos({ campos, onCampos, onInsertar, onDetectar }: {
     );
 }
 
-/* ================= Pestaña PARTES ================= */
-function FormCrearCampo({ p, existentes, onCrear, onCancelar }: {
-    p: Persona; existentes: CampoParte[]; onCrear: (l: CampoParte[]) => void; onCancelar: () => void;
+/* ================= «¿De quién se habla?» (compartido por Partes y Género) ================= */
+function Quien({ partes, valor, onCambiar, onAgregar, onQuitar }: {
+    partes: Parte[];
+    valor: Parte | null;
+    onCambiar: (id: string) => void;
+    /** Devuelve un mensaje de error, o null si se agregó. */
+    onAgregar: (rol: string) => string | null;
+    onQuitar: (p: Parte) => void;
+}) {
+    const [nuevo, setNuevo] = useState('');
+    const [abierto, setAbierto] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const formulario = abierto || partes.length === 0;
+
+    function agregar(ev: FormEvent<HTMLFormElement>) {
+        ev.preventDefault();
+        const e = onAgregar(nuevo);
+        if (e) {
+            setError(e);
+            return;
+        }
+        setNuevo('');
+        setError(null);
+        setAbierto(false);
+    }
+
+    return (
+        <div className="cb-quien">
+            <span className="cb-sub">¿De quién se habla?</span>
+            {valor && (
+                <div className="cb-quien-fila">
+                    <i className="cb-punto" style={{ '--h': valor.matiz } as CSSProperties} />
+                    <select aria-label="¿De quién se habla?" value={valor.id} onChange={(e) => onCambiar(e.target.value)}>
+                        {partes.map((p) => <option key={p.id} value={p.id}>{p.etiqueta}</option>)}
+                    </select>
+                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar esta parte" title="Quitar esta parte"
+                        onMouseDown={quieto} onClick={() => onQuitar(valor)}><Icono n="papelera" tam={15} /></button>
+                    <button type="button" className="btn btn-sec btn-sm" onMouseDown={quieto} onClick={() => setAbierto((a) => !a)}>
+                        {abierto ? 'Cerrar' : '+ Parte'}
+                    </button>
+                </div>
+            )}
+            {formulario && (
+                <form className="cb-fila-form" onSubmit={agregar}>
+                    <input aria-label="Rol de la parte" placeholder="Rol: vendedor, demandante, testigo…"
+                        value={nuevo} onChange={(e) => { setNuevo(e.target.value); setError(null); }} />
+                    <button type="submit" className="btn btn-pri btn-sm">Agregar</button>
+                </form>
+            )}
+            {error && <p className="pc-error">{error}</p>}
+            {partes.length === 0 && (
+                <p className="pc-nota">Crea las partes que intervienen en el documento (con el nombre que uses). Los datos que armes se reutilizan en todas.</p>
+            )}
+        </div>
+    );
+}
+
+/* ================= Pestaña PARTES: grupos de datos ================= */
+function PlanVista({ plan }: { plan: PlanDato[] }) {
+    if (plan.length === 0) return null;
+    return (
+        <ul className="cb-plan">
+            {plan.map((x, i) => (
+                <li key={i} className={x.estado === 'nuevo' ? 'ok' : x.estado === 'existe' ? 'ya' : 'no'}>
+                    <b>{x.nombre}</b>
+                    <span>
+                        {x.estado === 'nuevo'
+                            ? (x.dato?.ficha ? '→ de la ficha de la persona' : `→ dato nuevo · ${nombreTipo(x.dato?.tipo ?? 'texto')}`)
+                            : `→ ${x.motivo}`}
+                    </span>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+function FormGrupo({ todos, onCrear, onCancelar }: {
+    todos: DatoParte[]; onCrear: (g: GrupoDatos) => void; onCancelar?: () => void;
+}) {
+    const [nombre, setNombre] = useState('');
+    const [texto, setTexto] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const plan = planDatos(texto, todos, tipoSugerido, { requerido: true, mayus: false });
+    const listos = plan.flatMap((x) => (x.estado === 'nuevo' && x.dato ? [x.dato] : []));
+
+    function enviar(ev: FormEvent<HTMLFormElement>) {
+        ev.preventDefault();
+        const n = nombre.trim();
+        if (!n) {
+            setError('Ponle un nombre al grupo, por ejemplo «Generales de ley».');
+            return;
+        }
+        onCrear({ id: nuevoId(), nombre: n, datos: listos });
+    }
+
+    return (
+        <form className="cb-edicion" onSubmit={enviar}>
+            <input aria-label="Nombre del grupo" autoFocus placeholder="Nombre del grupo: Generales de ley, Datos del vehículo…"
+                value={nombre} onChange={(e) => { setNombre(e.target.value); setError(null); }} />
+            <textarea aria-label="Datos del grupo" placeholder="Datos, separados por comas: Nombre completo, C.I., Domicilio, Estado civil"
+                value={texto} onChange={(e) => setTexto(e.target.value)} />
+            <PlanVista plan={plan} />
+            <p className="pc-nota">
+                Si el nombre coincide con la ficha de la persona (nombre, C.I., domicilio…) se toma de ahí; si no, es un dato nuevo
+                que llenas en el expediente. Es opcional: puedes crear el grupo vacío y agregar datos después.
+            </p>
+            {error && <p className="pc-error">{error}</p>}
+            <div className="pc-acciones">
+                <button type="submit" className="btn btn-pri btn-sm">
+                    {listos.length > 0 ? `Crear grupo con ${plural(listos.length, 'dato', 'datos')}` : 'Crear grupo'}
+                </button>
+                {onCancelar && <button type="button" className="btn btn-fan btn-sm" onClick={onCancelar}>Cancelar</button>}
+            </div>
+        </form>
+    );
+}
+
+function FormDatos({ todos, onAgregar, onCancelar }: {
+    todos: DatoParte[]; onAgregar: (l: DatoParte[]) => void; onCancelar: () => void;
 }) {
     const [texto, setTexto] = useState('');
     const [tipo, setTipo] = useState<TipoCampo>('texto');
@@ -177,50 +293,24 @@ function FormCrearCampo({ p, existentes, onCrear, onCancelar }: {
     const [requerido, setRequerido] = useState(true);
     const [mayus, setMayus] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const plan = planCampos(texto, p.singular, existentes, !p.fija, tipoSugerido, {
-        tipo: manual ? tipo : undefined, requerido, mayus,
-    });
-    const listos = plan.flatMap((x) => (x.estado === 'nuevo' && x.campo ? [x.campo] : []));
+    const plan = planDatos(texto, todos, tipoSugerido, { tipo: manual ? tipo : undefined, requerido, mayus });
+    const listos = plan.flatMap((x) => (x.estado === 'nuevo' && x.dato ? [x.dato] : []));
     const propio = plan.length === 1 && listos[0] && !listos[0].ficha ? listos[0] : null;
-    const sugerencias = DATOS_FICHA.filter((d) => !d.exclusivo || d.exclusivo === p.singular);
 
     function enviar(ev: FormEvent<HTMLFormElement>) {
         ev.preventDefault();
         if (listos.length === 0) {
-            setError('Escribe al menos un campo nuevo. Separa con comas para crear varios.');
+            setError('Escribe al menos un dato nuevo. Separa con comas para crear varios.');
             return;
         }
-        onCrear(listos);
+        onAgregar(listos);
     }
 
     return (
         <form className="cb-edicion" onSubmit={enviar}>
-            <input aria-label="Nombre del campo" list={`fichas-${p.singular}`} autoFocus
-                placeholder="Ej.: Nombre, C.I., Domicilio, Lugar de nacimiento"
+            <input aria-label="Nombre del dato" autoFocus placeholder="Ej.: Lugar de nacimiento, Nombre del padre, Teléfono"
                 value={texto} onChange={(e) => { setTexto(e.target.value); setError(null); }} />
-            <datalist id={`fichas-${p.singular}`}>{sugerencias.map((d) => <option key={d.clave} value={d.etiqueta} />)}</datalist>
-            <p className="pc-nota">
-                {p.fija
-                    ? 'Se toman de la ficha de la persona (Configuración, para el abogado). Separa con comas para crear varios.'
-                    : 'Si el nombre coincide con la ficha de la persona (nombre, C.I., domicilio…) se toma de ahí; si no, es un dato nuevo que llenas en el expediente. Separa con comas para crear varios.'}
-            </p>
-
-            {plan.length > 0 && (
-                <ul className="cb-plan">
-                    {plan.map((x, i) => (
-                        <li key={i} className={x.estado === 'nuevo' ? 'ok' : x.estado === 'existe' ? 'ya' : 'no'}>
-                            <b>{x.nombre}</b>
-                            <span>
-                                {x.estado === 'nuevo'
-                                    ? (x.campo?.ficha ? '→ de la ficha de la persona' : `→ dato nuevo · ${nombreTipo(x.campo?.tipo ?? 'texto')}`)
-                                    : `→ ${x.motivo}`}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
-            )}
-
+            <PlanVista plan={plan} />
             {propio && (
                 <select aria-label="Tipo de dato" value={manual ? tipo : propio.tipo}
                     onChange={(e) => { setTipo(e.target.value as TipoCampo); setManual(true); }}>
@@ -240,7 +330,7 @@ function FormCrearCampo({ p, existentes, onCrear, onCancelar }: {
             {error && <p className="pc-error">{error}</p>}
             <div className="pc-acciones">
                 <button type="submit" className="btn btn-pri btn-sm" disabled={listos.length === 0}>
-                    {listos.length === 1 ? 'Crear e insertar' : `Crear ${listos.length || ''} campos`.trim()}
+                    {listos.length > 1 ? `Agregar ${listos.length} datos` : 'Agregar'}
                 </button>
                 <button type="button" className="btn btn-fan btn-sm" onClick={onCancelar}>Cancelar</button>
             </div>
@@ -248,29 +338,29 @@ function FormCrearCampo({ p, existentes, onCrear, onCancelar }: {
     );
 }
 
-function EditarCampoParte({ c, ocupadas, onGuardar, onCancelar }: {
-    c: CampoParte; ocupadas: ReadonlySet<string>; onGuardar: (c: CampoParte) => void; onCancelar: () => void;
+function EditarDatoParte({ d, ocupadas, onGuardar, onCancelar }: {
+    d: DatoParte; ocupadas: ReadonlySet<string>; onGuardar: (d: DatoParte) => void; onCancelar: () => void;
 }) {
-    const [etiqueta, setEtiqueta] = useState(c.etiqueta);
-    const [tipo, setTipo] = useState<TipoCampo>(c.tipo);
-    const [requerido, setRequerido] = useState(c.requerido);
-    const [mayus, setMayus] = useState(!!c.mayus);
+    const [etiqueta, setEtiqueta] = useState(d.etiqueta);
+    const [tipo, setTipo] = useState<TipoCampo>(d.tipo);
+    const [requerido, setRequerido] = useState(d.requerido);
+    const [mayus, setMayus] = useState(!!d.mayus);
     const [error, setError] = useState<string | null>(null);
     const texto = tipo === 'texto' || tipo === 'texto_largo';
 
     function guardar() {
-        const nombre = etiqueta.trim() || c.etiqueta;
+        const nombre = etiqueta.trim() || d.etiqueta;
         if (ocupadas.has(claveCampo(nombre))) {
-            setError('Ya hay otro campo con ese nombre en esta parte.');
+            setError('Ya hay otro dato con ese nombre.');
             return;
         }
-        onGuardar({ ...c, etiqueta: nombre, tipo, requerido, mayus: texto && mayus ? true : undefined });
+        onGuardar({ ...d, etiqueta: nombre, tipo, requerido, mayus: texto && mayus ? true : undefined });
     }
 
     return (
         <div className="cb-edicion">
-            <input aria-label="Nombre del campo" value={etiqueta} onChange={(e) => { setEtiqueta(e.target.value); setError(null); }} />
-            {!c.ficha && (
+            <input aria-label="Nombre del dato" value={etiqueta} onChange={(e) => { setEtiqueta(e.target.value); setError(null); }} />
+            {!d.ficha && (
                 <select aria-label="Tipo de dato" value={tipo} onChange={(e) => setTipo(e.target.value as TipoCampo)}>
                     {TIPOS_CAMPO.map((t) => <option key={t.valor} value={t.valor}>{t.etiqueta}</option>)}
                 </select>
@@ -288,9 +378,9 @@ function EditarCampoParte({ c, ocupadas, onGuardar, onCancelar }: {
                 )}
             </div>
             <p className="pc-nota">
-                {c.ficha
+                {d.ficha
                     ? 'Se toma de la ficha de la persona.'
-                    : <>Dato propio (<code>datos.{c.clave}</code>): se llena en el expediente, pestaña Partes → Datos.</>}
+                    : <>Dato propio (<code>datos.{d.clave}</code>): se llena en el expediente, pestaña Partes → Datos.</>}
             </p>
             {error && <p className="pc-error">{error}</p>}
             <div className="pc-acciones">
@@ -301,23 +391,128 @@ function EditarCampoParte({ c, ocupadas, onGuardar, onCancelar }: {
     );
 }
 
-function Redactor({ p, matiz, campos, dentro, onInsertar, onListo }: {
-    p: Persona; matiz: number; campos: CampoParte[]; dentro: boolean; onInsertar: Insertar; onListo: () => void;
+function TarjetaGrupo({ g, todos, quien, dentro, onCambiar, onQuitar, onInsertar }: {
+    g: GrupoDatos;
+    todos: DatoParte[];
+    quien: Parte | null;
+    dentro: boolean;
+    onCambiar: (g: GrupoDatos) => void;
+    onQuitar: () => void;
+    onInsertar: Insertar;
+}) {
+    const [abierta, setAbierta] = useState(true);
+    const [modo, setModo] = useState<null | 'agregar' | 'nombre' | number>(g.datos.length === 0 ? 'agregar' : null);
+    const [nombre, setNombre] = useState(g.nombre);
+    const prefijo = quien && !dentro ? `${quien.id}.` : '';
+
+    const cambiarDatos = (datos: DatoParte[]) => onCambiar({ ...g, datos });
+
+    function guardarNombre() {
+        const n = nombre.trim();
+        if (n) onCambiar({ ...g, nombre: n });
+        else setNombre(g.nombre);
+        setModo(null);
+    }
+
+    async function quitar() {
+        if (g.datos.length > 0 && !(await confirmar(
+            `¿Quitar el grupo «${g.nombre}» con sus ${plural(g.datos.length, 'dato', 'datos')}? Lo que ya insertaste en el texto no cambia.`,
+            'Quitar grupo',
+        ))) return;
+        onQuitar();
+    }
+
+    return (
+        <div className="cb-tarjeta">
+            <div className="cb-tarjeta-cab">
+                {modo === 'nombre' ? (
+                    <>
+                        <input aria-label="Nombre del grupo" autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); guardarNombre(); }
+                                if (e.key === 'Escape') { setNombre(g.nombre); setModo(null); }
+                            }} />
+                        <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Guardar nombre" onMouseDown={quieto}
+                            onClick={guardarNombre}><Icono n="ok" tam={15} /></button>
+                    </>
+                ) : (
+                    <>
+                        <button type="button" className="cb-grupo-tit" aria-expanded={abierta} onMouseDown={quieto}
+                            onClick={() => setAbierta((a) => !a)}>
+                            <span aria-hidden="true">{abierta ? '▾' : '▸'}</span>
+                            <b>{g.nombre}</b>
+                            <span className="suave">{plural(g.datos.length, 'dato', 'datos')}</span>
+                        </button>
+                        <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Renombrar grupo" onMouseDown={quieto}
+                            onClick={() => { setNombre(g.nombre); setModo('nombre'); }}><Icono n="editar" tam={15} /></button>
+                        <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar grupo" onMouseDown={quieto}
+                            onClick={() => void quitar()}><Icono n="papelera" tam={15} /></button>
+                    </>
+                )}
+            </div>
+
+            {abierta && (
+                <>
+                    {g.datos.length === 0 && modo !== 'agregar' && <p className="pc-ayuda">Grupo vacío. Agrega los datos que se piden de cada parte.</p>}
+
+                    {g.datos.map((d, i) => modo === i ? (
+                        <EditarDatoParte key={i} d={d}
+                            ocupadas={new Set(todos.filter((x) => x !== d).map((x) => claveCampo(x.etiqueta)))}
+                            onCancelar={() => setModo(null)}
+                            onGuardar={(nuevo) => { cambiarDatos(g.datos.map((x, k) => (k === i ? nuevo : x))); setModo(null); }} />
+                    ) : (
+                        <div key={i} className="cb-fila">
+                            <button type="button" className="cb-insertar" disabled={!quien} onMouseDown={quieto}
+                                title={quien
+                                    ? `Insertar para ${quien.etiqueta}${dentro ? ' (cada persona del bloque)' : ''}`
+                                    : 'Primero crea una parte (arriba)'}
+                                onClick={() => quien && onInsertar(marcadorDato(d, prefijo), false)}>
+                                <span className="cb-nombre">{d.etiqueta}</span>
+                                <span className="cb-meta">
+                                    {d.ficha ? 'Ficha de la persona' : `Dato propio · ${nombreTipo(d.tipo)}`}
+                                    {d.mayus ? ' · MAYÚSCULAS' : ''}{d.requerido ? '' : ' · opcional'}
+                                </span>
+                            </button>
+                            <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Editar dato" onMouseDown={quieto}
+                                onClick={() => setModo(i)}><Icono n="editar" tam={15} /></button>
+                            <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar dato" onMouseDown={quieto}
+                                onClick={() => cambiarDatos(g.datos.filter((_, k) => k !== i))}><Icono n="papelera" tam={15} /></button>
+                        </div>
+                    ))}
+
+                    {modo === 'agregar' ? (
+                        <FormDatos todos={todos} onCancelar={() => setModo(null)}
+                            onAgregar={(nuevos) => { cambiarDatos([...g.datos, ...nuevos]); setModo(null); }} />
+                    ) : (
+                        <div className="pc-acciones">
+                            <button type="button" className="btn btn-sec btn-sm" onClick={() => setModo('agregar')}>
+                                <Icono n="mas" tam={14} /> Dato
+                            </button>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
+function Redactor({ quien, datos, dentro, onInsertar, onListo }: {
+    quien: Parte; datos: DatoParte[]; dentro: boolean; onInsertar: Insertar; onListo: () => void;
 }) {
     const [texto, setTexto] = useState('');
     const [modo, setModo] = useState<Modo>('cada');
     const area = useRef<HTMLTextAreaElement>(null);
-    const puedeUna = !p.varias || p.singular !== p.plural;
-    const repetir = !dentro && p.varias && (modo === 'cada' || !puedeUna);
-    const prefijo = dentro || repetir ? '' : `${p.singular}.`;
-    const piezas = useMemo(() => partirFrase(texto, campos), [texto, campos]);
+    const puedeUna = quien.id !== quien.plural;
+    const repetir = !dentro && (modo === 'cada' || !puedeUna);
+    const prefijo = dentro || repetir ? '' : `${quien.id}.`;
+    const piezas = useMemo(() => partirFrase(texto, datos), [texto, datos]);
     const desconocidos = piezas.flatMap((x) => (x.t === 'falta' ? [x.v] : []));
     const vacio = texto.trim() === '';
-    const ejemplo = campos.length > 0
-        ? campos.slice(0, 3).map((c) => `{${c.etiqueta}}`).join(', tu texto aquí ')
-        : 'Primero crea los campos con «Crear campo»';
+    const ejemplo = datos.length > 0
+        ? datos.slice(0, 3).map((c) => `{${c.etiqueta}}`).join(', tu texto aquí ')
+        : 'Primero crea los datos en un grupo';
 
-    function poner(c: CampoParte) {
+    function poner(c: DatoParte) {
         const ficha = `{${c.etiqueta}}`;
         const el = area.current;
         const a = el?.selectionStart ?? texto.length;
@@ -331,24 +526,25 @@ function Redactor({ p, matiz, campos, dentro, onInsertar, onListo }: {
     }
 
     function insertar() {
-        const { texto: t, faltan } = armarFrase(texto.trim(), campos, prefijo);
+        const { texto: t, faltan } = armarFrase(texto.trim(), datos, prefijo);
         if (faltan.length > 0 || t.trim() === '') return;
-        const lineas = t.split('\n');
-        if (repetir) onInsertar(`{{#${p.plural}}}\n${t}\n{{/${p.plural}}}`, true);
-        else onInsertar(t, lineas.length > 1);
+        if (repetir) onInsertar(`{{#${quien.plural}}}\n${t}\n{{/${quien.plural}}}`, true);
+        else onInsertar(t, t.includes('\n'));
         setTexto('');
         onListo();
     }
 
     return (
         <div className="cb-edicion">
-            <span className="cb-sub">Escribe el párrafo y toca los campos</span>
+            <span className="cb-sub">
+                Párrafo para <i className="cb-punto" style={{ '--h': quien.matiz } as CSSProperties} /> {quien.etiqueta}: escribe y toca los datos
+            </span>
             <textarea ref={area} aria-label="Párrafo" value={texto} placeholder={ejemplo}
                 onChange={(e) => setTexto(e.target.value)} />
-            {campos.length > 0 && (
+            {datos.length > 0 && (
                 <div className="chips">
-                    {campos.map((c, i) => (
-                        <button key={i} type="button" className="chip" title="Insertar este campo en el texto"
+                    {datos.map((c, i) => (
+                        <button key={i} type="button" className="chip" title="Insertar este dato en el texto"
                             onMouseDown={quieto} onClick={() => poner(c)}>
                             + {c.etiqueta}
                         </button>
@@ -359,23 +555,22 @@ function Redactor({ p, matiz, campos, dentro, onInsertar, onListo }: {
             <span className="cb-sub">Así se verá</span>
             <div className="cb-redaccion">
                 {vacio
-                    ? <span className="suave">Aquí aparece tu párrafo con los campos como etiquetas.</span>
+                    ? <span className="suave">Aquí aparece tu párrafo con los datos como etiquetas.</span>
                     : piezas.map((x, i) => (x.t === 'txt'
                         ? <span key={i}>{x.v}</span>
                         : x.t === 'campo'
-                            ? <span key={i} className="mk" data-k="persona" style={{ '--h': matiz } as CSSProperties}><span className="mk-e">{x.campo.etiqueta}</span></span>
+                            ? <span key={i} className="mk" data-k="persona" style={{ '--h': quien.matiz } as CSSProperties}><span className="mk-e">{x.campo.etiqueta}</span></span>
                             : <span key={i} className="mk-falta">{`{${x.v}}`}</span>))}
             </div>
             {desconocidos.length > 0 && (
-                <p className="pc-error">No existe el campo: {desconocidos.map((d) => `{${d}}`).join(', ')}. Créalo o corrige el nombre.</p>
+                <p className="pc-error">No existe el dato: {desconocidos.map((d) => `{${d}}`).join(', ')}. Créalo o corrige el nombre.</p>
             )}
 
             {dentro ? (
                 <p className="pc-nota">
-                    El cursor está dentro del bloque «cada {p.singular.replace(/_/g, ' ')}»: se inserta una vez, y el bloque
-                    ya la repite por persona.
+                    El cursor está dentro del bloque «cada {quien.id.replace(/_/g, ' ')}»: se inserta una vez, y el bloque ya la repite por persona.
                 </p>
-            ) : p.varias && puedeUna ? (
+            ) : puedeUna ? (
                 <Segmentado<Modo> valor={modo} cambiar={setModo}
                     opciones={[{ id: 'cada', etiqueta: 'Repetir por cada persona' }, { id: 'una', etiqueta: 'Solo la primera' }]} />
             ) : null}
@@ -393,159 +588,78 @@ function Redactor({ p, matiz, campos, dentro, onInsertar, onListo }: {
     );
 }
 
-function TarjetaPersona({ p, matiz, campos, dentro, autoAbrir, onCampos, quitar, onInsertar, irAGenero }: {
-    p: Persona; matiz: number; campos: CampoParte[]; dentro: boolean; autoAbrir: boolean;
-    onCampos: (lista: CampoParte[]) => void; quitar?: () => void; onInsertar: Insertar; irAGenero: () => void;
+function TabPartes({ grupos, quien, ambito, onGrupos, onInsertar }: {
+    grupos: GrupoDatos[]; quien: Parte | null; ambito: readonly string[];
+    onGrupos: (g: GrupoDatos[]) => void; onInsertar: Insertar;
 }) {
-    const [modo, setModo] = useState<ModoTarjeta>(autoAbrir ? 'crear' : null);
-    const prefijo = dentro ? '' : `${p.singular}.`;
-    const alternar = (m: 'crear' | 'redactar') => setModo((a) => (a === m ? null : m));
-
-    function crear(nuevos: CampoParte[]) {
-        onCampos([...campos, ...nuevos]);
-        if (nuevos.length === 1) onInsertar(marcadorCampoParte(nuevos[0], prefijo), false);
-        setModo(null);
-    }
-
-    return (
-        <div className="cb-tarjeta">
-            <div className="cb-tarjeta-cab">
-                <i className="cb-punto" style={{ '--h': matiz } as CSSProperties} />
-                <b>{p.etiqueta}</b>
-                <span className="suave">
-                    {p.varias ? 'una o varias personas' : p.id === CLIENTE.id ? 'quien contrata tus servicios' : 'tus datos (Configuración)'}
-                </span>
-                <span className="espacio" />
-                {quitar && (
-                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar parte" onMouseDown={quieto}
-                        onClick={quitar}><Icono n="papelera" tam={15} /></button>
-                )}
-            </div>
-
-            {dentro && (
-                <p className="pc-nota">El cursor está dentro del bloque «cada {p.singular.replace(/_/g, ' ')}»: los campos se insertan sin prefijo (cada persona).</p>
-            )}
-            {campos.length === 0 && modo !== 'crear' && (
-                <p className="pc-ayuda">Aún no hay campos. Toca «Crear campo» y escribe, por ejemplo: Nombre, C.I., Domicilio.</p>
-            )}
-
-            {campos.map((c, i) => modo === i ? (
-                <EditarCampoParte key={i} c={c}
-                    ocupadas={new Set(campos.filter((_, k) => k !== i).map((x) => claveCampo(x.etiqueta)))}
-                    onCancelar={() => setModo(null)}
-                    onGuardar={(nuevo) => { onCampos(campos.map((x, k) => (k === i ? nuevo : x))); setModo(null); }} />
-            ) : (
-                <div key={i} className="cb-fila">
-                    <button type="button" className="cb-insertar" title="Insertar en el cursor" onMouseDown={quieto}
-                        onClick={() => onInsertar(marcadorCampoParte(c, prefijo), false)}>
-                        <span className="cb-nombre">{c.etiqueta}</span>
-                        <span className="cb-meta">
-                            {c.ficha ? 'Ficha de la persona' : `Dato propio · ${nombreTipo(c.tipo)}`}
-                            {c.mayus ? ' · MAYÚSCULAS' : ''}{c.requerido ? '' : ' · opcional'}
-                        </span>
-                    </button>
-                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Editar campo" onMouseDown={quieto}
-                        onClick={() => setModo(i)}><Icono n="editar" tam={15} /></button>
-                    <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar campo" onMouseDown={quieto}
-                        onClick={() => onCampos(campos.filter((_, k) => k !== i))}><Icono n="papelera" tam={15} /></button>
-                </div>
-            ))}
-
-            {modo === 'crear' && <FormCrearCampo p={p} existentes={campos} onCrear={crear} onCancelar={() => setModo(null)} />}
-            {modo === 'redactar' && (
-                <Redactor p={p} matiz={matiz} campos={campos} dentro={dentro} onInsertar={onInsertar} onListo={() => setModo(null)} />
-            )}
-
-            <div className="pc-acciones">
-                <button type="button" className="btn btn-sec btn-sm" onClick={() => alternar('crear')}>
-                    <Icono n="mas" tam={14} /> Crear campo
-                </button>
-                <button type="button" className="btn btn-sec btn-sm" onClick={() => alternar('redactar')}>Redactar párrafo</button>
-                <button type="button" className="btn btn-sec btn-sm" onClick={irAGenero}>Género…</button>
-            </div>
-        </div>
-    );
-}
-
-function TabPartes({ partes, personas, camposPartes, ambito, onPartes, onCamposPartes, onInsertar, irAGenero }: {
-    partes: string[]; personas: Persona[]; camposPartes: CampoParte[]; ambito: readonly string[];
-    onPartes: (p: string[]) => void; onCamposPartes: (c: CampoParte[]) => void;
-    onInsertar: Insertar; irAGenero: (id: string) => void;
-}) {
-    const [nuevo, setNuevo] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    const [foco, setFoco] = useState<string | null>(null);
-
-    function agregar(ev: FormEvent<HTMLFormElement>) {
-        ev.preventDefault();
-        const r = rolDesdeTexto(nuevo);
-        if (!r) {
-            setError('Escribe el rol: vendedor, demandante, testigo…');
-            return;
-        }
-        if (r === 'cliente' || r === 'abogado') {
-            setError('«Cliente» y «Abogado» ya están disponibles abajo.');
-            return;
-        }
-        if (!partes.includes(r)) onPartes([...partes, r]);
-        setNuevo('');
-        setError(null);
-        setFoco(r);
-    }
-
-    async function quitar(p: Persona) {
-        const mios = camposPartes.filter((c) => c.rol === p.singular);
-        if (mios.length > 0 && !(await confirmar(
-            `Se quitarán también los ${mios.length} campo(s) de «${p.etiqueta}». Lo que ya insertaste en el texto no cambia. ¿Continuar?`,
-            'Quitar parte',
-        ))) return;
-        onPartes(partes.filter((x) => x !== p.id));
-        if (mios.length > 0) onCamposPartes(camposPartes.filter((c) => c.rol !== p.singular));
-    }
+    const [nuevoGrupo, setNuevoGrupo] = useState(false);
+    const [redactando, setRedactando] = useState(false);
+    const todos = useMemo(() => datosDe(grupos), [grupos]);
+    const dentro = !!quien && ambito.some((a) => mismoRol(a, quien.id));
 
     return (
         <>
             <p className="pc-ayuda">
-                Crea cada rol con el nombre que uses (vendedor, comodante, testigo…). En cada parte creas tus campos
-                y redactas el párrafo mezclando texto y campos.
+                Agrupa los datos que se piden de las personas (una sola vez). Luego elige arriba «¿De quién se habla?»
+                y toca un dato para insertarlo para esa parte.
             </p>
-            <form className="cb-form" onSubmit={agregar}>
-                <div className="cb-fila-form">
-                    <input aria-label="Rol de la parte" placeholder="Rol: vendedor, demandante…"
-                        value={nuevo} onChange={(e) => { setNuevo(e.target.value); setError(null); }} />
-                    <button type="submit" className="btn btn-pri btn-sm">Agregar</button>
-                </div>
-                {error && <p className="pc-error">{error}</p>}
-            </form>
 
-            {personas.map((p) => (
-                <TarjetaPersona key={p.id} p={p} matiz={matizDePersona(p.id, partes)}
-                    campos={camposPartes.filter((c) => c.rol === p.singular)}
-                    dentro={p.varias && ambito.some((a) => mismoRol(a, p.singular))}
-                    autoAbrir={foco === p.id}
-                    onCampos={(lista) => onCamposPartes([...camposPartes.filter((c) => c.rol !== p.singular), ...lista])}
-                    quitar={p.fija ? undefined : () => void quitar(p)}
-                    onInsertar={onInsertar} irAGenero={() => irAGenero(p.id)} />
+            <div className="cb-cab-seccion">
+                <span>Datos de las partes</span>
+                <div className="pc-acciones" style={{ margin: 0 }}>
+                    <button type="button" className="btn btn-sec btn-sm" onClick={() => setNuevoGrupo((v) => !v)}>
+                        <Icono n="mas" tam={14} /> Grupo
+                    </button>
+                    <button type="button" className="btn btn-sec btn-sm" disabled={!quien || todos.length === 0}
+                        title={!quien ? 'Primero crea una parte' : todos.length === 0 ? 'Primero crea algunos datos' : 'Escribe un párrafo mezclando texto y datos'}
+                        onClick={() => setRedactando((v) => !v)}>
+                        Redactar párrafo
+                    </button>
+                </div>
+            </div>
+
+            {quien && dentro && (
+                <p className="pc-nota">
+                    El cursor está dentro del bloque «cada {quien.id.replace(/_/g, ' ')}»: los datos se insertan sin prefijo (cada persona del bloque).
+                </p>
+            )}
+
+            {redactando && quien && (
+                <Redactor quien={quien} datos={todos} dentro={dentro} onInsertar={onInsertar} onListo={() => setRedactando(false)} />
+            )}
+
+            {(nuevoGrupo || grupos.length === 0) && (
+                <FormGrupo todos={todos}
+                    onCrear={(g) => { onGrupos([...grupos, g]); setNuevoGrupo(false); }}
+                    onCancelar={grupos.length > 0 ? () => setNuevoGrupo(false) : undefined} />
+            )}
+
+            {grupos.map((g) => (
+                <TarjetaGrupo key={g.id} g={g} todos={todos} quien={quien} dentro={dentro}
+                    onCambiar={(nuevo) => onGrupos(grupos.map((x) => (x.id === g.id ? nuevo : x)))}
+                    onQuitar={() => onGrupos(grupos.filter((x) => x.id !== g.id))}
+                    onInsertar={onInsertar} />
             ))}
         </>
     );
 }
 
 /* ================= Pestaña GÉNERO ================= */
-function TabGenero({ personas, fuenteId, cambiarFuente, onInsertar }: {
-    personas: Persona[]; fuenteId: string; cambiarFuente: (id: string) => void; onInsertar: Insertar;
-}) {
-    const p = personas.find((x) => x.id === fuenteId) ?? personas[0];
+function TabGenero({ quien, onInsertar }: { quien: Parte | null; onInsertar: Insertar }) {
     const [palabra, setPalabra] = useState('el');
     const [manual, setManual] = useState<Partial<FormasConcordancia>>({});
     const auto = useMemo(() => formasConcordancia(palabra), [palabra]);
     const f: FormasConcordancia = { ...auto, ...manual };
     const rapidas = useMemo(() => {
-        const rol = p.fija || p.singular.includes('_')
-            ? []
-            : [`el ${p.singular}`, `EL ${p.singular.toUpperCase()}`, p.singular.toUpperCase()];
+        const rol = quien && !quien.id.includes('_')
+            ? [`el ${quien.id}`, `EL ${quien.id.toUpperCase()}`, quien.id.toUpperCase()]
+            : [];
         return [...PALABRAS_RAPIDAS, ...rol];
-    }, [p]);
+    }, [quien]);
+
+    if (!quien) {
+        return <p className="pc-ayuda">Primero crea una parte arriba: el género se calcula con las personas de esa parte.</p>;
+    }
 
     const limpio = (s: string) => s.replace(/"/g, '').trim();
     const sm = limpio(f.sm);
@@ -553,7 +667,7 @@ function TabGenero({ personas, fuenteId, cambiarFuente, onInsertar }: {
     const pm = limpio(f.pm) || limpio(auto.pm);
     const pf = limpio(f.pf) || limpio(auto.pf);
     const listo = sm !== '' && sf !== '';
-    const marcador = `{{${p.plural} | concordar:"${sm}":"${sf}":"${pm}":"${pf}"}}`;
+    const marcador = `{{${quien.plural} | concordar:"${sm}":"${sf}":"${pm}":"${pf}"}}`;
 
     const cambiar = (v: string) => {
         setPalabra(v);
@@ -573,12 +687,6 @@ function TabGenero({ personas, fuenteId, cambiarFuente, onInsertar }: {
             </p>
 
             <div className="cb-form">
-                <Campo etiqueta="¿De quién se habla?">
-                    <select value={p.id} onChange={(e) => cambiarFuente(e.target.value)}>
-                        {personas.map((x) => <option key={x.id} value={x.id}>{x.etiqueta}</option>)}
-                    </select>
-                </Campo>
-
                 <Campo etiqueta="Palabra en masculino" ayuda="Escribe la que necesites o toca una de abajo.">
                     <input value={palabra} placeholder="el, señor, domiciliado, mayor de edad…" onChange={(e) => cambiar(e.target.value)} />
                 </Campo>
@@ -592,22 +700,22 @@ function TabGenero({ personas, fuenteId, cambiarFuente, onInsertar }: {
                 <div className="cb-formas">
                     {forma('sm', 'Masculino')}
                     {forma('sf', 'Femenino')}
-                    {p.varias && forma('pm', 'Masculino (varios)')}
-                    {p.varias && forma('pf', 'Femenino (varias)')}
+                    {forma('pm', 'Masculino (varios)')}
+                    {forma('pf', 'Femenino (varias)')}
                 </div>
 
                 <span className="cb-sub">Resultado en el documento</span>
                 <div className="cb-ejemplo">
-                    <div><span>{p.varias ? 'Un hombre' : 'Si es hombre'}</span>{sm || '—'}</div>
-                    <div><span>{p.varias ? 'Una mujer' : 'Si es mujer'}</span>{sf || '—'}</div>
-                    {p.varias && <div><span>Varios (o mixto)</span>{pm || '—'}</div>}
-                    {p.varias && <div><span>Varias mujeres</span>{pf || '—'}</div>}
+                    <div><span>Un hombre</span>{sm || '—'}</div>
+                    <div><span>Una mujer</span>{sf || '—'}</div>
+                    <div><span>Varios (o mixto)</span>{pm || '—'}</div>
+                    <div><span>Varias mujeres</span>{pf || '—'}</div>
                 </div>
 
                 <div>
                     <button type="button" className="btn btn-pri btn-sm" disabled={!listo} onMouseDown={quieto}
                         onClick={() => onInsertar(marcador, false)}>
-                        Insertar en el cursor
+                        Insertar para {quien.etiqueta}
                     </button>
                 </div>
             </div>
@@ -620,26 +728,38 @@ function TabGenero({ personas, fuenteId, cambiarFuente, onInsertar }: {
 }
 
 /* ================= Panel ================= */
-export function PanelCampos({ campos, partes, camposPartes, ambito = SIN_AMBITO, onCampos, onPartes, onCamposPartes, onInsertar, onDetectar }: {
+export function PanelCampos({ campos, partes, grupos, ambito = SIN_AMBITO, onCampos, onPartes, onGrupos, onInsertar, onDetectar }: {
     campos: CampoPropio[];
     partes: string[];
-    camposPartes: CampoParte[];
+    grupos: GrupoDatos[];
     /** Bloques «{{#…}}» abiertos donde está el cursor del editor. */
     ambito?: readonly string[];
     onCampos: (c: CampoPropio[]) => void;
     onPartes: (p: string[]) => void;
-    onCamposPartes: (c: CampoParte[]) => void;
+    onGrupos: (g: GrupoDatos[]) => void;
     onInsertar: Insertar;
     onDetectar: () => void;
 }) {
     const [pestana, setPestana] = useState<Pestana>('datos');
-    const [generoDe, setGeneroDe] = useState<string>(partes[0] ?? CLIENTE.id);
-    const personas = useMemo<Persona[]>(() => [...partes.map(dePersona), CLIENTE, ABOGADO], [partes]);
+    const [sel, setSel] = useState('');
+    const lista = useMemo(() => dePartes(partes), [partes]);
+    const quien = lista.find((p) => p.id === sel) ?? lista[0] ?? null;
 
-    const irAGenero = (id: string) => {
-        setGeneroDe(id);
-        setPestana('genero');
-    };
+    function agregarParte(texto: string): string | null {
+        const r = rolDesdeTexto(texto);
+        if (!r) return 'Escribe el rol: vendedor, demandante, testigo…';
+        if (RESERVADOS.has(r)) {
+            return `«${r}» es un nombre reservado del sistema. Usa otro (poderdante, contratante, solicitante…).`;
+        }
+        if (!partes.includes(r)) onPartes([...partes, r]);
+        setSel(r);
+        return null;
+    }
+
+    async function quitarParte(p: Parte) {
+        if (!(await confirmar(`¿Quitar la parte «${p.etiqueta}» del modelo? Lo que ya insertaste en el texto no cambia.`, 'Quitar parte'))) return;
+        onPartes(partes.filter((x) => x !== p.id));
+    }
 
     const items: { id: Pestana; etiqueta: string }[] = [
         { id: 'datos', etiqueta: `Datos${campos.length ? ` (${campos.length})` : ''}` },
@@ -663,14 +783,17 @@ export function PanelCampos({ campos, partes, camposPartes, ambito = SIN_AMBITO,
             </div>
 
             <div className="pc-cuerpo">
-                {pestana === 'datos' && <TabDatos campos={campos} onCampos={onCampos} onInsertar={onInsertar} onDetectar={onDetectar} />}
+                {pestana !== 'datos' && (
+                    <Quien partes={lista} valor={quien} onCambiar={setSel} onAgregar={agregarParte}
+                        onQuitar={(p) => void quitarParte(p)} />
+                )}
+                {pestana === 'datos' && (
+                    <TabDatos campos={campos} onCampos={onCampos} onInsertar={onInsertar} onDetectar={onDetectar} />
+                )}
                 {pestana === 'partes' && (
-                    <TabPartes partes={partes} personas={personas} camposPartes={camposPartes} ambito={ambito}
-                        onPartes={onPartes} onCamposPartes={onCamposPartes} onInsertar={onInsertar} irAGenero={irAGenero} />
+                    <TabPartes grupos={grupos} quien={quien} ambito={ambito} onGrupos={onGrupos} onInsertar={onInsertar} />
                 )}
-                {pestana === 'genero' && (
-                    <TabGenero personas={personas} fuenteId={generoDe} cambiarFuente={setGeneroDe} onInsertar={onInsertar} />
-                )}
+                {pestana === 'genero' && <TabGenero quien={quien} onInsertar={onInsertar} />}
             </div>
 
             <div className="pc-pie">

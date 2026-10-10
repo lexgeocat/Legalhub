@@ -845,3 +845,79 @@
 .cb-edicion textarea {
     min-height: 74px;
 }
+
+/* ===== Partes: «¿De quién se habla?» y grupos de datos ===== */
+.cb-quien {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 10px;
+    border: 1px solid #cfd8fb;
+    border-radius: 10px;
+    background: var(--primario-claro);
+    box-shadow: 0 6px 10px -8px rgba(16, 24, 40, .35);
+}
+
+.cb-quien-fila {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 6px;
+    align-items: center;
+}
+
+.cb-quien-fila select {
+    font-weight: 600;
+}
+
+.cb-cab-seccion {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0 6px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.cb-grupo-tit {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--texto);
+    font: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.cb-grupo-tit:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.cb-insertar:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+.cb-insertar:disabled:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+.cb-sub .cb-punto {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 2px;
+}

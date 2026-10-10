@@ -10,6 +10,9 @@ export interface ManifiestoModelo {
     creadoEn: string;
     versionMinima: string;
     origen?: 'word' | 'editor';
+    materia?: string;
+    categoria?: string;
+    descripcion?: string;
 }
 
 export interface ContenidoPaquete {

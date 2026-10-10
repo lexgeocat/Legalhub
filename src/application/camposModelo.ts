@@ -1,5 +1,5 @@
-import { datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
-import type { CampoParte, CampoPropio, FuenteModelo, TipoCampo } from '../domain/fuenteModelo';
+import { datoDeParteEnRuta } from '../domain/catalogo';
+import type { CampoPropio, FuenteModelo, GrupoDatos, TipoCampo } from '../domain/fuenteModelo';
 import { claveCampo, claveNormalizada } from '../domain/texto';
 import type { CampoEsquema } from './puertos/motorPlantillas';
 const USO_CASO = /\{\{\s*caso\.([\p{L}_][\p{L}\p{N}_]*)\s*(\?)?/giu;
@@ -76,18 +76,20 @@ export function analizarCampos(fuente: Pick<FuenteModelo, 'texto' | 'campos'>): 
 }
 
 /** Aplica etiqueta y tipo de los campos declarados sobre el esquema escaneado. El filtro del marcador (moneda, fecha…) manda sobre el tipo declarado. */
+/** Aplica etiqueta y tipo de los campos declarados sobre el esquema escaneado. El filtro del marcador (moneda, fecha…) manda sobre el tipo declarado. */
 export function aplicarCampos(
-    esquema: CampoEsquema[], campos: CampoPropio[], camposPartes: readonly CampoParte[] = [],
+    esquema: CampoEsquema[], campos: CampoPropio[], grupos: readonly GrupoDatos[] = [],
 ): CampoEsquema[] {
     const propios = new Map(campos.map((c) => [claveCampo(c.clave), c] as const));
+    const propiosParte = new Map(
+        grupos.flatMap((g) => g.datos).filter((d) => !d.ficha).map((d) => [claveCampo(d.clave), d] as const),
+    );
     return esquema.map((e) => {
         const d = datoDeParteEnRuta(e.path, e.ambito ?? []);
         if (d) {
-            const cp = camposPartes.find(
-                (c) => !c.ficha && claveCampo(c.clave) === d.clave && (d.rol === null || mismoRol(c.rol, d.rol)),
-            );
-            if (!cp) return e;
-            return { ...e, etiqueta: cp.etiqueta.trim() || e.etiqueta, tipo: e.tipo === 'texto' ? cp.tipo : e.tipo };
+            const dp = propiosParte.get(d.clave);
+            if (!dp) return e;
+            return { ...e, etiqueta: dp.etiqueta.trim() || e.etiqueta, tipo: e.tipo === 'texto' ? dp.tipo : e.tipo };
         }
         const partes = e.path.split('.');
         if (partes.length !== 2 || claveNormalizada(partes[0]) !== 'caso') return e;

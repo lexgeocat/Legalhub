@@ -16,6 +16,12 @@ export class ArchivosTauri implements ArchivosPuerto {
     rutaTrabajo(nombreArchivo: string): Promise<string> {
         return join(this.raiz, 'Modelos', '_trabajo', nombreArchivo);
     }
+    rutaPlantilla(nombreArchivo: string): Promise<string> {
+        return join(this.raiz, 'Modelos', '_plantillas', nombreArchivo);
+    }
+    escribir(ruta: string, contenido: Uint8Array): Promise<void> {
+        return writeFile(ruta, contenido);
+    }
     leer(ruta: string): Promise<Uint8Array> {
         return readFile(ruta);
     }
