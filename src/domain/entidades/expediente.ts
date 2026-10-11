@@ -9,7 +9,7 @@ export interface Expediente {
   estado: EstadoExpediente;
   juzgado?: string;
   nroCausa?: string;
-  clienteId: string;
+  clienteId?: string;
   datos: Record<string, string>; // «caso.*» precargado en los modelos
   creadoEn: string;
   actualizadoEn: string;

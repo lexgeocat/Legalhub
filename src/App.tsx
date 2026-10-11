@@ -1,29 +1,42 @@
 import { useEffect, useState } from 'react';
 import { VERSION_APP } from './domain/version';
 import { Buscador } from './ui/Buscador';
-import { Icono, Notificaciones, type NombreIcono } from './ui/comunes';
+import { Icono, Notificaciones, avisar, type NombreIcono } from './ui/comunes';
+import { FormularioPersona } from './ui/FormularioPersona';
 import { Configuracion } from './ui/paginas/Configuracion';
 import { Expediente } from './ui/paginas/Expediente';
 import { Expedientes } from './ui/paginas/Expedientes';
 import { Modelos } from './ui/paginas/Modelos';
-import { Personas } from './ui/paginas/Personas';
+import { useCargar, useServicios } from './ui/servicios';
 
-type Item = 'expedientes' | 'personas' | 'modelos' | 'config';
-type Vista =
-  | { n: 'expedientes' | 'modelos' | 'config' }
-  | { n: 'expediente'; id: string }
-  | { n: 'personas'; id?: string };
+type Item = 'expedientes' | 'modelos' | 'config';
+type Vista = { n: Item } | { n: 'expediente'; id: string };
 
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'expedientes', etiqueta: 'Expedientes', icono: 'carpeta' },
-  { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
   { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
 ];
 
+/** Ficha de una persona abierta desde el buscador (ya no hay página «Personas»). */
+function FichaPersona({ id, cerrar }: { id: string; cerrar: () => void }) {
+  const s = useServicios();
+  const lista = useCargar(() => s.consultas.listarPersonas(), []);
+  if (!lista.datos) return null;
+  return (
+    <FormularioPersona
+      id={id}
+      personas={lista.datos}
+      cerrar={cerrar}
+      guardado={() => { cerrar(); avisar('Persona actualizada'); }}
+    />
+  );
+}
+
 export default function App() {
   const [vista, setVista] = useState<Vista>({ n: 'expedientes' });
   const [buscando, setBuscando] = useState(false);
+  const [persona, setPersona] = useState<string | null>(null);
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -36,7 +49,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', f);
   }, []);
 
-  const ir = (n: Item) => setVista(n === 'personas' ? { n: 'personas' } : { n });
+  const ir = (n: Item) => setVista({ n });
 
   return (
     <div className="app">
@@ -62,11 +75,8 @@ export default function App() {
       </nav>
 
       <main className="contenido">
-        {vista.n === 'expedientes' && (
-          <Expedientes abrir={(id) => setVista({ n: 'expediente', id })} irPersonas={() => setVista({ n: 'personas' })} />
-        )}
+        {vista.n === 'expedientes' && <Expedientes abrir={(id) => setVista({ n: 'expediente', id })} />}
         {vista.n === 'expediente' && <Expediente key={vista.id} id={vista.id} volver={() => setVista({ n: 'expedientes' })} />}
-        {vista.n === 'personas' && <Personas key={vista.id ?? 'lista'} inicial={vista.id} />}
         {vista.n === 'modelos' && <Modelos />}
         {vista.n === 'config' && <Configuracion />}
       </main>
@@ -76,12 +86,13 @@ export default function App() {
           cerrar={() => setBuscando(false)}
           elegir={(r) => {
             setBuscando(false);
-            if (r.tipo === 'persona') setVista({ n: 'personas', id: r.id });
+            if (r.tipo === 'persona') setPersona(r.id);
             else if (r.expedienteId) setVista({ n: 'expediente', id: r.expedienteId });
             else setVista({ n: 'expedientes' });
           }}
         />
       )}
+      {persona && <FichaPersona id={persona} cerrar={() => setPersona(null)} />}
       <Notificaciones />
     </div>
   );

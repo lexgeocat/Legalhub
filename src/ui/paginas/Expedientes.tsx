@@ -2,14 +2,15 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { esTextoLargo } from '../../application/camposModelo';
 import type { ExpedienteResumen, PersonaResumen } from '../../application/consultas';
 import { claveNormalizada } from '../../domain/texto';
-import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, obtenerTipo } from '../../domain/tiposExpediente';
+import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, clienteAlInicio, obtenerTipo } from '../../domain/tiposExpediente';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Modal, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta,
 } from '../comunes';
+import { FormularioPersona } from '../FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 
-export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void; irPersonas: () => void }) {
+export function Expedientes({ abrir }: { abrir: (id: string) => void }) {
     const s = useServicios();
     const lista = useCargar(() => s.consultas.listarExpedientes(), []);
     const personas = useCargar(() => s.consultas.listarPersonas(), []);
@@ -104,7 +105,7 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
                                         <div className="celda-titulo">{x.materia}</div>
                                         <div className="suave">{etiquetaTipo(x.tipo)}{x.juzgado ? ` · ${x.juzgado}` : ''}</div>
                                     </td>
-                                    <td>{x.clienteNombre || '—'}</td>
+                                    <td>{x.clienteNombre || <span className="suave">Por definir</span>}</td>
                                     <td><EstadoInsignia estado={x.estado} /></td>
                                     <td className="num">{x.nPartes}</td>
                                     <td className="num">{x.nDocumentos}</td>
@@ -130,24 +131,27 @@ export function Expedientes({ abrir, irPersonas }: { abrir: (id: string) => void
             {nuevo && (
                 <NuevoExpediente
                     personas={personas.datos ?? []}
+                    recargarPersonas={personas.recargar}
                     cerrar={() => setNuevo(false)}
                     creado={(id) => { setNuevo(false); abrir(id); }}
-                    irPersonas={() => { setNuevo(false); irPersonas(); }}
                 />
             )}
         </div>
     );
 }
 
-function NuevoExpediente({ personas, cerrar, creado, irPersonas }: {
+function NuevoExpediente({ personas, recargarPersonas, cerrar, creado }: {
     personas: PersonaResumen[];
+    recargarPersonas: () => void;
     cerrar: () => void;
     creado: (id: string) => void;
-    irPersonas: () => void;
 }) {
     const s = useServicios();
     const [tipo, setTipo] = useState(TIPO_POR_DEFECTO);
     const t = obtenerTipo(tipo);
+    const alInicio = clienteAlInicio(t);
+    const [clienteId, setClienteId] = useState('');
+    const [nuevaPersona, setNuevaPersona] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [trabajando, setTrabajando] = useState(false);
 
@@ -164,7 +168,7 @@ function NuevoExpediente({ personas, cerrar, creado, irPersonas }: {
             const exp = await s.crearExpediente.ejecutar({
                 tipo,
                 materia: f.materia ?? '',
-                clienteId: f.clienteId ?? '',
+                clienteId: alInicio ? clienteId : undefined,
                 referencia: f.referencia,
                 juzgado: t.judicial ? f.juzgado : undefined,
                 nroCausa: t.judicial ? f.nroCausa : undefined,
@@ -179,58 +183,76 @@ function NuevoExpediente({ personas, cerrar, creado, irPersonas }: {
     }
 
     return (
-        <Modal
-            titulo="Nuevo expediente"
-            ancho="grande"
-            cerrar={cerrar}
-            pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button><button type="submit" form="form-nuevo-exp" className="btn btn-pri" disabled={trabajando || personas.length === 0}>Crear expediente</button></>}
-        >
-            <Aviso error={error} />
-            <div>
-                {GRUPOS_TIPO.map((g) => (
-                    <div key={g}>
-                        <h4 className="grupo-titulo">{g}</h4>
-                        <div className="tipos-grid">
-                            {TIPOS_EXPEDIENTE.filter((x) => x.grupo === g).map((x) => (
-                                <button key={x.clave} type="button" className={`tipo-opcion${x.clave === tipo ? ' sel' : ''}`} onClick={() => setTipo(x.clave)}>
-                                    {x.etiqueta}
-                                </button>
-                            ))}
+        <>
+            <Modal
+                titulo="Nuevo expediente"
+                ancho="grande"
+                cerrar={cerrar}
+                pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button><button type="submit" form="form-nuevo-exp" className="btn btn-pri" disabled={trabajando}>Crear expediente</button></>}
+            >
+                <Aviso error={error} />
+                <div>
+                    {GRUPOS_TIPO.map((g) => (
+                        <div key={g}>
+                            <h4 className="grupo-titulo">{g}</h4>
+                            <div className="tipos-grid">
+                                {TIPOS_EXPEDIENTE.filter((x) => x.grupo === g).map((x) => (
+                                    <button key={x.clave} type="button" className={`tipo-opcion${x.clave === tipo ? ' sel' : ''}`} onClick={() => setTipo(x.clave)}>
+                                        {x.etiqueta}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                ))}
-            </div>
-
-            {personas.length === 0 && (
-                <Alerta tipo="adv">
-                    Primero registra al cliente. <button type="button" className="btn btn-enlace" onClick={irPersonas}>Ir a Personas</button>
-                </Alerta>
-            )}
-
-            <form id="form-nuevo-exp" className="form-grid" onSubmit={(e) => void enviar(e)}>
-                <Campo etiqueta="Asunto *" ancho><input name="materia" required placeholder="Ej.: Cumplimiento de contrato · Compraventa lote 12" /></Campo>
-                <Campo etiqueta="Cliente *">
-                    <select name="clienteId" required defaultValue="">
-                        <option value="" disabled>Elegir…</option>
-                        {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </select>
-                </Campo>
-                <Campo etiqueta="Referencia"><input name="referencia" /></Campo>
-                {t.judicial && (
-                    <>
-                        <Campo etiqueta="Juzgado / tribunal"><input name="juzgado" /></Campo>
-                        <Campo etiqueta="N° de causa" ayuda="Lo asigna la autoridad; distinto del código interno."><input name="nroCausa" /></Campo>
-                    </>
-                )}
-                <fieldset key={tipo} style={{ display: 'contents', border: 0, padding: 0 }}>
-                    {t.campos.map((c) => (
-                        <Campo key={c.clave} etiqueta={c.etiqueta} ancho={esTextoLargo(c.clave)}>
-                            {esTextoLargo(c.clave) ? <textarea name={`caso.${c.clave}`} /> : <input name={`caso.${c.clave}`} />}
-                        </Campo>
                     ))}
-                </fieldset>
-            </form>
-            {t.campos.length > 0 && <p className="suave">Los datos del caso son opcionales: se usan como {'{{caso.…}}'} en los modelos y puedes completarlos después.</p>}
-        </Modal>
+                </div>
+
+                <form id="form-nuevo-exp" className="form-grid" onSubmit={(e) => void enviar(e)}>
+                    <Campo etiqueta="Asunto *" ancho><input name="materia" required placeholder="Ej.: Compraventa de vehículo · Cumplimiento de contrato" /></Campo>
+
+                    {alInicio ? (
+                        <div className="campo ancho">
+                            <span className="campo-etiq">Cliente *</span>
+                            <div className="acciones">
+                                <select value={clienteId} onChange={(ev) => setClienteId(ev.target.value)} required style={{ flex: 1 }}>
+                                    <option value="" disabled>Elegir…</option>
+                                    {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                                </select>
+                                <button type="button" className="btn btn-sec btn-sm" onClick={() => setNuevaPersona(true)}>+ Nueva persona</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="ancho">
+                            <Alerta tipo="info">
+                                En contratos y documentos privados el cliente se define al final: registra a las partes en la pestaña «Datos» y marca cuál de ellas es tu cliente.
+                            </Alerta>
+                        </div>
+                    )}
+
+                    <Campo etiqueta="Referencia"><input name="referencia" /></Campo>
+                    {t.judicial && (
+                        <>
+                            <Campo etiqueta="Juzgado / tribunal"><input name="juzgado" /></Campo>
+                            <Campo etiqueta="N° de causa" ayuda="Lo asigna la autoridad; distinto del código interno."><input name="nroCausa" /></Campo>
+                        </>
+                    )}
+                    <fieldset key={tipo} style={{ display: 'contents', border: 0, padding: 0 }}>
+                        {t.campos.map((c) => (
+                            <Campo key={c.clave} etiqueta={c.etiqueta} ancho={esTextoLargo(c.clave)}>
+                                {esTextoLargo(c.clave) ? <textarea name={`caso.${c.clave}`} /> : <input name={`caso.${c.clave}`} />}
+                            </Campo>
+                        ))}
+                    </fieldset>
+                </form>
+                {t.campos.length > 0 && <p className="suave">Los datos del caso son opcionales: se usan como {'{{caso.…}}'} en los modelos y puedes completarlos después.</p>}
+            </Modal>
+
+            {nuevaPersona && (
+                <FormularioPersona
+                    personas={personas}
+                    cerrar={() => setNuevaPersona(false)}
+                    guardado={(id) => { setNuevaPersona(false); recargarPersonas(); setClienteId(id); avisar('Persona creada'); }}
+                />
+            )}
+        </>
     );
 }

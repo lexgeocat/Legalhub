@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { hoyISO } from '../../domain/filtros/fecha';
 import { VERSION_APP } from '../../domain/version';
 import { Alerta, Aviso, Campo, Modal, avisar, confirmar } from '../comunes';
+import { FormularioPersona } from '../FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 
 type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | null;
@@ -21,6 +22,8 @@ export function Configuracion() {
     const [auditoria, setAuditoria] = useState<{ ok: boolean; texto: string } | null>(null);
     const [respaldoOk, setRespaldoOk] = useState<string | null>(null);
     const [restaurado, setRestaurado] = useState<string | null>(null);
+    const [fichaAbogado, setFichaAbogado] = useState<{ id?: string } | null>(null);
+    const [abogadoSel, setAbogadoSel] = useState<string | null>(null);
 
     async function guardar(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -162,12 +165,22 @@ export function Configuracion() {
                             </div>
                         )}
 
-                        <Campo etiqueta="Abogado (persona)" ayuda={naturales.length === 0 ? 'Registra primero al abogado en la sección Personas.' : undefined}>
-                            <select name="abogadoPersonaId" defaultValue={c.abogadoPersonaId ?? ''}>
+                        <Campo etiqueta="Abogado (persona)" ayuda={naturales.length === 0 ? 'Aún no registraste tus datos: usa «Registrar mis datos».' : undefined}>
+                            <select name="abogadoPersonaId" value={abogadoSel ?? c.abogadoPersonaId ?? ''} onChange={(e) => setAbogadoSel(e.target.value)}>
                                 <option value="">—</option>
                                 {naturales.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         </Campo>
+                        <div className="campo">
+                            <span className="campo-etiq">Mis datos</span>
+                            <div className="acciones">
+                                <button type="button" className="btn btn-sec btn-sm" onClick={() => setFichaAbogado({})}>Registrar mis datos…</button>
+                                {(abogadoSel ?? c.abogadoPersonaId) && (
+                                    <button type="button" className="btn btn-fan btn-sm"
+                                        onClick={() => setFichaAbogado({ id: (abogadoSel ?? c.abogadoPersonaId) as string })}>Editar mis datos…</button>
+                                )}
+                            </div>
+                        </div>
                         <Campo etiqueta="Matrícula profesional">
                             <input name="abogadoMatricula" defaultValue={c.abogadoMatricula} />
                         </Campo>
@@ -244,6 +257,20 @@ export function Configuracion() {
                     <Alerta tipo="ok">{restaurado}</Alerta>
                     <p className="suave">La aplicación se recargará para usar los datos restaurados.</p>
                 </Modal>
+            )}
+
+            {fichaAbogado && (
+                <FormularioPersona
+                    id={fichaAbogado.id}
+                    personas={personas.datos ?? []}
+                    cerrar={() => setFichaAbogado(null)}
+                    guardado={(id) => {
+                        setFichaAbogado(null);
+                        setAbogadoSel(id);
+                        personas.recargar();
+                        avisar('Datos guardados. Pulsa «Guardar configuración» para fijarte como abogado.');
+                    }}
+                />
             )}
         </div>
     );

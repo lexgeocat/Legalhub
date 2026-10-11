@@ -37,7 +37,7 @@ const RE_PROFESION = /(?:de\s+profesi[oó]n|de\s+ocupaci[oó]n|de\s+oficio|profe
 const RE_NACIDO = /nacid[oa]\s+(?:el\s+)?(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de|del)\s+(\d{4})/i;
 const NO_PROFESION = /c\.?\s?i\b|c[eé]dula|domicili|vecin|resident|mayor|h[aá]bil|nacid|natural|nacionalidad|^con\s|^de\s/i;
 
-function partirNombre(completo: string): Pick<Generales, 'nombres' | 'apellidoPaterno' | 'apellidoMaterno'> {
+export function partirNombre(completo: string): Pick<Generales, 'nombres' | 'apellidoPaterno' | 'apellidoMaterno'> {
     const unidas: string[] = [];
     let prefijo = '';
     for (const p of completo.split(/\s+/).filter(Boolean)) {

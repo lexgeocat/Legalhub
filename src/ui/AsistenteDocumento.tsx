@@ -1,6 +1,6 @@
 // src/ui/AsistenteDocumento.tsx
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { camposParaFormulario, esCampoCaso, esTextoLargo } from '../application/camposModelo';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { camposParaFormulario, esCampoCaso, esTextoLargo, fichaDeModelo } from '../application/camposModelo';
 import type { DocumentoPreparado } from '../application/casosDeUso/generarDocumento';
 import type { ResultadoImportacion } from '../application/casosDeUso/importarModelo';
 import type { ExpedienteResumen, ModeloResumen } from '../application/consultas';
@@ -12,7 +12,7 @@ import {
 } from '../domain/fuenteModelo';
 import { revisarTexto, type HallazgoTexto } from '../domain/revisionTexto';
 import { asignarRuta, leerRuta } from '../domain/rutas';
-import { claveCampo, claveNormalizada } from '../domain/texto';
+import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../domain/texto';
 import type { Servicios } from '../infrastructure/composicion';
 import { ActualizarModelo } from './ActualizarModelo';
 import {
@@ -21,7 +21,7 @@ import {
 import { EditorDocumento } from './EdicionDocumento';
 import { Hoja } from './Hoja';
 import { mensajeError, useCargar, useServicios } from './servicios';
-import { datoDeParteEnRuta } from '../domain/catalogo';
+import { DATOS_FICHA, datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
 
 interface Borrador {
     modelo: ModeloResumen;
@@ -29,6 +29,7 @@ interface Borrador {
     faltantes: CampoEsquema[];
     avisos: string[];
     valores: Record<string, string>;
+    grupos: { nombre: string; campos: CampoEsquema[] }[];
 }
 
 /** Lo necesario para mostrar el documento ya completado, con el aspecto del editor. */
@@ -61,7 +62,7 @@ type Paso =
 
 type PestanaVerif = 'documento' | 'datos';
 
-const ETAPAS = ['Modelo', 'Datos', 'Revisar', 'Listo'];
+const ETAPAS = ['Modelo', 'Datos que faltan', 'Vista previa y edición', 'Generado'];
 const INDICE: Record<Paso['n'], number> = { elegir: 0, formulario: 1, verificar: 2, listo: 3 };
 const NUMERICOS = new Set(['moneda', 'dolares', 'superficie', 'numero']);
 
@@ -75,6 +76,30 @@ const sinGenero = (v: unknown): boolean =>
         return g !== 'M' && g !== 'F';
     });
 const esLargo = (c: CampoEsquema) => c.tipo === 'texto_largo' || esTextoLargo(ultimo(c.path));
+
+/** Los datos de las partes se llenan en la pestaña «Datos», no aquí. */
+function esPathDeParte(path: string, roles: readonly string[]): boolean {
+    const primero = path.split('.')[0];
+    return roles.some((r) => mismoRol(r, primero));
+}
+
+/** Ordena los datos que faltan según las categorías (grupos) del modelo. */
+function agruparFaltantes(faltantes: CampoEsquema[], fuente: FuenteModelo | null): { nombre: string; campos: CampoEsquema[] }[] {
+    const grupos = fuente?.grupos ?? [];
+    const nombreDe = (c: CampoEsquema): string => {
+        const segs = c.path.split('.');
+        const clave = segs.length === 2 && claveNormalizada(segs[0]) === 'caso' ? claveCampo(segs[1]) : '';
+        const campo = clave ? fuente?.campos.find((x) => claveCampo(x.clave) === clave) : undefined;
+        return grupos.find((g) => g.id === campo?.grupo)?.nombre ?? 'Otros datos';
+    };
+    const salida = new Map<string, CampoEsquema[]>();
+    for (const g of grupos) salida.set(g.nombre, []);
+    for (const c of faltantes) {
+        const n = nombreDe(c);
+        salida.set(n, [...(salida.get(n) ?? []), c]);
+    }
+    return [...salida].filter(([, l]) => l.length > 0).map(([nombre, campos]) => ({ nombre, campos }));
+}
 
 function leerEsquema(json: string): CampoEsquema[] {
     try {

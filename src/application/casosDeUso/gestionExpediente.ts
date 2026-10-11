@@ -24,7 +24,7 @@ export interface CambiosExpediente {
     estado?: string;
     juzgado?: string;
     nroCausa?: string;
-    clienteId?: string;
+    clienteId?: string | null;
     modeloId?: string | null;
     datos?: Record<string, string>;
 }
@@ -48,8 +48,8 @@ export class ActualizarExpediente {
         if (c.juzgado !== undefined) v.juzgado = c.juzgado.trim() || null;
         if (c.nroCausa !== undefined) v.nro_causa = c.nroCausa.trim() || null;
         if (c.clienteId !== undefined) {
-            if (!c.clienteId) throw new ErrorDeDatos('Elige al cliente');
-            v.cliente_id = c.clienteId;
+            if (c.clienteId === '') throw new ErrorDeDatos('Elige al cliente');
+            v.cliente_id = c.clienteId; // null = sin cliente definido (contratos y documentos)
         }
         if (c.modeloId !== undefined) v.modelo_id = c.modeloId || null;
         if (c.datos !== undefined) v.datos_json = JSON.stringify(limpiarDatos(c.datos));

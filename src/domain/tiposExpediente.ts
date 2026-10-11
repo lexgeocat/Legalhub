@@ -74,3 +74,6 @@ const EXTRA = ['demandante', 'demandado', 'tercero', 'acusado', 'denunciante', '
 export const ROLES_CONOCIDOS: readonly string[] = [
     ...new Set([...EXTRA, ...TIPOS_EXPEDIENTE.flatMap((t) => t.roles)].map(normalizarRol)),
 ];
+
+/** Procesos y trámites: el cliente se conoce desde el inicio. En contratos y documentos se define al final, entre las partes. */
+export const clienteAlInicio = (t: TipoExpediente): boolean => t.grupo !== 'Contratos y documentos';

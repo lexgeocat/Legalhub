@@ -1,4 +1,4 @@
-import { ROL_PENDIENTE, datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
+import { CAMPOS_PERSONA, DATOS_FICHA, ROL_PENDIENTE, datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
 import type { CampoPropio, FuenteModelo, GrupoDatos, TipoCampo } from '../domain/fuenteModelo';
 import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../domain/texto';
 import { ROLES_CONOCIDOS } from '../domain/tiposExpediente';
@@ -155,6 +155,8 @@ export function camposDesdeEsquema(esquema: CampoEsquema[]): CampoPropio[] {
 /* ---------------- Ficha de un modelo: qué pide, para mostrarlo en el expediente ---------------- */
 export interface DatoCasoFicha { clave: string; etiqueta: string; tipo: string; requerido: boolean }
 export interface DatoParteFicha extends DatoCasoFicha { rol: string }
+/** Dato de la ficha de la persona que usa el modelo: «vendedor.nombre», «comprador.ci»… */
+export interface UsoFichaParte { rol: string; clave: string; requerido: boolean }
 export interface FichaModelo {
     /** Roles (singular) que usa el modelo: vendedor, comprador… */
     roles: string[];
@@ -162,7 +164,13 @@ export interface FichaModelo {
     caso: DatoCasoFicha[];
     /** Datos propios de las partes («vendedor.datos.x») que pide el modelo. */
     datosParte: DatoParteFicha[];
+    /** Datos de la ficha de la persona que usa el modelo, por rol. */
+    fichaParte: UsoFichaParte[];
 }
+
+const NO_FICHA = new Set(['datos', 'representante', 'id', 'tipo', 'genero', 'porcentaje', 'domicilio_procesal']);
+const EN_FICHA = new Set<string>(CAMPOS_PERSONA.filter((k) => !NO_FICHA.has(k)));
+const ALIAS_FICHA: Record<string, string> = { nombre_completo: 'nombre', ci_datos: 'ci' };
 
 export function fichaDeModelo(esquema: CampoEsquema[], rolesDeclarados: readonly string[] = []): FichaModelo {
     const roles = new Set(rolesDeclarados.map(normalizarRol).filter(Boolean));
@@ -172,6 +180,7 @@ export function fichaDeModelo(esquema: CampoEsquema[], rolesDeclarados: readonly
     };
     const caso = new Map<string, DatoCasoFicha>();
     const datosParte = new Map<string, DatoParteFicha>();
+    const fichaParte = new Map<string, UsoFichaParte>();
 
     for (const c of esquema) {
         const ambito = c.ambito ?? [];
@@ -200,6 +209,21 @@ export function fichaDeModelo(esquema: CampoEsquema[], rolesDeclarados: readonly
             continue;
         }
 
+        // Dato de la ficha de una persona: «vendedor.nombre» o, dentro de un bloque, «nombre».
+        const ult = claveNormalizada(segs[segs.length - 1]);
+        let rolF = '';
+        if (segs.length === 2) rolF = primero;
+        else if (segs.length === 1) for (let i = ambito.length - 1; i >= 0 && !rolF; i--) rolF = canonico(ambito[i]);
+        if (rolF && EN_FICHA.has(ult)) {
+            roles.add(rolF);
+            const clave = ALIAS_FICHA[ult] ?? ult;
+            const k = `${rolF}|${clave}`;
+            const previo = fichaParte.get(k);
+            if (previo) previo.requerido ||= c.requerido;
+            else fichaParte.set(k, { rol: rolF, clave, requerido: c.requerido });
+            continue;
+        }
+
         if (segs.length === 2 && claveNormalizada(segs[0]) === 'caso') {
             const clave = claveCampo(segs[1]);
             if (!clave) continue;
@@ -208,5 +232,58 @@ export function fichaDeModelo(esquema: CampoEsquema[], rolesDeclarados: readonly
             else caso.set(clave, { clave, etiqueta: c.etiqueta || etiquetaRol(clave), tipo: c.tipo || 'texto', requerido: c.requerido });
         }
     }
-    return { roles: [...roles], caso: [...caso.values()], datosParte: [...datosParte.values()] };
+    return {
+        roles: [...roles], caso: [...caso.values()], datosParte: [...datosParte.values()], fichaParte: [...fichaParte.values()],
+    };
+}
+
+/* ---------------- Categorías (grupos) del modelo ---------------- */
+export interface DatoSeccion { clave: string; etiqueta: string; tipo: string; requerido: boolean }
+export interface SeccionModelo {
+    id: string;
+    nombre: string;
+    /** Datos del caso de esta categoría. */
+    caso: DatoCasoFicha[];
+    /** Datos de la ficha de las partes (nombre, C.I., domicilio…) de esta categoría. */
+    ficha: DatoSeccion[];
+    /** Datos propios de las partes (municipio, depto…) de esta categoría. */
+    propios: DatoSeccion[];
+}
+
+/** Ordena lo que pide el modelo según los grupos que creó el abogado en el editor. */
+export function seccionesDeModelo(
+    ficha: FichaModelo, grupos: readonly GrupoDatos[] = [], campos: readonly CampoPropio[] = [],
+): SeccionModelo[] {
+    const nueva = (id: string, nombre: string): SeccionModelo => ({ id, nombre, caso: [], ficha: [], propios: [] });
+    const secs = grupos.map((g) => nueva(g.id, g.nombre));
+    const partes = nueva('_partes', 'Datos de las partes');
+    const otros = nueva('_otros', 'Otros datos');
+    const porId = (id?: string) => secs.find((s) => s.id === id);
+
+    for (const c of ficha.caso) {
+        const campo = campos.find((x) => claveCampo(x.clave) === c.clave);
+        (porId(campo?.grupo) ?? otros).caso.push(c);
+    }
+
+    const fichaUsada = new Map<string, boolean>();
+    for (const f of ficha.fichaParte) fichaUsada.set(f.clave, (fichaUsada.get(f.clave) ?? false) || f.requerido);
+    for (const [clave, requerido] of fichaUsada) {
+        const g = grupos.find((x) => x.datos.some((d) => d.ficha && claveCampo(d.clave) === clave));
+        const def = g?.datos.find((d) => d.ficha && claveCampo(d.clave) === clave);
+        const etiqueta = def?.etiqueta || DATOS_FICHA.find((d) => d.clave === clave)?.etiqueta || etiquetaRol(clave);
+        (porId(g?.id) ?? partes).ficha.push({ clave, etiqueta, tipo: def?.tipo ?? 'texto', requerido });
+    }
+
+    const propios = new Map<string, DatoParteFicha>();
+    for (const d of ficha.datosParte) {
+        const previo = propios.get(d.clave);
+        if (previo) previo.requerido ||= d.requerido;
+        else propios.set(d.clave, { ...d });
+    }
+    for (const d of propios.values()) {
+        const g = grupos.find((x) => x.datos.some((y) => !y.ficha && claveCampo(y.clave) === d.clave));
+        (porId(g?.id) ?? partes).propios.push({ clave: d.clave, etiqueta: d.etiqueta, tipo: d.tipo, requerido: d.requerido });
+    }
+
+    return [partes, ...secs, otros].filter((s) => s.caso.length + s.ficha.length + s.propios.length > 0);
 }
