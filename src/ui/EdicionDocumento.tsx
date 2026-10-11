@@ -5,6 +5,7 @@ import {
 } from '../domain/fuenteModelo';
 import { Alerta, confirmar } from './comunes';
 import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo } from './HojaEditable';
+import { CintaLetra } from './CintaLetra';
 
 const ICO = {
     deshacer: 'M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3',
@@ -78,6 +79,8 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                 <div className="ed-cinta" role="toolbar" aria-label="Formato del documento">
                     <Tb titulo="Deshacer (Ctrl+Z)" onClick={() => hoja.current?.deshacer()}><Ico d={ICO.deshacer} /></Tb>
                     <Tb titulo="Rehacer (Ctrl+Y)" onClick={() => hoja.current?.rehacer()}><Ico d={ICO.rehacer} /></Tb>
+                    <Sep />
+                    <CintaLetra config={config} formato={formato} hoja={hoja} />
                     <Sep />
                     <Tb titulo="Negrita (Ctrl+N)" activo={formato.negrita} onClick={() => hoja.current?.comando('negrita')}><b>N</b></Tb>
                     <Tb titulo="Cursiva (Ctrl+K)" activo={formato.cursiva} onClick={() => hoja.current?.comando('cursiva')}><i>K</i></Tb>

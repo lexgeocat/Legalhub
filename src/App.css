@@ -1444,3 +1444,14 @@ textarea {
   text-transform: uppercase;
   color: #8a8f9c;
 }
+
+/* ===== Columnas: región de párrafos en 2 columnas (equivale a una sección continua de Word) ===== */
+.sec-cols {
+  column-count: 2;
+  column-gap: calc(1.25cm * var(--esc, 1));
+  column-fill: balance;
+}
+
+.sec-cols>[data-nc] {
+  break-before: column;
+}

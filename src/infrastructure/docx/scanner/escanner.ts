@@ -12,7 +12,7 @@ const PARTES = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments
 const MARCADOR = /\{\{([\s\S]*?)\}\}/g;
 
 const TIPO_POR_FILTRO: Record<string, string> = {
-  moneda: 'moneda', fecha: 'fecha', superficie: 'superficie', literal: 'numero',
+  moneda: 'moneda', dolares: 'dolares', fecha: 'fecha', fechalarga: 'fecha', superficie: 'superficie', literal: 'numero',
   ci: 'ci', lista: 'lista', concordar: 'concordancia', mayus: 'texto', minus: 'texto', titulo: 'texto',
 };
 

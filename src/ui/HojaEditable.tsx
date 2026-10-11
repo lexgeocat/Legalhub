@@ -52,10 +52,17 @@ export interface FormatoActivo {
     subrayado: boolean;
     alineacion: Alineacion;
     estilo: EstiloParrafo;
+    /** Fuente, tamaño (pt) e interlineado de la selección; null = los base del documento. */
+    fuente: string | null;
+    tamanoPt: number | null;
+    interlineado: number | null;
+    /** Columnas del párrafo donde está el cursor (1 = normal). */
+    columnas: number;
 }
 
 export const FORMATO_INICIAL: FormatoActivo = {
     negrita: false, cursiva: false, subrayado: false, alineacion: 'both', estilo: 'normal',
+    fuente: null, tamanoPt: null, interlineado: null, columnas: 1,
 };
 export interface MenuCampoInfo {
     marcador: string;
@@ -85,17 +92,59 @@ export interface ControlHoja {
     contarPendientes(): number;
     /** Aplica `fn` a todos los campos del documento; si devuelve un marcador lo reemplaza. Devuelve cuántos cambió. */
     reasignar(fn: (marcador: string, ambito: string[]) => string | null): number;
+    /** Solo para lo seleccionado (o lo que escribas desde el cursor / el párrafo del cursor). */
+    fuente(nombre: string): void;
+    tamano(pt: number): void;
+    interlineado(v: number): void;
+    columnas(n: number): void;
+    saltoColumna(): void;
 }
 
 /* ================= DOM ⇄ bloques ================ */
-interface Fmt { b: boolean; i: boolean; u: boolean }
+interface Fmt { b: boolean; i: boolean; u: boolean; fam?: string; pt?: number }
 interface Pieza { texto: string; f: Fmt; chip: boolean; br?: boolean }
 const SIN_FMT: Fmt = { b: false, i: false, u: false };
 
 const esSalto = (n: Node | null): boolean => n instanceof HTMLElement && n.dataset.salto !== undefined;
 const esBr = (n: Node | null | undefined): boolean => !!n && n.nodeName === 'BR';
 const estiloDe = (b: Element): EstiloParrafo => (b.tagName === 'H1' ? 'titulo' : b.tagName === 'H2' ? 'subtitulo' : 'normal');
+/* ----- Regiones de columnas (secciones continuas de Word) ----- */
+function esSeccion(n: Node | null | undefined): n is HTMLElement {
+    return n instanceof HTMLElement && n.classList.contains('sec-cols');
+}
 
+function nuevaSeccion(columnas = 2): HTMLElement {
+    const s = document.createElement('div');
+    s.className = 'sec-cols';
+    s.dataset.cols = String(columnas);
+    return s;
+}
+
+/** Todos los bloques (p, h1, h2 y saltos) en orden, incluidos los que están dentro de una región de columnas. */
+function todosBloques(raiz: HTMLElement): HTMLElement[] {
+    const salida: HTMLElement[] = [];
+    for (const n of Array.from(raiz.children)) {
+        if (!(n instanceof HTMLElement)) continue;
+        if (esSeccion(n)) {
+            for (const h of Array.from(n.children)) if (h instanceof HTMLElement) salida.push(h);
+        } else salida.push(n);
+    }
+    return salida;
+}
+
+/** Saca un párrafo de su región de columnas: lo anterior queda arriba y lo posterior forma otra región debajo. */
+function extraerDeSeccion(b: HTMLElement): void {
+    const sec = b.parentElement;
+    if (!esSeccion(sec)) return;
+    const despues: Node[] = [];
+    for (let x = b.nextSibling; x; x = x.nextSibling) despues.push(x);
+    if (despues.length > 0) {
+        const nueva = nuevaSeccion(Number(sec.dataset.cols) || 2);
+        nueva.append(...despues);
+        sec.after(nueva);
+    }
+    sec.after(b);
+}
 interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo: string; detalle: string; codigo: string }
 
 /** Etiquetas y colores del modelo que se está editando (lo fija el componente al montarse). */
@@ -153,6 +202,11 @@ function tramoADom(t: Tramo): Node {
     if (t.subrayado) n = envolver('u', n);
     if (t.cursiva) n = envolver('i', n);
     if (t.negrita) n = envolver('b', n);
+    if (t.fuente || t.tamanoPt) {
+        const s = spanLetra(t.fuente, t.tamanoPt);
+        s.appendChild(n);
+        n = s;
+    }
     return n;
 }
 
@@ -165,6 +219,11 @@ function parrafoVacio(): HTMLElement {
 function parrafoADom(b: BloqueParrafo): HTMLElement {
     const el = document.createElement(TAG[b.estilo]);
     if (b.alineacion !== BASE[b.estilo]) el.style.textAlign = A_CSS[b.alineacion];
+    if (b.interlineado) {
+        el.dataset.lh = String(b.interlineado);
+        el.style.lineHeight = String(b.interlineado);
+    }
+    if (b.nuevaColumna) el.dataset.nc = '1';
     if (b.tramos.length === 0) {
         el.appendChild(document.createElement('br'));
         return el;
@@ -188,8 +247,24 @@ function saltoADom(): HTMLElement {
 }
 
 function bloquesADom(texto: string): HTMLElement[] {
-    const l = parsearTexto(texto).map((b: Bloque) => (b.tipo === 'salto' ? saltoADom() : parrafoADom(b)));
-    return l.length > 0 ? l : [parrafoVacio()];
+    const salida: HTMLElement[] = [];
+    let sec: HTMLElement | null = null;
+    for (const b of parsearTexto(texto)) {
+        if (b.tipo === 'salto') {
+            salida.push(saltoADom());
+            sec = null;
+        } else if (b.columnas && b.columnas > 1) {
+            if (!sec) {
+                sec = nuevaSeccion(2);
+                salida.push(sec);
+            }
+            sec.appendChild(parrafoADom(b));
+        } else {
+            salida.push(parrafoADom(b));
+            sec = null;
+        }
+    }
+    return salida.length > 0 ? salida : [parrafoVacio()];
 }
 
 /** Texto de un nodo del editor: conserva «\n» y tabulaciones; quita invisibles. */
@@ -208,6 +283,9 @@ function formatoDe(el: HTMLElement, f: Fmt): Fmt {
     if (s.fontStyle) r.i = s.fontStyle === 'italic' || s.fontStyle === 'oblique';
     const dec = s.textDecorationLine || s.textDecoration;
     if (dec) r.u = dec.includes('underline');
+    if (el.dataset.fam) r.fam = el.dataset.fam;
+    const pt = Number(el.dataset.pt);
+    if (pt > 0) r.pt = pt;
     return r;
 }
 
@@ -235,8 +313,16 @@ function aTramos(piezas: Pieza[]): Tramo[] {
     const tramos: Tramo[] = [];
     const poner = (texto: string, f: Fmt, marcador: boolean) => {
         const u = tramos[tramos.length - 1];
-        if (!marcador && u && !u.marcador && u.negrita === f.b && u.cursiva === f.i && u.subrayado === f.u) u.texto += texto;
-        else tramos.push({ texto, negrita: f.b, cursiva: f.i, subrayado: f.u, marcador });
+        if (
+            !marcador && u && !u.marcador && u.negrita === f.b && u.cursiva === f.i && u.subrayado === f.u
+            && u.fuente === f.fam && u.tamanoPt === f.pt
+        ) u.texto += texto;
+        else {
+            tramos.push({
+                texto, negrita: f.b, cursiva: f.i, subrayado: f.u, marcador,
+                ...(f.fam ? { fuente: f.fam } : {}), ...(f.pt ? { tamanoPt: f.pt } : {}),
+            });
+        }
     };
     let corrida: Pieza[] = [];
     const vaciar = () => {
@@ -275,20 +361,34 @@ function leerAlineacion(el: HTMLElement): Alineacion | null {
     return DESDE_CSS[crudo] ?? null;
 }
 
+function bloqueDeElemento(n: HTMLElement, enColumnas: boolean): Bloque {
+    const estilo = estiloDe(n);
+    const piezas: Pieza[] = [];
+    recolectar(n, SIN_FMT, piezas);
+    // El último <br> del bloque es solo relleno, no un salto de línea.
+    if (piezas.length > 0 && piezas[piezas.length - 1].br) piezas.pop();
+    const lh = Number(n.dataset.lh);
+    return {
+        tipo: 'parrafo', alineacion: leerAlineacion(n) ?? BASE[estilo], estilo, tramos: aTramos(piezas),
+        ...(lh > 0 ? { interlineado: lh } : {}),
+        ...(enColumnas ? { columnas: 2, ...(n.dataset.nc ? { nuevaColumna: true } : {}) } : {}),
+    };
+}
+
 function domABloques(raiz: HTMLElement): Bloque[] {
     const salida: Bloque[] = [];
     for (const n of Array.from(raiz.children)) {
         if (!(n instanceof HTMLElement)) continue;
         if (esSalto(n)) {
             salida.push({ tipo: 'salto' });
-            continue;
+        } else if (esSeccion(n)) {
+            for (const h of Array.from(n.children)) {
+                if (!(h instanceof HTMLElement)) continue;
+                salida.push(esSalto(h) ? { tipo: 'salto' } : bloqueDeElemento(h, true));
+            }
+        } else {
+            salida.push(bloqueDeElemento(n, false));
         }
-        const estilo = estiloDe(n);
-        const piezas: Pieza[] = [];
-        recolectar(n, SIN_FMT, piezas);
-        // El último <br> del bloque es solo relleno, no un salto de línea.
-        if (piezas.length > 0 && piezas[piezas.length - 1].br) piezas.pop();
-        salida.push({ tipo: 'parrafo', alineacion: leerAlineacion(n) ?? BASE[estilo], estilo, tramos: aTramos(piezas) });
     }
     return salida;
 }
@@ -402,10 +502,30 @@ function ponerSel(raiz: HTMLElement, sel: SelGuardada | null): void {
     ponerRango(ult instanceof HTMLElement ? alFinal(ult) : inicioDe(raiz));
 }
 
+interface SelNodos { an: Node; ao: number; fn: Node; fo: number }
+
+/** Guarda la selección por nodos (no por rutas): sobrevive a mover párrafos de un contenedor a otro. */
+function guardarNodos(): SelNodos | null {
+    const s = window.getSelection();
+    return s && s.rangeCount > 0 && s.anchorNode && s.focusNode
+        ? { an: s.anchorNode, ao: s.anchorOffset, fn: s.focusNode, fo: s.focusOffset }
+        : null;
+}
+
+function restaurarNodos(g: SelNodos | null): void {
+    const s = window.getSelection();
+    if (!s || !g || !g.an.isConnected || !g.fn.isConnected) return;
+    try {
+        s.setBaseAndExtent(g.an, Math.min(g.ao, largo(g.an)), g.fn, Math.min(g.fo, largo(g.fn)));
+    } catch {
+        /* sin efecto */
+    }
+}
+
 function bloqueRaiz(raiz: HTMLElement, nodo: Node | null): HTMLElement | null {
     let n: Node | null = nodo;
-    while (n && n.parentNode !== raiz) n = n.parentNode;
-    return n instanceof HTMLElement ? n : null;
+    while (n && n.parentNode !== raiz && !(esSeccion(n.parentNode) && n.parentNode.parentNode === raiz)) n = n.parentNode;
+    return n instanceof HTMLElement && !esSeccion(n) ? n : null;
 }
 
 /** Bloque de texto (p, h1, h2) donde está el cursor; null si no hay o es un salto de página. */
@@ -420,8 +540,8 @@ function bloquesSeleccionados(raiz: HTMLElement): HTMLElement[] {
     const s = window.getSelection();
     if (!s || s.rangeCount === 0 || !raiz.contains(s.anchorNode)) return [];
     const r = s.getRangeAt(0);
-    const lista = Array.from(raiz.children).filter((el): el is HTMLElement => {
-        if (!(el instanceof HTMLElement) || esSalto(el) || !r.intersectsNode(el)) return false;
+    const lista = todosBloques(raiz).filter((el) => {
+        if (esSalto(el) || !r.intersectsNode(el)) return false;
         const terminaAlInicio = !r.collapsed && r.endOffset === 0 && !el.contains(r.startContainer) && (r.endContainer === el || el.contains(r.endContainer));
         return !terminaAlInicio;
     });
@@ -531,7 +651,7 @@ function hojasDe(b: HTMLElement): ChildNode[] {
 /** <br> de relleno para un bloque sin contenido; va dentro de los <b>/<i>/<u> vacíos para no perder el formato. */
 function colocarRelleno(b: HTMLElement): void {
     let destino: HTMLElement = b;
-    for (let n = destino.lastElementChild; n && /^(B|I|U)$/.test(n.tagName); n = destino.lastElementChild) {
+    for (let n = destino.lastElementChild; n && /^(B|I|U|SPAN)$/.test(n.tagName); n = destino.lastElementChild) {
         destino = n as HTMLElement;
     }
     destino.appendChild(document.createElement('br'));
@@ -545,12 +665,15 @@ function rellenarSaltoFinal(b: HTMLElement, br: Node | null): void {
 }
 
 function limpiarAtributos(b: HTMLElement): void {
-    if (b.hasAttribute('style') && b.style.length > (b.style.textAlign ? 1 : 0)) {
-        const alin = b.style.textAlign;
+    const alin = b.style.textAlign;
+    const lh = b.dataset.lh ? b.style.lineHeight : '';
+    const propios = (alin ? 1 : 0) + (lh ? 1 : 0);
+    if (b.hasAttribute('style') && b.style.length > propios) {
         b.removeAttribute('style');
         if (alin) b.style.textAlign = alin;
+        if (lh) b.style.lineHeight = lh;
     }
-    for (const e of Array.from(b.querySelectorAll<HTMLElement>('span:not(.mk)'))) {
+    for (const e of Array.from(b.querySelectorAll<HTMLElement>('span:not(.mk):not([data-fam]):not([data-pt])'))) {
         if (e.style.length === 0) continue;
         for (const p of ESTILOS_RUIDO) e.style.removeProperty(p);
         if (e.style.length === 0) e.removeAttribute('style');
@@ -620,42 +743,109 @@ function convertirMarcadores(el: HTMLElement): void {
     }
 }
 
-function normalizar(el: HTMLElement, solo?: HTMLElement | null): void {
+/** Lo que quede suelto en `cont` (texto, <span>, <div>…) pasa a ser párrafo. En la raíz se respetan las regiones de columnas. */
+function agruparSueltos(cont: HTMLElement, raiz: boolean): boolean {
+    let cambio = false;
     let sueltos: Node[] = [];
     const cerrar = (antes: Node | null) => {
         if (sueltos.length === 0) return;
         const p = document.createElement('p');
-        el.insertBefore(p, antes);
+        cont.insertBefore(p, antes);
         for (const n of sueltos) p.appendChild(n);
         sueltos = [];
+        cambio = true;
     };
-    for (const n of Array.from(el.childNodes)) {
-        if (n instanceof HTMLElement && (esSalto(n) || BLOQUES.has(n.tagName))) {
+    for (const n of Array.from(cont.childNodes)) {
+        if (n instanceof HTMLElement && (esSalto(n) || BLOQUES.has(n.tagName) || (raiz && esSeccion(n)))) {
             cerrar(n);
             continue;
         }
         if (n instanceof HTMLElement && n.tagName === 'DIV') {
             cerrar(n);
             renombrar(n, 'p');
+            cambio = true;
             continue;
         }
         if (n.nodeType === 3 && !(n as Text).data.trim() && sueltos.length === 0) {
             n.parentNode?.removeChild(n);
+            cambio = true;
             continue;
         }
         sueltos.push(n);
     }
     cerrar(null);
-    if (el.children.length === 0) el.appendChild(parrafoVacio());
-    if (esSalto(el.lastElementChild)) el.appendChild(parrafoVacio());
+    return cambio;
+}
 
-    if (solo && solo.parentNode === el) {
+/** Un salto de página no cabe dentro de una región de columnas: la parte en dos y el salto queda fuera. */
+function sacarSaltos(sec: HTMLElement): boolean {
+    let cambio = false;
+    for (; ;) {
+        const s = Array.from(sec.children).find((h) => esSalto(h));
+        if (!s) return cambio;
+        cambio = true;
+        const despues: Node[] = [];
+        for (let x = s.nextSibling; x; x = x.nextSibling) despues.push(x);
+        if (despues.length > 0) {
+            const nueva = nuevaSeccion(Number(sec.dataset.cols) || 2);
+            nueva.append(...despues);
+            sec.after(nueva);
+        }
+        if (s.previousSibling) sec.after(s);
+        else sec.before(s);
+    }
+}
+
+/**
+ * Mantiene sanas las regiones de columnas después de cualquier edición (Retroceso, Supr, pegar…):
+ * solo contienen párrafos, no quedan vacías y dos regiones pegadas se vuelven una sola.
+ */
+function repararSecciones(raiz: HTMLElement): boolean {
+    const g = guardarNodos();
+    let cambio = false;
+    for (let i = 0; i < raiz.children.length; i++) {
+        const sec = raiz.children[i];
+        if (!esSeccion(sec)) continue;
+        for (const h of Array.from(sec.children)) {
+            if (!esSeccion(h)) continue;
+            h.replaceWith(...Array.from(h.childNodes));
+            cambio = true;
+        }
+        if (agruparSueltos(sec, false)) cambio = true;
+        if (sacarSaltos(sec)) cambio = true;
+    }
+    for (const sec of Array.from(raiz.children)) {
+        if (!esSeccion(sec)) continue;
+        if (sec.childElementCount === 0) {
+            sec.remove();
+            cambio = true;
+            continue;
+        }
+        const ant = sec.previousElementSibling;
+        if (esSeccion(ant)) {
+            ant.append(...Array.from(sec.childNodes));
+            sec.remove();
+            cambio = true;
+        }
+    }
+    if (cambio) restaurarNodos(g);
+    return cambio;
+}
+
+function normalizar(el: HTMLElement, solo?: HTMLElement | null): void {
+    agruparSueltos(el, true);
+    repararSecciones(el);
+    if (el.children.length === 0) el.appendChild(parrafoVacio());
+    // Detrás de un salto o de una región de columnas siempre hay un párrafo donde seguir escribiendo.
+    if (esSalto(el.lastElementChild) || esSeccion(el.lastElementChild)) el.appendChild(parrafoVacio());
+
+    if (solo && (solo.parentNode === el || esSeccion(solo.parentNode))) {
         convertirMarcadores(solo);
         limpiarBloque(solo);
         return;
     }
     convertirMarcadores(el);
-    for (const b of Array.from(el.children)) if (b instanceof HTMLElement && !esSalto(b)) limpiarBloque(b);
+    for (const b of todosBloques(el)) if (!esSalto(b)) limpiarBloque(b);
 }
 
 /** Bloques abiertos («#rol») en la posición del cursor, según las etiquetas de campo que lo preceden. */
@@ -853,6 +1043,98 @@ function mostrarCursor(raiz: HTMLElement): void {
     else if (rect.top < arriba) cont.scrollTop -= arriba - rect.top;
 }
 
+/* ================= Fuente, tamaño y párrafo (independientes por selección) ================= */
+function spanLetra(fam?: string, pt?: number): HTMLElement {
+    const s = document.createElement('span');
+    if (fam) {
+        s.dataset.fam = fam;
+        s.style.fontFamily = pilaCss(fam);
+    }
+    if (pt) {
+        s.dataset.pt = String(pt);
+        // --esc es la escala de la hoja en pantalla: así el tamaño real (pt) se mantiene proporcional.
+        s.style.fontSize = `calc(${pt}pt * var(--esc, 1))`;
+    }
+    return s;
+}
+
+/** Fuente y tamaño efectivos en un punto del texto (el más cercano hacia arriba). */
+function letraEn(nodo: Node, hasta: HTMLElement): { fam: string | null; pt: number | null } {
+    let fam: string | null = null;
+    let pt: number | null = null;
+    for (let n: Node | null = nodo; n && n !== hasta; n = n.parentNode) {
+        if (!(n instanceof HTMLElement)) continue;
+        if (fam === null && n.dataset.fam) fam = n.dataset.fam;
+        if (pt === null && n.dataset.pt) pt = Number(n.dataset.pt) || null;
+    }
+    return { fam, pt };
+}
+
+/** Nodo donde empieza la selección (con selección, el primer texto dentro del punto de inicio). */
+function nodoInicial(r: Range): Node {
+    let n: Node = r.startContainer;
+    if (n.nodeType === 1 && !r.collapsed) {
+        let h: Node | null = n.childNodes[r.startOffset] ?? null;
+        while (h && h.firstChild && !(h instanceof HTMLElement && h.classList.contains('mk'))) h = h.firstChild;
+        if (h) n = h;
+    }
+    return n;
+}
+
+/** Envuelve en un <span> de fuente/tamaño solo lo que toca la selección (texto y campos). */
+function aplicarLetra(r: Range, c: { fam?: string; pt?: number }): void {
+    const base = r.commonAncestorContainer.nodeType === 3 ? r.commonAncestorContainer.parentNode : r.commonAncestorContainer;
+    if (!base) return;
+    const sc = r.startContainer, so = r.startOffset, ec = r.endContainer, eo = r.endOffset;
+
+    const objetivos: Node[] = [];
+    const w = document.createTreeWalker(base, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode(n: Node): number {
+            if (!r.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
+            if (n.nodeType === 3) {
+                return (n as Text).parentElement?.closest('.mk, [data-salto]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+            }
+            if (n instanceof HTMLElement) {
+                if (n.classList.contains('mk')) return NodeFilter.FILTER_ACCEPT;
+                if (n.dataset.salto !== undefined) return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_SKIP;
+        },
+    });
+    for (let n = w.nextNode(); n; n = w.nextNode()) objetivos.push(n);
+
+    const envueltos: HTMLElement[] = [];
+    for (const n of objetivos) {
+        let destino: Node = n;
+        if (n.nodeType === 3) {
+            let t = n as Text;
+            const desde = t === sc ? so : 0;
+            const hasta = t === ec ? eo : t.length;
+            if (hasta <= desde) continue;
+            if (hasta < t.length) t.splitText(hasta);
+            if (desde > 0) t = t.splitText(desde);
+            destino = t;
+        }
+        const sp = spanLetra(c.fam, c.pt);
+        destino.parentNode?.replaceChild(sp, destino);
+        sp.appendChild(destino);
+        envueltos.push(sp);
+    }
+    if (envueltos.length === 0) return;
+    const nr = document.createRange();
+    nr.setStartBefore(envueltos[0]);
+    nr.setEndAfter(envueltos[envueltos.length - 1]);
+    ponerRango(nr);
+}
+
+function heredarParrafo(de: HTMLElement, a: HTMLElement, alineacion: boolean): void {
+    if (alineacion && de.style.textAlign) a.style.textAlign = de.style.textAlign;
+    if (de.dataset.lh) {
+        a.dataset.lh = de.dataset.lh;
+        a.style.lineHeight = de.style.lineHeight;
+    }
+}
+
 /* ================= Componente ================= */
 const MAX_HISTORIAL = 200;
 const MAX_HISTORIAL_CHARS = 24_000_000;
@@ -864,7 +1146,10 @@ const RAPIDOS = /^(insertText|insertCompositionText|insertReplacementText|delete
 interface Historial { pila: Snap[]; i: number; t0: number; timer: number; pendiente: boolean }
 
 /** HTML del documento sin las alturas que calcula la paginación (no son contenido: no deben ensuciar el historial). */
-const instantanea = (el: HTMLElement) => el.innerHTML.replace(/ style="height: [\d.]+px;"/g, '');
+const instantanea = (el: HTMLElement) => el.innerHTML
+    .replace(/ style="height: [\d.]+px;"/g, '')
+    .replace(/ style="margin-top: [\d.]+px;"/g, '')
+    .replace(/ style=""/g, '');
 
 export function HojaEditable({
     ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito,
@@ -888,6 +1173,7 @@ export function HojaEditable({
     onMenuCampo?: (info: MenuCampoInfo) => void;
 }) {
     const raizRef = useRef<HTMLDivElement>(null);
+    const cfgRef = useRef(config);
     const lienzo = useRef<HTMLDivElement>(null);
     const [ancho, setAncho] = useState(0);
     const guardada = useRef<Range | null>(null);
@@ -987,12 +1273,19 @@ export function HojaEditable({
             }
         };
         const explicito = formatoEn(s.anchorNode, b);
+        const letra = letraEn(nodoInicial(s.getRangeAt(0)), el);
+        const lh = Number(b.dataset.lh);
+        const padre = b.parentNode;
         const f: FormatoActivo = {
             negrita: estilo === 'normal' ? q('bold') : explicito.b,
             cursiva: q('italic'),
             subrayado: q('underline'),
             alineacion: leerAlineacion(b) ?? BASE[estilo],
             estilo,
+            fuente: letra.fam,
+            tamanoPt: letra.pt,
+            interlineado: lh > 0 ? lh : null,
+            columnas: esSeccion(padre) ? 2 : 1,
         };
         const clave = JSON.stringify(f);
         if (clave === ultimoFmt.current) return;
@@ -1087,9 +1380,12 @@ export function HojaEditable({
             const u = el.lastElementChild;
             r = u instanceof HTMLElement ? alFinal(u) : inicioDe(el);
         }
-        if (r.startContainer === el || r.endContainer === el) {
-            const b = el.children[Math.min(r.startOffset, el.children.length - 1)];
-            r = b instanceof HTMLElement ? inicioDe(b) : inicioDe(el);
+        const cont = [r.startContainer, r.endContainer].find((n) => n === el || esSeccion(n));
+        if (cont instanceof HTMLElement) {
+            const hijos = cont.children;
+            const b = hijos[Math.min(cont === r.startContainer ? r.startOffset : r.endOffset, hijos.length - 1)];
+            const destino = esSeccion(b) ? b.firstElementChild : b;
+            r = destino instanceof HTMLElement ? inicioDe(destino) : inicioDe(el);
         }
         const base = r.startContainer.nodeType === 1 ? (r.startContainer as Element) : r.startContainer.parentElement;
         const chip = base?.closest('.mk');
@@ -1142,9 +1438,14 @@ export function HojaEditable({
         const tagOriginal = bloque.tagName.toLowerCase();
         const tag = estiloDe(bloque) !== 'normal' && alFinBloque ? 'p' : tagOriginal;
         const nuevo = document.createElement(tag);
-        if (tag === tagOriginal && bloque.style.textAlign) nuevo.style.textAlign = bloque.style.textAlign;
+        heredarParrafo(bloque, nuevo, tag === tagOriginal);
         nuevo.appendChild(resto);
         bloque.after(nuevo);
+        if (bloque.dataset.nc && esVacio(bloque)) {
+            // Enter al inicio de un párrafo que abre columna: el salto de columna se va con el texto.
+            nuevo.dataset.nc = bloque.dataset.nc;
+            delete bloque.dataset.nc;
+        }
 
         // Un salto suave justo antes del cursor queda ahora al final del párrafo original: necesita su relleno.
         if (trasBr) {
@@ -1268,6 +1569,122 @@ export function HojaEditable({
     function saltoPagina() {
         insertar('===', true);
     }
+
+    /** Fuente o tamaño: solo lo seleccionado; sin selección, lo que escribas desde el cursor (como en Word). */
+    function formatoLetra(c: { fam?: string; pt?: number }) {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const s = window.getSelection();
+        if (!s || s.rangeCount === 0 || !s.anchorNode || !el.contains(s.anchorNode)) return;
+        registrar();
+        const r = s.getRangeAt(0);
+        if (r.collapsed) {
+            const r2 = rangoActual();
+            r2.collapse(true);
+            const sp = spanLetra(c.fam, c.pt);
+            const zw = document.createTextNode('\u200B');
+            sp.appendChild(zw);
+            r2.insertNode(sp);
+            const nr = document.createRange();
+            nr.setStart(zw, 1);
+            nr.collapse(true);
+            ponerRango(nr);
+        } else {
+            aplicarLetra(r, c);
+        }
+        tras(true);
+    }
+
+    const ponerFuente = (nombre: string) => formatoLetra({ fam: nombre });
+    const ponerTamano = (pt: number) => {
+        if (pt > 0) formatoLetra({ pt });
+    };
+
+    /** Interlineado de los párrafos seleccionados (o del párrafo del cursor). */
+    function ponerInterlineado(v: number) {
+        const el = raizRef.current;
+        if (!el || !(v > 0)) return;
+        foco();
+        const bloques = bloquesSeleccionados(el);
+        if (bloques.length === 0) return;
+        registrar();
+        const base = cfgRef.current.interlineado;
+        for (const b of bloques) {
+            if (Math.abs(v - base) < 0.005) {
+                delete b.dataset.lh;
+                b.style.removeProperty('line-height');
+            } else {
+                b.dataset.lh = String(v);
+                b.style.lineHeight = String(v);
+            }
+            if (!b.getAttribute('style')) b.removeAttribute('style');
+        }
+        tras(true);
+    }
+
+    /**
+ * Como en Word: lo seleccionado pasa a 1 o 2 columnas y el resto del documento no cambia.
+ * Sin selección y pidiendo 1 columna, se deshace toda la región donde está el cursor.
+ */
+    function ponerColumnas(n: number) {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const s = window.getSelection();
+        let objetivo = bloquesSeleccionados(el);
+        if (objetivo.length === 0) return;
+        if (n < 2 && s?.isCollapsed) {
+            const sec = objetivo[0].parentElement;
+            if (esSeccion(sec)) {
+                objetivo = Array.from(sec.children).filter((h): h is HTMLElement => h instanceof HTMLElement && !esSalto(h));
+            }
+        }
+        registrar();
+        const g = guardarNodos();
+        for (const b of objetivo) {
+            if (n >= 2) {
+                if (!esSeccion(b.parentElement)) {
+                    const sec = nuevaSeccion(2);
+                    b.replaceWith(sec);
+                    sec.appendChild(b);
+                }
+            } else {
+                delete b.dataset.nc;
+                extraerDeSeccion(b);
+            }
+        }
+        repararSecciones(el); // une las regiones que quedaron pegadas
+        restaurarNodos(g);
+        tras(true);
+    }
+
+    /** Ctrl+Mayús+Enter: lo que sigue al cursor pasa a la columna siguiente. Solo dentro de columnas. */
+    function saltoColumna() {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        let b = bloqueActual(el);
+        if (!b || !esSeccion(b.parentElement)) return;
+        const r = rangoActual();
+        const pre = document.createRange();
+        pre.selectNodeContents(b);
+        pre.setEnd(r.startContainer, r.startOffset);
+        const alInicio = pre.toString().replace(/\u200B/g, '') === '' && !pre.cloneContents().querySelector('.mk');
+        registrar();
+        if (alInicio) {
+            // Al inicio del párrafo: se activa o se quita el salto de ese párrafo.
+            if (b.dataset.nc) delete b.dataset.nc;
+            else b.dataset.nc = '1';
+            tras(true);
+            return;
+        }
+        nuevoParrafo();
+        b = bloqueActual(el);
+        if (b) b.dataset.nc = '1';
+        tras(true);
+    }
+
     /** Ctrl+E: selecciona todo el documento (igual que el Ctrl+A nativo: la selección queda dentro de los bloques). */
     function seleccionarTodo() {
         foco();
@@ -1293,6 +1710,7 @@ export function HojaEditable({
         ref,
         () => ({
             leerTexto, insertar, comando, alinear, estilo, saltoPagina, deshacer, rehacer, enfocar: foco,
+            fuente: ponerFuente, tamano: ponerTamano, interlineado: ponerInterlineado, columnas: ponerColumnas, saltoColumna,
             contarPendientes: () => raizRef.current?.querySelectorAll('.mk[data-k="pendiente"]').length ?? 0,
             reasignar: (fn) => {
                 const el = raizRef.current;
@@ -1305,6 +1723,7 @@ export function HojaEditable({
 
     /* ----- ciclo de vida ----- */
     useEffect(() => {
+        cfgRef.current = config;
         cb.current = { onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo };
         acc.current = { deshacer, rehacer, parrafo: nuevoParrafo, salto: saltoSuave };
     });
@@ -1409,7 +1828,11 @@ export function HojaEditable({
         if (chipTip.current) ocultarTip();
 
         if (e.key === 'Enter') {
-            if (e.ctrlKey || e.metaKey) { e.preventDefault(); saltoPagina(); }       // Ctrl+Enter: salto de página
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (e.shiftKey) saltoColumna();   // Ctrl+Mayús+Enter: salto de columna
+                else saltoPagina();               // Ctrl+Enter: salto de página
+            }
             else if (e.shiftKey) { e.preventDefault(); saltoSuave(); }              // Shift+Enter: salto de línea
             else if (!e.altKey) { e.preventDefault(); nuevoParrafo(); }             // Enter: párrafo nuevo
             return;

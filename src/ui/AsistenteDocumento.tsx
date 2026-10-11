@@ -63,7 +63,7 @@ type PestanaVerif = 'documento' | 'datos';
 
 const ETAPAS = ['Modelo', 'Datos', 'Revisar', 'Listo'];
 const INDICE: Record<Paso['n'], number> = { elegir: 0, formulario: 1, verificar: 2, listo: 3 };
-const NUMERICOS = new Set(['moneda', 'superficie', 'numero']);
+const NUMERICOS = new Set(['moneda', 'dolares', 'superficie', 'numero']);
 
 const sinValor = (v: unknown) => v === undefined || v === null || v === '';
 const ultimo = (ruta: string) => ruta.split('.').pop() ?? ruta;

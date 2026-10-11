@@ -126,7 +126,7 @@ function EntradaCaso({ c, valor }: { c: CampoDato; valor: string }) {
     if (c.tipo === 'fecha' && (valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor))) {
         return <input type="date" name={nombre} defaultValue={valor} />;
     }
-    if (c.tipo === 'moneda' || c.tipo === 'superficie' || c.tipo === 'numero') {
+    if (c.tipo === 'moneda' || c.tipo === 'dolares' || c.tipo === 'superficie' || c.tipo === 'numero') {
         return <input name={nombre} defaultValue={valor} inputMode="decimal" placeholder="1234,56" />;
     }
     if (c.tipo === 'texto_largo') return <textarea name={nombre} defaultValue={valor} />;
@@ -212,7 +212,7 @@ function EntradaDato({ nombre, tipo, valor }: { nombre: string; tipo: string; va
     if (tipo === 'fecha' && (valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor))) {
         return <input type="date" name={nombre} defaultValue={valor} />;
     }
-    if (tipo === 'moneda' || tipo === 'superficie' || tipo === 'numero') {
+    if (tipo === 'moneda' || tipo === 'dolares' || tipo === 'superficie' || tipo === 'numero') {
         return <input name={nombre} defaultValue={valor} inputMode="decimal" placeholder="1234,56" />;
     }
     if (tipo === 'texto_largo') return <textarea name={nombre} defaultValue={valor} />;

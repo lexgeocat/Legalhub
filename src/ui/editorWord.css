@@ -139,7 +139,7 @@
  * aquí, para que el cursor y la alineación se comporten como en Word.
  * (Antes se llamaba `.vacio`, que es el estado vacío de las listas y le ponía caja, borde y centrado.)
  */
-.hoja-ed>.linea-vacia::before {
+.hoja-ed .linea-vacia::before {
     content: "";
     display: inline-block;
     width: 1px;
@@ -1061,4 +1061,18 @@
     padding: 6px 8px;
     font-size: 12px;
     color: var(--texto-3);
+}
+
+/* Región de columnas dentro del editor: contorno suave; el párrafo que abre columna lleva una barra a la izquierda */
+.hoja-ed>.sec-cols {
+    outline: 1px dashed rgba(139, 155, 217, .55);
+    outline-offset: 3px;
+}
+
+.hoja-ed>.sec-cols>[data-nc] {
+    box-shadow: inset 2px 0 0 #8b9bd9;
+}
+
+.ed-cinta select.ed-fuente {
+    max-width: 190px;
 }

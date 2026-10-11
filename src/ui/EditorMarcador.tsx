@@ -12,9 +12,8 @@ import { Alerta, Aviso, Campo, Modal } from './comunes';
 export interface CambioCampo { clave: string; tipo?: TipoCampo; requerido?: boolean }
 type Aplicar = (marcador: string, cambio?: CambioCampo) => void;
 
-const TIPO_DE_FORMATO: Record<string, TipoCampo> = { fecha: 'fecha', moneda: 'moneda', superficie: 'superficie', literal: 'numero' };
-const TIPOS_ESPECIALES = new Set<TipoCampo>(['fecha', 'moneda', 'superficie', 'numero']);
-
+const TIPO_DE_FORMATO: Record<string, TipoCampo> = { fecha: 'fecha', fechalarga: 'fechalarga', moneda: 'moneda', dolares: 'dolares', superficie: 'superficie', literal: 'numero' };
+const TIPOS_ESPECIALES = new Set<TipoCampo>(['fecha', 'fechalarga', 'moneda', 'dolares', 'superficie', 'numero']);
 function Vista({ marcador, contexto }: { marcador: string; contexto: ContextoMarcadores }) {
     const i = describirMarcador(marcador, contexto);
     return (

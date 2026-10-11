@@ -4,7 +4,8 @@ import {
 } from 'react';
 import type { ConfigPagina } from '../domain/fuenteModelo';
 import {
-    alturaSalto, alturaTotal, crearGeometria, exclusiones, margenesLaterales, paginasCota, paginasPara,
+    alturaSalto, alturaTotal, crearGeometria, exclusiones, finContenido, inicioContenido, margenesLaterales,
+    paginaDe, paginasCota, paginasPara,
     type Exclusion, type GeometriaPagina,
 } from '../domain/paginacion';
 
@@ -117,10 +118,31 @@ export function usePaginacion(
         const origen = () => flujo.getBoundingClientRect().top;
 
         /** Cada salto de página mide lo necesario para que lo siguiente empiece en la hoja siguiente. */
+        const esSeccion = (n: Element) => n.classList.contains('sec-cols');
+
+        /**
+         * Saltos de página: cada uno mide lo necesario para que lo siguiente empiece en la hoja siguiente.
+         * Regiones de columnas: si no caben en lo que queda de la hoja, pasan enteras a la siguiente.
+         */
         const ajustarSaltos = () => {
+            const util = g.alto - g.mSup - g.mInf;
             for (const s of Array.from(raiz.children)) {
-                if (!esSalto(s)) continue;
                 const el = s as HTMLElement;
+                if (esSeccion(el)) {
+                    if (el.style.marginTop) {
+                        el.style.marginTop = '';
+                        if (!el.getAttribute('style')) el.removeAttribute('style');
+                    }
+                    const r = el.getBoundingClientRect();
+                    const y = r.top - origen();
+                    const k = paginaDe(g, y);
+                    if (r.height > util || y + r.height <= finContenido(g, k) + 0.5) continue;
+                    const prev = el.previousElementSibling;
+                    const mb = prev ? Number.parseFloat(getComputedStyle(prev).marginBottom) || 0 : 0;
+                    el.style.marginTop = `${(inicioContenido(g, k + 1) - y + mb).toFixed(2)}px`;
+                    continue;
+                }
+                if (!esSalto(el)) continue;
                 const h = alturaSalto(g, el.getBoundingClientRect().top - origen());
                 const actual = Number.parseFloat(el.style.height) || 0;
                 if (Math.abs(actual - h) > 0.02) el.style.height = `${h}px`;

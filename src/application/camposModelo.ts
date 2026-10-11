@@ -5,16 +5,15 @@ import type { CampoEsquema } from './puertos/motorPlantillas';
 const USO_CASO = /\{\{\s*caso\.([\p{L}_][\p{L}\p{N}_]*)\s*(\?)?/giu;
 
 const TIPO_DESDE_ESQUEMA: Record<string, TipoCampo> = {
-    moneda: 'moneda', fecha: 'fecha', superficie: 'superficie', numero: 'numero',
+    moneda: 'moneda', dolares: 'dolares', fecha: 'fecha', superficie: 'superficie', numero: 'numero',
 };
-
 export function esTextoLargo(clave: string): boolean {
     return /hechos|petitorio|descripcion|observacion|fundamento|consulta|conclusion|facultades|objeto/.test(claveNormalizada(clave));
 }
 
-/** Tipo más probable de un campo «caso.x» según su nombre (precio → monto, fecha_hecho → fecha…). */
 export function tipoSugerido(clave: string): TipoCampo {
     const k = claveNormalizada(clave);
+    if (/dolar|(^|_)(usd|sus|us)(_|$)/.test(k)) return 'dolares';
     if (/precio|monto|cuantia|importe|costo|honorario|canon/.test(k)) return 'moneda';
     if (/(^|_)fecha(_|$)/.test(k)) return 'fecha';
     if (/superficie/.test(k)) return 'superficie';

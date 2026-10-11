@@ -1,11 +1,13 @@
 import { NOMBRES_FUENTES } from './fuentes';
-export type TipoCampo = 'texto' | 'texto_largo' | 'fecha' | 'moneda' | 'numero' | 'superficie';
+export type TipoCampo = 'texto' | 'texto_largo' | 'fecha' | 'fechalarga' | 'moneda' | 'dolares' | 'numero' | 'superficie';
 
 export const TIPOS_CAMPO: { valor: TipoCampo; etiqueta: string }[] = [
     { valor: 'texto', etiqueta: 'Texto corto' },
     { valor: 'texto_largo', etiqueta: 'Texto largo' },
-    { valor: 'fecha', etiqueta: 'Fecha' },
+    { valor: 'fecha', etiqueta: 'Fecha (9 de octubre de 2026)' },
+    { valor: 'fechalarga', etiqueta: 'Fecha completa (nueve (9) días del mes de…)' },
     { valor: 'moneda', etiqueta: 'Monto (Bs.)' },
+    { valor: 'dolares', etiqueta: 'Monto (US$)' },
     { valor: 'numero', etiqueta: 'Número' },
     { valor: 'superficie', etiqueta: 'Superficie (m²)' },
 ];
@@ -183,7 +185,7 @@ export function leerFuente(json: string): FuenteModelo {
     };
 }
 
-const FILTRO_POR_TIPO: Partial<Record<TipoCampo, string>> = { moneda: ' | moneda', fecha: ' | fecha', superficie: ' | superficie' };
+const FILTRO_POR_TIPO: Partial<Record<TipoCampo, string>> = { moneda: ' | moneda', dolares: ' | dolares', fecha: ' | fecha', fechalarga: ' | fechalarga', superficie: ' | superficie' };
 
 export function marcadorDeCampo(c: CampoPropio): string {
     return `{{caso.${c.clave}${c.requerido ? '' : '?'}${FILTRO_POR_TIPO[c.tipo] ?? ''}}}`;
@@ -199,12 +201,29 @@ export function hacerOpcional(marcador: string): string {
 export type Alineacion = 'left' | 'center' | 'right' | 'both';
 export type EstiloParrafo = 'normal' | 'titulo' | 'subtitulo';
 
-export interface Tramo { texto: string; negrita: boolean; cursiva: boolean; subrayado: boolean; marcador: boolean }
+export interface Tramo {
+    texto: string; negrita: boolean; cursiva: boolean; subrayado: boolean; marcador: boolean;
+    /** Fuente y tamaño propios de este fragmento (sin valor = los base del documento). */
+    fuente?: string;
+    tamanoPt?: number;
+}
 
 export type Bloque =
     | { tipo: 'salto' }
-    | { tipo: 'parrafo'; alineacion: Alineacion; estilo: EstiloParrafo; tramos: Tramo[] };
+    | {
+        tipo: 'parrafo'; alineacion: Alineacion; estilo: EstiloParrafo; tramos: Tramo[];
+        /** Interlineado propio del párrafo (sin valor = el base del documento). */
+        interlineado?: number;
+        /** 2 = el párrafo está en una región de dos columnas; sin valor = una columna. */
+        columnas?: number;
+        /** Solo en columnas: el párrafo empieza en la columna siguiente (salto de columna). */
+        nuevaColumna?: boolean;
+    };
 export type BloqueParrafo = Extract<Bloque, { tipo: 'parrafo' }>;
+
+/** Marcas de fuente/tamaño dentro de una línea del texto fuente: ⟪Arial|14⟫texto⟪/⟫ */
+export const ABRE_LETRA = '\u27EA';
+export const CIERRA_LETRA = '\u27EB';
 
 const POR_LETRA: Record<string, Alineacion> = { c: 'center', d: 'right', i: 'left', j: 'both' };
 const LETRA: Record<Alineacion, string> = { center: 'c', right: 'd', left: 'i', both: 'j' };
@@ -213,8 +232,11 @@ const ALINEACION_BASE: Record<EstiloParrafo, Alineacion> = { normal: 'both', tit
 export function tramosDe(linea: string): Tramo[] {
     const tramos: Tramo[] = [];
     let negrita = false, cursiva = false, subrayado = false, buf = '';
+    let fuente: string | undefined;
+    let tam: number | undefined;
+    const letra = () => ({ ...(fuente ? { fuente } : {}), ...(tam ? { tamanoPt: tam } : {}) });
     const vaciar = () => {
-        if (buf) tramos.push({ texto: buf, negrita, cursiva, subrayado, marcador: false });
+        if (buf) tramos.push({ texto: buf, negrita, cursiva, subrayado, marcador: false, ...letra() });
         buf = '';
     };
     for (let i = 0; i < linea.length;) {
@@ -222,13 +244,31 @@ export function tramosDe(linea: string): Tramo[] {
             const fin = linea.indexOf('}}', i + 2);
             if (fin !== -1) {
                 vaciar();
-                tramos.push({ texto: linea.slice(i, fin + 2), negrita, cursiva, subrayado, marcador: true });
+                tramos.push({ texto: linea.slice(i, fin + 2), negrita, cursiva, subrayado, marcador: true, ...letra() });
                 i = fin + 2;
                 continue;
             }
         }
         if (linea[i] === '\u2028') { buf += '\n'; i += 1; continue; }
         if (linea[i] === '\\' && i + 1 < linea.length) { buf += linea[i + 1]; i += 2; continue; }
+        if (linea[i] === ABRE_LETRA) {
+            const fin = linea.indexOf(CIERRA_LETRA, i + 1);
+            if (fin !== -1) {
+                vaciar();
+                const cuerpo = linea.slice(i + 1, fin);
+                if (cuerpo === '/') {
+                    fuente = undefined;
+                    tam = undefined;
+                } else {
+                    const [f = '', t = ''] = cuerpo.split('|');
+                    fuente = f.trim() || undefined;
+                    const n = Number(t.replace(',', '.'));
+                    tam = Number.isFinite(n) && n > 0 ? n : undefined;
+                }
+                i = fin + 1;
+                continue;
+            }
+        }
         if (linea.startsWith('**', i)) { vaciar(); negrita = !negrita; i += 2; continue; }
         if (linea.startsWith('++', i)) { vaciar(); subrayado = !subrayado; i += 2; continue; }
         if (linea[i] === '*') { vaciar(); cursiva = !cursiva; i += 1; continue; }
@@ -247,37 +287,75 @@ export function parsearTexto(texto: string): Bloque[] {
         let resto = linea;
         let alineacion: Alineacion | null = null;
         let estilo: EstiloParrafo = 'normal';
-        for (let n = 0; n < 2; n++) {
+        let interlineado: number | undefined;
+        let columnas = false;
+        let nuevaColumna = false;
+        for (let n = 0; n < 8; n++) {
             const a = /^\[(c|d|i|j)\]\s?/i.exec(resto);
             if (a) { alineacion = POR_LETRA[a[1].toLowerCase()]; resto = resto.slice(a[0].length); continue; }
+            const l = /^\[int=(\d+(?:[.,]\d+)?)\]\s?/i.exec(resto);
+            if (l) { interlineado = Number(l[1].replace(',', '.')); resto = resto.slice(l[0].length); continue; }
+            // Los modelos con 3 o 4 columnas (versión anterior) se leen como 2.
+            const c = /^\[col=[2-4]\]\s?/i.exec(resto);
+            if (c) { columnas = true; resto = resto.slice(c[0].length); continue; }
+            const k = /^\[nc\]\s?/i.exec(resto);
+            if (k) { nuevaColumna = true; resto = resto.slice(k[0].length); continue; }
             const h = /^(#{1,2})\s+/.exec(resto);
             if (h) { estilo = h[1].length === 1 ? 'titulo' : 'subtitulo'; resto = resto.slice(h[0].length); continue; }
             break;
         }
-        return { tipo: 'parrafo', alineacion: alineacion ?? ALINEACION_BASE[estilo], estilo, tramos: tramosDe(resto) };
+        return {
+            tipo: 'parrafo', alineacion: alineacion ?? ALINEACION_BASE[estilo], estilo, tramos: tramosDe(resto),
+            ...(interlineado && interlineado > 0 ? { interlineado } : {}),
+            ...(columnas ? { columnas: 2, ...(nuevaColumna ? { nuevaColumna: true } : {}) } : {}),
+        };
     });
 }
 
 function tramoATexto(t: Tramo): string {
     let o = t.marcador
         ? t.texto
-        : t.texto.replace(/[\\*]/g, '\\$&').replace(/\+\+/g, '\\+\\+').replace(/\n/g, '\u2028');
+        : t.texto.replace(/[\\*\u27EA]/g, '\\$&').replace(/\+\+/g, '\\+\\+').replace(/\n/g, '\u2028');
     if (t.subrayado) o = `++${o}++`;
     if (t.cursiva) o = `*${o}*`;
     if (t.negrita) o = `**${o}**`;
     return o;
 }
 
+/** Agrupa los tramos consecutivos con la misma fuente/tamaño dentro de una sola marca. */
+function tramosATexto(tramos: Tramo[]): string {
+    let salida = '';
+    let abierto = '';
+    for (const t of tramos) {
+        const k = t.fuente || t.tamanoPt ? `${t.fuente ?? ''}|${t.tamanoPt ?? ''}` : '';
+        if (k !== abierto) {
+            if (abierto) salida += `${ABRE_LETRA}/${CIERRA_LETRA}`;
+            if (k) salida += `${ABRE_LETRA}${k}${CIERRA_LETRA}`;
+            abierto = k;
+        }
+        salida += tramoATexto(t);
+    }
+    if (abierto) salida += `${ABRE_LETRA}/${CIERRA_LETRA}`;
+    return salida;
+}
+
+const numTxt = (n: number) => String(Math.round(n * 100) / 100);
+
 export function bloquesATexto(bloques: Bloque[]): string {
     return bloques
         .map((b) => {
             if (b.tipo === 'salto') return '===';
             let pref = '';
+            if (b.columnas && b.columnas > 1) {
+                pref += '[col=2] ';
+                if (b.nuevaColumna) pref += '[nc] ';
+            }
+            if (b.interlineado) pref += `[int=${numTxt(b.interlineado)}] `;
             if (b.alineacion !== ALINEACION_BASE[b.estilo]) pref += `[${LETRA[b.alineacion]}] `;
             if (b.estilo === 'titulo') pref += '# ';
             if (b.estilo === 'subtitulo') pref += '## ';
-            const cuerpo = b.tramos.map(tramoATexto).join('');
-            const seguro = /^(#|\[[cdij]\]|===\s*$)/i.test(cuerpo) ? `\\${cuerpo}` : cuerpo;
+            const cuerpo = tramosATexto(b.tramos);
+            const seguro = /^(#|\[(?:[cdij]\]|int=|col=|nc\])|===\s*$)/i.test(cuerpo) ? `\\${cuerpo}` : cuerpo;
             return pref + seguro;
         })
         .join('\n');

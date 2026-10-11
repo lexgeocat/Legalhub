@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { esTextoLargo, tipoSugerido, usosCaso } from '../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
 import {
-    AREA_MIN_CM, FUENTES_PAGINA, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES,
+    AREA_MIN_CM, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES,
     fuenteVacia, margenesSeguros, presetDe,
     type Alineacion, type CampoPropio, type DatoParte, type GrupoDatos, type ConfigPagina, type FuenteModelo, type Margenes, type TamanoPagina, type TipoCampo,
 } from '../domain/fuenteModelo';
 import { claveCampo, etiquetaRol } from '../domain/texto';
+import { precargarFuentes } from '../domain/fuentes';
+import { CintaLetra, SelectFuente, SelectInterlineado, SelectTamano } from './CintaLetra';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, SelectCategoria, SelectMateria, TablaEsquema,
     avisar, confirmar,
@@ -15,7 +17,6 @@ import { FORMATO_INICIAL, HojaEditable, type ControlHoja, type FormatoActivo, ty
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
 import { ROL_PENDIENTE, etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
-import { GRUPOS_FUENTES, buscarFuente, pilaCss, precargarFuentes } from '../domain/fuentes';
 import { ModalMarcador } from './EditorMarcador';
 import type { ContextoMarcadores } from '../domain/marcadores';
 import { nuevoId } from '../domain/id';
@@ -30,10 +31,9 @@ type Dialogo =
     | { n: 'verificacion' }
     | { n: 'marcador'; actual: string; aplicar: (nuevo: string) => void };
 
-const INTERLINEADOS = [1, 1.15, 1.5, 2];
-const TAMANOS_LETRA = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24];
+
 const PAPEL: Record<TamanoPagina, string> = { carta: 'Carta', oficio: 'Oficio', a4: 'A4' };
-const TIPO_POR_FILTRO: Record<string, TipoCampo> = { moneda: 'moneda', fecha: 'fecha', superficie: 'superficie', literal: 'numero' };
+const TIPO_POR_FILTRO: Record<string, TipoCampo> = { moneda: 'moneda', dolares: 'dolares', fechalarga: 'fechalarga', fecha: 'fecha', superficie: 'superficie', literal: 'numero' };
 const LADOS: (keyof Margenes)[] = ['superior', 'inferior', 'izquierdo', 'derecho'];
 const NOMBRE_LADO: Record<keyof Margenes, string> = {
     superior: 'Superior', inferior: 'Inferior', izquierdo: 'Izquierdo', derecho: 'Derecho',
@@ -62,7 +62,7 @@ const normalizarCampos = (l: CampoPropio[]): CampoPropio[] =>
     });
 
 function tipoDesdeUso(texto: string, clave: string): TipoCampo {
-    const m = new RegExp(`\\{\\{\\s*caso\\.${clave}\\s*\\??\\s*\\|\\s*(moneda|fecha|superficie|literal)`, 'iu').exec(texto);
+    const m = new RegExp(`\\{\\{\\s*caso\\.${clave}\\s*\\??\\s*\\|\\s*(moneda|dolares|fechalarga|fecha|superficie|literal)`, 'iu').exec(texto);
     if (m) return TIPO_POR_FILTRO[m[1].toLowerCase()];
     return esTextoLargo(clave) ? 'texto_largo' : 'texto';
 }
@@ -210,6 +210,12 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     /** Desde la regla: un solo margen, sin quitarle el foco a la hoja. */
     const setMargen = (lado: keyof Margenes, cm: number) => {
         setConfig((c) => ({ ...c, margenes: margenesSeguros({ ...c.margenes, [lado]: cm }, c.tamano) }));
+        tocar();
+    };
+
+    /** Letra base del documento (la que usa todo lo que no tenga formato propio). */
+    const setBase = (p: Partial<ConfigPagina>) => {
+        setConfig((c) => ({ ...c, ...p }));
         tocar();
     };
 
@@ -363,11 +369,6 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
     }, []);
 
     /* ----- listas de la cinta (incluyen el valor actual aunque no sea estándar) ----- */
-    const fuentes = FUENTES_PAGINA.includes(config.fuente) ? FUENTES_PAGINA : [...FUENTES_PAGINA, config.fuente];
-    const tamanos = TAMANOS_LETRA.includes(config.tamanoPt)
-        ? TAMANOS_LETRA : [...TAMANOS_LETRA, config.tamanoPt].sort((a, b) => a - b);
-    const interlineados = INTERLINEADOS.includes(config.interlineado)
-        ? INTERLINEADOS : [...INTERLINEADOS, config.interlineado].sort((a, b) => a - b);
     const preset = presetDe(config.margenes, config.simetricos);
     const mg = config.margenes;
 
@@ -394,26 +395,7 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 <Tb titulo="Deshacer (Ctrl+Z)" onClick={() => hoja.current?.deshacer()}><Ico d={ICO.deshacer} /></Tb>
                 <Tb titulo="Rehacer (Ctrl+Y)" onClick={() => hoja.current?.rehacer()}><Ico d={ICO.rehacer} /></Tb>
                 <Sep />
-                <select className="ed-fuente" aria-label="Fuente" value={config.fuente} onChange={(e) => setCfg({ fuente: e.target.value })}>
-                    {GRUPOS_FUENTES.map((g) => {
-                        const lista = fuentes.filter((f) => (buscarFuente(f)?.categoria ?? 'sistema') === g.id);
-                        if (lista.length === 0) return null;
-                        return (
-                            <optgroup key={g.id} label={g.titulo}>
-                                {lista.map((f) => (
-                                    <option key={f} value={f} title={buscarFuente(f)?.nota} style={{ fontFamily: pilaCss(f) }}>{f}</option>
-                                ))}
-                            </optgroup>
-                        );
-                    })}
-                </select>
-                <select aria-label="Tamaño de letra" value={config.tamanoPt} onChange={(e) => setCfg({ tamanoPt: Number(e.target.value) })}>
-                    {tamanos.map((n) => <option key={n} value={n}>{coma(n)}</option>)}
-                </select>
-                <select aria-label="Interlineado" title="Interlineado" value={config.interlineado}
-                    onChange={(e) => setCfg({ interlineado: Number(e.target.value) })}>
-                    {interlineados.map((n) => <option key={n} value={n}>{coma(n)}</option>)}
-                </select>
+                <CintaLetra config={config} formato={formato} hoja={hoja} />
                 <Sep />
                 <Tb titulo="Negrita (Ctrl+N)" activo={formato.negrita} onClick={() => hoja.current?.comando('negrita')}><b>N</b></Tb>
                 <Tb titulo="Cursiva (Ctrl+K)" activo={formato.cursiva} onClick={() => hoja.current?.comando('cursiva')}><i>K</i></Tb>
@@ -543,6 +525,15 @@ function EditorInterno({ modeloId: idInicial, inicial, volver, guardado }: {
                 <Modal titulo="Propiedades del modelo" cerrar={cerrarDialogo}
                     pie={<><span className="espacio" /><button type="button" className="btn btn-pri" onClick={cerrarDialogo}>Listo</button></>}>
                     <div className="form-grid">
+                        <Campo etiqueta="Fuente base" ayuda="La usa todo el texto que no tenga una fuente propia.">
+                            <SelectFuente valor={config.fuente} onCambio={(f) => setBase({ fuente: f })} />
+                        </Campo>
+                        <Campo etiqueta="Tamaño base (pt)">
+                            <SelectTamano valor={config.tamanoPt} onCambio={(n) => setBase({ tamanoPt: n })} />
+                        </Campo>
+                        <Campo etiqueta="Interlineado base">
+                            <SelectInterlineado valor={config.interlineado} onCambio={(n) => setBase({ interlineado: n })} />
+                        </Campo>
                         <Campo etiqueta="Categoría">
                             <SelectCategoria value={categoria} onChange={(e) => { setCategoria(e.target.value); tocar(); }} />
                         </Campo>

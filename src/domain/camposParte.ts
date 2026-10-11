@@ -6,7 +6,7 @@ import {
 import { analizarMarcador, armarMarcador, type FiltroMarcador } from './marcadores';
 import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from './texto';
 
-const FILTRO_TIPO: Partial<Record<TipoCampo, string>> = { fecha: 'fecha', moneda: 'moneda', superficie: 'superficie' };
+const FILTRO_TIPO: Partial<Record<TipoCampo, string>> = { fecha: 'fecha', fechalarga: 'fechalarga', moneda: 'moneda', dolares: 'dolares', superficie: 'superficie' };
 const esTexto = (t: TipoCampo) => t === 'texto' || t === 'texto_largo';
 
 /** Dato listo para insertar: de una parte (ficha o propio) o del caso. */
@@ -173,20 +173,41 @@ export interface DatoAsignable {
     rol: string | null;
     /** Lo que sigue al rol: «nombre» o «datos.lugar». */
     resto: string;
+    /** true: está escrito sin prefijo dentro del bloque de esa parte («{{nombre}}»). */
+    relativo?: boolean;
 }
 
-/** ¿El marcador es un dato de parte que se puede (re)asignar? Los del caso, cliente, abogado y relativos no. */
-export function datoAsignable(marcador: string, roles: readonly string[]): DatoAsignable | null {
+/**
+ * ¿El marcador es un dato de parte que se puede (re)asignar?
+ * Acepta «sin_parte.x», «rol.x» y, dentro del bloque de una parte, «x» a secas.
+ */
+export function datoAsignable(
+    marcador: string, roles: readonly string[], ambito: readonly string[] = [],
+): DatoAsignable | null {
     const a = analizarMarcador(marcador);
     if (!a || a.tipo !== 'valor') return null;
     const segs = a.ruta.split('.').map((s) => s.trim()).filter(Boolean);
-    if (segs.length < 2) return null;
-    const resto = segs.slice(1);
-    if (!esDatoDePersona(resto)) return null;
-    const raiz = claveNormalizada(segs[0]);
-    if (raiz === ROL_PENDIENTE) return { rol: null, resto: resto.join('.') };
-    const rol = roles.find((r) => mismoRol(r, raiz));
-    return rol ? { rol: normalizarRol(rol), resto: resto.join('.') } : null;
+    if (segs.length === 0) return null;
+
+    // 1) Con rol explícito
+    if (segs.length >= 2) {
+        const resto = segs.slice(1);
+        if (esDatoDePersona(resto)) {
+            const raiz = claveNormalizada(segs[0]);
+            if (raiz === ROL_PENDIENTE) return { rol: null, resto: resto.join('.') };
+            const rol = roles.find((r) => mismoRol(r, raiz));
+            if (rol) return { rol: normalizarRol(rol), resto: resto.join('.') };
+        }
+    }
+
+    // 2) Relativo dentro del bloque de una parte
+    if (esDatoDePersona(segs)) {
+        for (let i = ambito.length - 1; i >= 0; i--) {
+            const rol = roles.find((r) => mismoRol(r, ambito[i]));
+            if (rol) return { rol: normalizarRol(rol), resto: segs.join('.'), relativo: true };
+        }
+    }
+    return null;
 }
 
 /**
@@ -196,7 +217,7 @@ export function datoAsignable(marcador: string, roles: readonly string[]): DatoA
 export function reasignarDato(
     marcador: string, rol: string | null, ambito: readonly string[], roles: readonly string[],
 ): string | null {
-    const d = datoAsignable(marcador, roles);
+    const d = datoAsignable(marcador, roles, ambito);
     const a = analizarMarcador(marcador);
     if (!d || !a) return null;
     if (rol === null && d.rol === null) return null;

@@ -9,13 +9,14 @@
 const ABRE = '\u27E6';
 const CIERRA = '\u27E7';
 
-const PREFIJOS = '(?:\\[(?:c|d|i|j)\\]\\s?|#{1,2}\\s+){0,2}';
+const PREFIJOS = '(?:\\[(?:c|d|i|j)\\]\\s?|\\[int=\\d+(?:\\.\\d+)?\\]\\s?|\\[col=\\d\\]\\s?|\\[nc\\]\\s?|#{1,2}\\s+){0,6}';
 const RE_PREFIJO = new RegExp(`^(${PREFIJOS})`, 'i');
 const RE_ORIGEN = new RegExp(`^${PREFIJOS}(?:\\*{1,3}|\\+\\+)*${ABRE}(\\d+)${CIERRA}`, 'i');
 const RE_MARCA = new RegExp(`${ABRE}(\\d+|<|>)${CIERRA}`, 'g');
 const MARCADOR = /\{\{[\s\S]*?\}\}/g;
 
-const esSoloBloque = (l: string) => /^\s*\{\{\s*[#/][^}]*\}\}\s*$/.test(l);
+const sinPrefijo = (l: string) => l.slice((RE_PREFIJO.exec(l)?.[1] ?? '').length);
+const esSoloBloque = (l: string) => /^\s*\{\{\s*[#/][^}]*\}\}\s*$/.test(sinPrefijo(l));
 const tieneBloque = (l: string) => /\{\{\s*[#/]/.test(l);
 
 export const normalizar = (s: string): string => s.replace(/[\u200B\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
@@ -180,7 +181,7 @@ function estructuraDeBloques(modelo: readonly string[]): Estructura {
     const pila: number[] = [];
     modelo.forEach((l, i) => {
         if (!esSoloBloque(l)) return;
-        if (/^\s*\{\{\s*#/.test(l)) {
+        if (/^\s*\{\{\s*#/.test(sinPrefijo(l))) {
             pila.push(i);
             return;
         }
@@ -196,7 +197,7 @@ function estructuraDeBloques(modelo: readonly string[]): Estructura {
 }
 
 const resumen = (s: string): string => {
-    const t = s.replace(/\u2028/g, ' ').replace(/\*\*|\+\+/g, '').trim();
+    const t = s.replace(/\u2028/g, ' ').replace(/\u27EA[^\u27EB]*\u27EB/g, '').replace(/\*\*|\+\+/g, '').trim();
     if (t === '') return '(párrafo vacío)';
     return t.length > 80 ? `${t.slice(0, 80)}…` : t;
 };

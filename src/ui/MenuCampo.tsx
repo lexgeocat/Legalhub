@@ -26,32 +26,38 @@ export function MenuCampo({ info, partes, contexto, cerrar }: {
     }, [info]);
 
     useEffect(() => {
+        const abierto = Date.now();
         const fuera = (e: Event) => {
             if (!ref.current?.contains(e.target as Node)) cerrar();
         };
         const tecla = (e: KeyboardEvent) => {
             if (e.key === 'Escape') cerrar();
         };
+        // El navegador puede desplazar el texto al hacer clic derecho: se ignora justo al abrir.
+        const desplazar = () => {
+            if (Date.now() - abierto > 250) cerrar();
+        };
         window.addEventListener('mousedown', fuera, true);
         window.addEventListener('keydown', tecla, true);
         window.addEventListener('blur', cerrar);
         window.addEventListener('resize', cerrar);
-        window.addEventListener('scroll', cerrar, true);
+        window.addEventListener('scroll', desplazar, true);
         return () => {
             window.removeEventListener('mousedown', fuera, true);
             window.removeEventListener('keydown', tecla, true);
             window.removeEventListener('blur', cerrar);
             window.removeEventListener('resize', cerrar);
-            window.removeEventListener('scroll', cerrar, true);
+            window.removeEventListener('scroll', desplazar, true);
         };
     }, [cerrar]);
 
-    const actual = datoAsignable(info.marcador, partes);
+    const asignable = (m: string) => datoAsignable(m, partes, info.ambito);
+    const actual = asignable(info.marcador);
     const asignado = (m: string) => {
-        const d = datoAsignable(m, partes);
+        const d = asignable(m);
         return !!d && d.rol !== null;
     };
-    const asignablesSel = info.seleccion.filter((m) => datoAsignable(m, partes) !== null).length;
+    const asignablesSel = info.seleccion.filter((m) => asignable(m) !== null).length;
     const lote = info.seleccion.length > 1 && asignablesSel > 0;
     const puede = lote || actual !== null;
     const hayAsignado = lote ? info.seleccion.some(asignado) : asignado(info.marcador);

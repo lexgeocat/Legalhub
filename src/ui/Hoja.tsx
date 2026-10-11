@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
     CONFIG_POR_DEFECTO, PAGINA_CM,
     type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
@@ -8,7 +8,9 @@ import { pilaCss } from '../domain/fuentes';
 import { describirMarcador } from '../domain/marcadores';
 const PX_POR_CM = 37.7953;
 
-function Tramos({ tramos, estilo, resaltar }: { tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean }) {
+function Tramos({ tramos, estilo, resaltar, escala }: {
+    tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean; escala: number;
+}) {
     if (tramos.length === 0) return <>{'\u00A0'}</>;
     return (
         <>
@@ -29,6 +31,8 @@ function Tramos({ tramos, estilo, resaltar }: { tramos: Tramo[]; estilo: BloqueP
                             fontWeight: t.negrita || estilo !== 'normal' ? 700 : undefined,
                             fontStyle: t.cursiva ? 'italic' : undefined,
                             textDecoration: t.subrayado ? 'underline' : undefined,
+                            fontFamily: t.fuente ? pilaCss(t.fuente) : undefined,
+                            fontSize: t.tamanoPt ? `${(t.tamanoPt * escala).toFixed(2)}pt` : undefined,
                         }}
                     >
                         {t.texto}
@@ -38,6 +42,7 @@ function Tramos({ tramos, estilo, resaltar }: { tramos: Tramo[]; estilo: BloqueP
         </>
     );
 }
+
 function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: ConfigPagina; escala: number; resaltar: boolean }) {
     const titulo = b.estilo === 'titulo';
     const sub = b.estilo === 'subtitulo';
@@ -46,6 +51,8 @@ function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: Conf
         textAlign: b.alineacion === 'both' ? 'justify' : b.alineacion,
         margin: `${(titulo ? 12 : sub ? 6 : 0) * escala}pt 0 ${(titulo ? 12 : sub ? 6 : 6) * escala}pt`,
         fontSize: titulo ? `${(cfg.tamanoPt + 2) * escala}pt` : undefined,
+        lineHeight: b.interlineado,
+        breakBefore: b.nuevaColumna && (b.columnas ?? 1) > 1 ? 'column' : undefined,
         textIndent:
             cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')
                 ? `${1.25 * escala}cm`
@@ -53,7 +60,7 @@ function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: Conf
     };
     return (
         <p className={esBloque ? 'mk-bloque' : undefined} style={estilo}>
-            <Tramos tramos={b.tramos} estilo={b.estilo} resaltar={resaltar} />
+            <Tramos tramos={b.tramos} estilo={b.estilo} resaltar={resaltar} escala={escala} />
         </p>
     );
 }
@@ -81,6 +88,32 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
     const pg = usePaginacion(raiz, config, PX_POR_CM * escala, bloques);
 
+    // Los párrafos consecutivos en columnas van dentro de una región de 2 columnas.
+    const piezas: ReactNode[] = [];
+    for (let i = 0; i < bloques.length;) {
+        const b = bloques[i];
+        if (b.tipo === 'salto') {
+            piezas.push(<div key={i} className="pg-salto" data-salto="1"><span>Salto de página</span></div>);
+            i += 1;
+            continue;
+        }
+        if ((b.columnas ?? 1) < 2) {
+            piezas.push(<ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} />);
+            i += 1;
+            continue;
+        }
+        const grupo: ReactNode[] = [];
+        let j = i;
+        while (j < bloques.length) {
+            const x = bloques[j];
+            if (x.tipo !== 'parrafo' || (x.columnas ?? 1) < 2) break;
+            grupo.push(<ParrafoHoja key={j} b={x} cfg={config} escala={escala} resaltar={resaltar} />);
+            j += 1;
+        }
+        piezas.push(<div key={`c${i}`} className="sec-cols">{grupo}</div>);
+        i = j;
+    }
+
     return (
         <div className="hoja-wrap" ref={cont}>
             <div className="pg-caja" style={pg.estiloCaja}>
@@ -96,16 +129,11 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
                             tabSize: `${(1.25 * escala).toFixed(3)}cm`,
                             fontSize: pt(config.tamanoPt),
                             lineHeight: config.interlineado,
-                        }}
+                            '--esc': escala,
+                        } as CSSProperties}
                     >
                         {bloques.length === 0 && <p className="hoja-vacia">El documento está vacío.</p>}
-                        {bloques.map((b, i) =>
-                            b.tipo === 'salto' ? (
-                                <div key={i} className="pg-salto" data-salto="1"><span>Salto de página</span></div>
-                            ) : (
-                                <ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} />
-                            ),
-                        )}
+                        {piezas}
                     </div>
                 </div>
             </div>

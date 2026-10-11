@@ -39,10 +39,17 @@ function configSegura(c: Partial<ConfigPagina> | undefined): ConfigPagina {
     };
 }
 
+const rFuentes = (f: string) => {
+    const e = escAttr(f);
+    return `<w:rFonts w:ascii="${e}" w:hAnsi="${e}" w:eastAsia="${e}" w:cs="${e}"/>`;
+};
+
 function corrida(t: Tramo, estilo: BloqueParrafo['estilo'], mediosPuntos: number): string {
     const negrita = t.negrita || estilo !== 'normal';
-    const tamano = estilo === 'titulo' ? `<w:sz w:val="${mediosPuntos + 4}"/><w:szCs w:val="${mediosPuntos + 4}"/>` : '';
+    const sz = t.tamanoPt ? Math.round(acotar(t.tamanoPt, 4, 96, 12) * 2) : estilo === 'titulo' ? mediosPuntos + 4 : 0;
+    const tamano = sz ? `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>` : '';
     const props =
+        (t.fuente ? rFuentes(t.fuente) : '') +
         (negrita ? '<w:b/><w:bCs/>' : '') +
         (t.cursiva ? '<w:i/><w:iCs/>' : '') +
         tamano +
@@ -71,24 +78,58 @@ function parrafo(b: BloqueParrafo, cfg: ConfigPagina): string {
     if (b.estilo === 'titulo') pPr.push('<w:pStyle w:val="Title"/>');
     else if (b.estilo === 'subtitulo') pPr.push('<w:pStyle w:val="Subtitle"/>');
     if (b.estilo !== 'normal') pPr.push('<w:keepNext/>');
-
+    if (b.interlineado) {
+        pPr.push(`<w:spacing w:line="${Math.round(240 * acotar(b.interlineado, 0.5, 5, cfg.interlineado))}" w:lineRule="auto"/>`);
+    }
     pPr.push(`<w:jc w:val="${b.alineacion}"/>`);
-    return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${b.tramos.map((t) => corrida(t, b.estilo, mediosPuntos)).join('')}</w:p>`;
+    // Salto de columna: va primero y lo que sigue empieza en la columna siguiente (solo tiene sentido dentro de columnas).
+    const salto = b.nuevaColumna && (b.columnas ?? 1) > 1 ? '<w:r><w:br w:type="column"/></w:r>' : '';
+    return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${salto}${b.tramos.map((t) => corrida(t, b.estilo, mediosPuntos)).join('')}</w:p>`;
 }
 
-function documentoXml(fuente: FuenteModelo, cfg: ConfigPagina): string {
+/** Propiedades de una sección. La primera no lleva «type»; las demás empiezan de forma continua (sin cambiar de hoja). */
+function sectPr(cfg: ConfigPagina, columnas: number, continua: boolean): string {
     const pag = PAGINAS[cfg.tamano];
-    const cuerpo = parsearTexto(fuente.texto)
-        .map((b) => (b.tipo === 'salto' ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : parrafo(b, cfg)))
-        .join('');
     return (
-        `${CABECERA}<w:document xmlns:w="${NS_W}"><w:body>${cuerpo || '<w:p/>'}` +
-        `<w:sectPr><w:pgSz w:w="${pag.w}" w:h="${pag.h}"/>` +
+        `<w:sectPr>${continua ? '<w:type w:val="continuous"/>' : ''}` +
+        `<w:pgSz w:w="${pag.w}" w:h="${pag.h}"/>` +
         `<w:pgMar w:top="${twips(cfg.margenes.superior)}" w:right="${twips(cfg.margenes.derecho)}" ` +
         `w:bottom="${twips(cfg.margenes.inferior)}" w:left="${twips(cfg.margenes.izquierdo)}" ` +
         'w:header="709" w:footer="709" w:gutter="0"/>' +
-        '</w:sectPr></w:body></w:document>'
+        (columnas > 1 ? `<w:cols w:num="${columnas}" w:space="708"/>` : '') +
+        '</w:sectPr>'
     );
+}
+
+const MINIMO = '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>';
+/** Párrafo diminuto (1 pt) que cierra una sección. Va fuera de los bloques {{#…}}, así el motor no lo repite ni lo quita. */
+const portadora = (cfg: ConfigPagina, columnas: number, continua: boolean) =>
+    `<w:p><w:pPr>${MINIMO}<w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr>${sectPr(cfg, columnas, continua)}</w:pPr></w:p>`;
+
+function documentoXml(fuente: FuenteModelo, cfg: ConfigPagina): string {
+    const secciones: { columnas: number; xml: string[] }[] = [];
+    let columnas = 1;
+    for (const b of parsearTexto(fuente.texto)) {
+        if (b.tipo === 'parrafo') columnas = (b.columnas ?? 1) > 1 ? 2 : 1;
+        const xml = b.tipo === 'salto' ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : parrafo(b, cfg);
+        const ultima = secciones[secciones.length - 1];
+        if (ultima && ultima.columnas === columnas) ultima.xml.push(xml);
+        else secciones.push({ columnas, xml: [xml] });
+    }
+    if (secciones.length === 0) secciones.push({ columnas: 1, xml: ['<w:p/>'] });
+    // Si las columnas quedan al final, se agrega una sección de 1 columna detrás: así Word las equilibra.
+    if (secciones[secciones.length - 1].columnas > 1) {
+        secciones.push({ columnas: 1, xml: [`<w:p><w:pPr>${MINIMO}</w:pPr></w:p>`] });
+    }
+
+    let cuerpo = '';
+    let final = '';
+    secciones.forEach((s, i) => {
+        cuerpo += s.xml.join('');
+        if (i < secciones.length - 1) cuerpo += portadora(cfg, s.columnas, i > 0);
+        else final = sectPr(cfg, s.columnas, i > 0);
+    });
+    return `${CABECERA}<w:document xmlns:w="${NS_W}"><w:body>${cuerpo}${final}</w:body></w:document>`;
 }
 
 function estilosXml(cfg: ConfigPagina): string {

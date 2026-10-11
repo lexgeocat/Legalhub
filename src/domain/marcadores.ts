@@ -175,7 +175,9 @@ const EXPEDIENTE_CAMPO: Record<string, [string, string]> = {
 };
 const FILTRO_TXT: Record<string, string> = {
     mayus: 'en MAYÚSCULAS', minus: 'en minúsculas', titulo: 'con Mayúscula Inicial',
-    fecha: 'fecha en letras', moneda: 'monto con su literal', superficie: 'superficie con su literal',
+    fecha: 'fecha en letras', fechalarga: 'fecha: nueve (9) días del mes de…',
+    moneda: 'monto con su literal', dolares: 'monto en dólares con su literal',
+    superficie: 'superficie con su literal',
     literal: 'número en letras', lista: 'nombres en una línea', ci: 'C.I. completa',
 };
 
@@ -347,7 +349,7 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
 
 /* ---------------- Edición guiada ---------------- */
 export type Transformacion = '' | 'mayus' | 'minus' | 'titulo';
-export type Formato = '' | 'fecha' | 'moneda' | 'superficie' | 'literal';
+export type Formato = '' | 'fecha' | 'fechalarga' | 'moneda' | 'dolares' | 'superficie' | 'literal';
 
 export const TRANSFORMACIONES: { valor: Transformacion; etiqueta: string }[] = [
     { valor: '', etiqueta: 'Tal como está escrito' },
@@ -358,8 +360,10 @@ export const TRANSFORMACIONES: { valor: Transformacion; etiqueta: string }[] = [
 
 const FORMATOS_FILTRO: { valor: Formato; etiqueta: string }[] = [
     { valor: '', etiqueta: 'Tal cual' },
-    { valor: 'fecha', etiqueta: 'Fecha en letras (5 de octubre de 2026)' },
+    { valor: 'fecha', etiqueta: 'Fecha en letras (9 de octubre de 2026)' },
+    { valor: 'fechalarga', etiqueta: 'Fecha completa (nueve (9) días del mes de octubre del año 2026)' },
     { valor: 'moneda', etiqueta: 'Monto con su literal (Bs. 1.500,00 …)' },
+    { valor: 'dolares', etiqueta: 'Monto en dólares con su literal ($us. 1.500,00 …)' },
     { valor: 'superficie', etiqueta: 'Superficie con su literal (250 m² …)' },
     { valor: 'literal', etiqueta: 'Número en letras (doce)' },
 ];
@@ -368,8 +372,9 @@ export function formatosPara(ruta: string, actual: Formato = ''): { valor: Forma
     const segs = ruta.split('.');
     const ult = claveNormalizada(segs[segs.length - 1] ?? '');
     const propio = claveNormalizada(segs[0] ?? '') === 'caso' || segs.some((s) => claveNormalizada(s) === 'datos');
+    const esFecha = ult === 'fecha_nacimiento' || claveNormalizada(segs[0] ?? '') === 'hoy';
     let l = FORMATOS_FILTRO;
-    if (!propio) l = ult === 'fecha_nacimiento' ? FORMATOS_FILTRO.slice(0, 2) : FORMATOS_FILTRO.slice(0, 1);
+    if (!propio) l = esFecha ? FORMATOS_FILTRO.slice(0, 3) : FORMATOS_FILTRO.slice(0, 1);
     return actual && !l.some((f) => f.valor === actual) ? [...l, ...FORMATOS_FILTRO.filter((f) => f.valor === actual)] : l;
 }
 
@@ -390,7 +395,7 @@ export function editarMarcador(crudo: string): EdicionMarcador {
         return { n: 'genero', ruta: a.ruta, formas: { sm, sf, pm: pm ?? `${sm}s`, pf: pf ?? `${sf}s` } };
     }
     const trans = a.filtros.filter((f) => esTrans(f.nombre));
-    const forma = a.filtros.filter((f) => (['fecha', 'moneda', 'superficie', 'literal'] as string[]).includes(f.nombre));
+    const forma = a.filtros.filter((f) => (['fecha', 'fechalarga', 'moneda', 'dolares', 'superficie', 'literal'] as string[]).includes(f.nombre));
     if (
         trans.length + forma.length !== a.filtros.length || trans.length > 1 || forma.length > 1
         || a.filtros.some((f) => f.args.length > 0)

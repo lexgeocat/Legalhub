@@ -13,6 +13,7 @@ import { nuevoId } from '../domain/id';
 import { matizDePersona } from '../domain/marcadores';
 import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../domain/texto';
 import { Campo, Icono, Segmentado, confirmar } from './comunes';
+import { fecha, fechalarga, hoyISO } from '../domain/filtros/fecha';
 
 type Pestana = 'datos' | 'partes' | 'genero';
 type Insertar = (texto: string, bloque: boolean) => void;
@@ -440,7 +441,10 @@ function TarjetaGrupo({ g, campos, grupos, prefijo, enBloque, onCampos, onGrupos
                 <>
                     {!g && <p className="pc-nota">Datos que no están en ningún grupo. Edítalos para asignarles uno.</p>}
                     {g && total === 0 && modo !== 'agregar' && (
-                        <p className="pc-ayuda">Grupo vacío. Agrega los datos que necesitas.</p>
+                        <>
+                            <p className="pc-ayuda">Grupo vacío. Agrega los datos que necesitas.</p>
+                            <TarjetaFecha onInsertar={onInsertar} />
+                        </>
                     )}
 
                     {propios.map(({ c, i }) => (edita(modo, 'caso', i) ? (
@@ -598,6 +602,33 @@ function Redactor({ datos, partes, enBloque, onInsertar, onListo }: {
         </div>
     );
 }
+/* ================= Fecha de hoy (dato del sistema) ================= */
+function TarjetaFecha({ onInsertar }: { onInsertar: Insertar }) {
+    const hoy = useMemo(() => hoyISO(), []);
+    const opciones = useMemo(() => [
+        { marcador: '{{hoy | fecha}}', ejemplo: fecha(hoy), nota: 'Fecha corta' },
+        { marcador: '{{hoy | fechalarga}}', ejemplo: fechalarga(hoy), nota: 'Fecha completa' },
+        { marcador: '{{hoy | fechalarga:"letras"}}', ejemplo: fechalarga(hoy, 'letras'), nota: 'Fecha completa con el año en letras' },
+    ], [hoy]);
+
+    return (
+        <div className="cb-tarjeta">
+            <div className="cb-tarjeta-cab">
+                <b>Fecha de hoy</b>
+                <span className="suave">se completa sola al generar</span>
+            </div>
+            {opciones.map((o) => (
+                <div key={o.marcador} className="cb-fila">
+                    <button type="button" className="cb-insertar" title={o.marcador} onMouseDown={quieto}
+                        onClick={() => onInsertar(o.marcador, false)}>
+                        <span className="cb-nombre">{o.ejemplo}</span>
+                        <span className="cb-meta">{o.nota}</span>
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 /* ================= Pestaña DATOS ================= */
 function TabDatos({ campos, grupos, partes, ambito, onCampos, onGrupos, onInsertar, onDetectar }: {
@@ -628,11 +659,6 @@ function TabDatos({ campos, grupos, partes, ambito, onCampos, onGrupos, onInsert
 
     return (
         <>
-            <p className="pc-ayuda">
-                Arma aquí tus grupos de datos (Generales de ley, Datos del inmueble, Precio…). Cada dato es <b>del caso</b> (se llena
-                una vez) o <b>de una parte</b> (queda en <span className="pc-ambar">ámbar</span> hasta que lo asignes a una parte).
-            </p>
-
             <div className="cb-cab-seccion">
                 <span>Grupos de datos</span>
                 <div className="pc-acciones" style={{ margin: 0 }}>
@@ -681,14 +707,14 @@ function TabDatos({ campos, grupos, partes, ambito, onCampos, onGrupos, onInsert
 }
 
 /* ================= Pestaña PARTES ================= */
-function TabPartes({ lista, pendientes, onAgregar, onQuitar, onAsignarPendientes, onInsertar }: {
+/* ================= Pestaña PARTES ================= */
+function TabPartes({ lista, pendientes, onAgregar, onQuitar, onAsignarPendientes }: {
     lista: Parte[];
     pendientes: number;
     /** Devuelve un mensaje de error, o null si se agregó. */
     onAgregar: (rol: string) => string | null;
     onQuitar: (p: Parte) => void;
     onAsignarPendientes: (rol: string) => void;
-    onInsertar: Insertar;
 }) {
     const [rol, setRol] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -710,6 +736,7 @@ function TabPartes({ lista, pendientes, onAgregar, onQuitar, onAsignarPendientes
                 Crea las partes que intervienen (vendedor, comprador, demandante…). Después asigna los datos ámbar del documento:
                 clic derecho sobre cada uno, o todos juntos con el botón de cada parte.
             </p>
+
 
             <form className="cb-edicion" onSubmit={(ev) => { ev.preventDefault(); agregar(rol); }}>
                 <div className="cb-fila-form">
@@ -744,11 +771,6 @@ function TabPartes({ lista, pendientes, onAgregar, onQuitar, onAsignarPendientes
                             title="Asigna a esta parte todos los datos en ámbar del documento"
                             onClick={() => onAsignarPendientes(p.id)}>
                             Asignarle los pendientes ({pendientes})
-                        </button>
-                        <button type="button" className="btn btn-sec btn-sm" onMouseDown={quieto}
-                            title="Un bloque que repite su contenido por cada persona con este rol"
-                            onClick={() => onInsertar(`{{#${p.plural}}}\n…\n{{/${p.plural}}}`, true)}>
-                            Bloque «cada {p.etiqueta.toLowerCase()}»
                         </button>
                     </div>
                 </div>
@@ -936,7 +958,7 @@ export function PanelCampos({
                 {pestana === 'partes' && (
                     <TabPartes lista={lista} pendientes={pendientes} onAgregar={agregarParte}
                         onQuitar={(p) => void quitarParte(p)}
-                        onAsignarPendientes={(r) => onAsignarPendientes?.(r)} onInsertar={onInsertar} />
+                        onAsignarPendientes={(r) => onAsignarPendientes?.(r)} />
                 )}
                 {pestana === 'genero' && <TabGenero lista={lista} quien={quien} onSel={setSel} onInsertar={onInsertar} />}
             </div>
