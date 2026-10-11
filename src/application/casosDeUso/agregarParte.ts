@@ -20,6 +20,11 @@ export class AgregarParte {
         const rol = normalizarRol(d.rol ?? '');
         if (!rol) throw new ErrorDeDatos('Falta el rol de la parte');
         if (!d.personaId) throw new ErrorDeDatos('Elige una persona');
+        const [dup] = await this.db.consultar<{ id: string }>(
+            'SELECT id FROM expediente_parte WHERE expediente_id = ?1 AND persona_id = ?2 AND rol = ?3',
+            [d.expedienteId, d.personaId, rol],
+        );
+        if (dup) throw new ErrorDeDatos('Esa persona ya figura con ese rol en el expediente');
         const [{ orden }] = await this.db.consultar<{ orden: number }>(
             'SELECT COALESCE(MAX(orden), -1) + 1 AS orden FROM expediente_parte WHERE expediente_id = ?1 AND rol = ?2',
             [d.expedienteId, rol],

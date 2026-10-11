@@ -1,0 +1,1 @@
+ALTER TABLE expediente ADD COLUMN modelo_id TEXT;

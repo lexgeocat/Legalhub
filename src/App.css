@@ -470,26 +470,7 @@ textarea {
   margin-top: 2px;
 }
 
-.datos-lista {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px 20px;
-  margin: 0;
-}
 
-.dato dt {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--texto-3);
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-
-.dato dd {
-  margin: 3px 0 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 
 .tabla-wrap {
   overflow-x: auto;
@@ -1113,13 +1094,6 @@ textarea {
   color: var(--primario);
 }
 
-.fila-titular {
-  display: grid;
-  grid-template-columns: 1fr 120px auto;
-  gap: 8px;
-  align-items: center;
-}
-
 /* ===== Modelos ===== */
 .modelos-grid {
   display: grid;
@@ -1454,4 +1428,77 @@ textarea {
 
 .sec-cols>[data-nc] {
   break-before: column;
+}
+
+
+/* ===== Llenar sobre el documento ===== */
+.papel {
+  background: #fff;
+  color: #000;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 8px;
+  box-shadow: var(--sombra);
+  padding: 28px 36px;
+  max-height: 64vh;
+  overflow: auto;
+}
+
+.papel-p {
+  margin: 0 0 .6em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.papel-salto {
+  border: 0;
+  border-top: 1.5px dashed #aeb6cb;
+  margin: 18px 0;
+}
+
+.papel input.en-linea,
+.papel textarea.en-linea {
+  display: inline-block;
+  width: auto;
+  min-width: 8ch;
+  padding: 0 5px 1px;
+  font: inherit;
+  line-height: inherit;
+  color: #1f3fae;
+  background: #eef2ff;
+  border: 0;
+  border-bottom: 1.5px solid #8b9bd9;
+  border-radius: 3px;
+}
+
+.papel input.en-linea.sin-valor,
+.papel textarea.en-linea.sin-valor {
+  background: #fff4d6;
+  border-bottom-color: #d99a1f;
+}
+
+.papel input.en-linea:focus,
+.papel textarea.en-linea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(53, 86, 216, .16);
+}
+
+.papel textarea.en-linea.largo {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+  padding: 6px 8px;
+  min-height: 4.5em;
+  border: 1px solid #8b9bd9;
+  resize: vertical;
+}
+
+/* Lista «lo que pide el modelo» y partes del paso Datos */
+.chk-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 13px;
 }

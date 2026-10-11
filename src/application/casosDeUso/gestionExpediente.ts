@@ -25,7 +25,7 @@ export interface CambiosExpediente {
     juzgado?: string;
     nroCausa?: string;
     clienteId?: string;
-    /** Reemplaza todos los datos del caso. */
+    modeloId?: string | null;
     datos?: Record<string, string>;
 }
 
@@ -51,6 +51,7 @@ export class ActualizarExpediente {
             if (!c.clienteId) throw new ErrorDeDatos('Elige al cliente');
             v.cliente_id = c.clienteId;
         }
+        if (c.modeloId !== undefined) v.modelo_id = c.modeloId || null;
         if (c.datos !== undefined) v.datos_json = JSON.stringify(limpiarDatos(c.datos));
 
         const campos = Object.keys(v);

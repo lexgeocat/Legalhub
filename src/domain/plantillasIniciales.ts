@@ -24,11 +24,7 @@ const COMPRAVENTA = [
     '{{nombre | mayus}}, con C.I. N° {{ci}}, {{nacionalidad}}, {{estado_civil}}, con domicilio en {{domicilio}}, en calidad de COMPRADOR;',
     '{{/compradores}}',
     '',
-    '**SEGUNDA.- (ANTECEDENTES).-**',
-    '{{#inmuebles}}',
-    '{{titulares | lista}} es propietario del inmueble ubicado en {{ubicacion}}, con matrícula N° {{matricula}} y una superficie de {{superficie | superficie}}.',
-    '{{/inmuebles}}',
-    '',
+    '**SEGUNDA.- (ANTECEDENTES).-** {{vendedores | lista}} es propietario del inmueble ubicado en {{caso.ubicacion}}, con matrícula N° {{caso.matricula}} y una superficie de {{caso.superficie | superficie}}.',
     '**TERCERA.- (OBJETO Y PRECIO).-** Por el presente contrato se transfiere, a título de compraventa, el inmueble descrito en la cláusula anterior en favor de {{compradores | lista}}, por el precio total y definitivo de {{caso.precio | moneda}}, que se paga {{caso.forma_pago}}.',
     '',
     '**CUARTA.- (CONFORMIDAD).-** Las partes declaran su plena conformidad con el contenido de las cláusulas precedentes y firman en señal de ello.',
@@ -71,9 +67,12 @@ const MEMORIAL = [
 export const PLANTILLAS_INICIALES: PlantillaInicial[] = [
     {
         nombre: 'Minuta de compraventa de inmueble', categoria: 'Minuta', materia: 'civil',
-        descripcion: 'Borrador de ejemplo. Requiere roles vendedor/comprador, un inmueble con titulares y los campos precio, forma de pago y lugar.',
+        descripcion: 'Borrador de ejemplo. Requiere roles vendedor/comprador y los datos del inmueble, precio, forma de pago y lugar.',
         texto: COMPRAVENTA,
         campos: [
+            { clave: 'ubicacion', etiqueta: 'Ubicación del inmueble', tipo: 'texto', requerido: true },
+            { clave: 'matricula', etiqueta: 'Matrícula (Derechos Reales)', tipo: 'texto', requerido: true },
+            { clave: 'superficie', etiqueta: 'Superficie (m²)', tipo: 'superficie', requerido: true },
             { clave: 'precio', etiqueta: 'Precio (Bs.)', tipo: 'moneda', requerido: true },
             { clave: 'forma_pago', etiqueta: 'Forma de pago', tipo: 'texto', requerido: true },
             { clave: 'lugar_firma', etiqueta: 'Lugar de firma', tipo: 'texto', requerido: true },

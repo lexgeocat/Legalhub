@@ -1,43 +1,79 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { useState, type FormEvent } from 'react';
-import { tipoSugerido } from '../../application/camposModelo';
-import type { DocumentoResumen, ExpedienteResumen, InmuebleResumen, ParteResumen, PersonaResumen } from '../../application/consultas';
-import { claveCampo, etiquetaRol } from '../../domain/texto';
-import { ROLES_CONOCIDOS, TIPOS_EXPEDIENTE, obtenerTipo } from '../../domain/tiposExpediente';
-import { AsistenteDocumento } from '../AsistenteDocumento';
+import { useMemo, useState, type FormEvent } from 'react';
+import { fichaDeModelo, type DatoParteFicha, type FichaModelo } from '../../application/camposModelo';
+import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
+import type { DocumentoResumen, ExpedienteResumen, ModeloResumen, ParteResumen, PersonaResumen } from '../../application/consultas';
 import { mismoRol } from '../../domain/catalogo';
+import { claveNormalizada, etiquetaRol } from '../../domain/texto';
+import { TIPOS_EXPEDIENTE, obtenerTipo } from '../../domain/tiposExpediente';
+import { AsistenteDocumento } from '../AsistenteDocumento';
 import {
-    Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Vacio,
-    avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta, fechaHora, normalizarNumero,
+    Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Segmentado, Vacio,
+    avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta, fechaHora,
 } from '../comunes';
+import { EntradaDato, LlenadoEnDocumento, OtrosDatos, esLargo } from '../DatosCaso';
+import { FormularioPersona } from '../FormularioPersona';
+import { Hoja } from '../Hoja';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 
-type PestanaExp = 'resumen' | 'partes' | 'inmuebles' | 'documentos';
+type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos';
+type ModoDatos = 'formulario' | 'documento';
+
+const sinValor = (v: string | undefined) => !v || v.trim() === '';
+const firma = (d: Record<string, string>) =>
+    JSON.stringify(Object.entries(d).filter(([, v]) => v.trim() !== '').sort(([a], [b]) => a.localeCompare(b)));
 
 export function Expediente({ id, volver }: { id: string; volver: () => void }) {
     const s = useServicios();
     const exp = useCargar(() => s.consultas.obtenerExpediente(id), [id]);
     const partes = useCargar(() => s.consultas.listarPartes(id), [id]);
-    const inmuebles = useCargar(() => s.consultas.listarInmuebles(id), [id]);
     const docs = useCargar(() => s.consultas.listarDocumentos(id), [id]);
     const personas = useCargar(() => s.consultas.listarPersonas(), []);
-    const [pestana, setPestana] = useState<PestanaExp>('resumen');
+    const modelos = useCargar(() => s.consultas.listarModelos(), []);
+    const [pestana, setPestana] = useState<PestanaExp | null>(null);
+    const [modoDatos, setModoDatos] = useState<ModoDatos>('formulario');
     const [error, setError] = useState<string | null>(null);
     const [asistente, setAsistente] = useState(false);
     const [editando, setEditando] = useState(false);
+    const [datosDe, setDatosDe] = useState<ParteResumen | null>(null);
+    const [fichaDe, setFichaDe] = useState<string | null>(null);
     const e = exp.datos;
+
+    // Modelo elegido para este expediente y lo que ese modelo pide (partes y datos).
+    const modelo = modelos.datos?.find((m) => m.id === e?.modeloId) ?? null;
+    const detalle = useCargar(
+        () => (modelo ? s.verModelo.ejecutar(modelo.versionId) : Promise.resolve(null)),
+        [modelo?.versionId ?? ''],
+    );
+    const visible = modelo && detalle.datos?.versionId === modelo.versionId ? detalle.datos : null;
+    const ficha = useMemo(
+        () => (visible ? fichaDeModelo(visible.esquema, visible.fuente?.partes ?? []) : null),
+        [visible],
+    );
 
     const atras = <button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Expedientes</button>;
     if (exp.error) return <div className="pagina">{atras}<Aviso error={exp.error} /></div>;
-    if (!e) return <div className="pagina">{atras}<p className="suave">Cargando…</p></div>;
+    if (!e || (!modelos.datos && !modelos.error)) return <div className="pagina">{atras}<p className="suave">Cargando…</p></div>;
 
     const t = obtenerTipo(e.tipo);
+    const activa: PestanaExp = pestana ?? (modelo ? 'partes' : 'modelo');
 
     async function cambiarEstado(estado: string) {
         try {
             await s.actualizarExpediente.ejecutar(id, { estado });
             exp.recargar();
             avisar('Estado actualizado');
+        } catch (err) {
+            setError(mensajeError(err));
+        }
+    }
+
+    async function elegirModelo(modeloId: string) {
+        try {
+            await s.actualizarExpediente.ejecutar(id, { modeloId });
+            setError(null);
+            exp.recargar();
+            avisar('Modelo elegido');
         } catch (err) {
             setError(mensajeError(err));
         }
@@ -68,10 +104,12 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                     <div className="fila-chica">
                         <code className="codigo">{e.codigo}</code>
                         <Insignia tono="azul">{etiquetaTipo(e.tipo)}</Insignia>
+                        {modelo && <Insignia tono="verde">Modelo: {modelo.nombre}</Insignia>}
                     </div>
                     <h1>{e.materia}</h1>
                     <p className="subtitulo">
                         Cliente: <strong>{e.clienteNombre || '—'}</strong>
+                        {e.referencia && <> · Ref.: {e.referencia}</>}
                         {t.judicial && <> · Juzgado: {e.juzgado || '—'} · Causa N° {e.nroCausa || '—'}</>}
                     </p>
                 </div>
@@ -85,222 +123,214 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                 </div>
             </div>
 
-            <Aviso error={error ?? partes.error ?? inmuebles.error ?? docs.error} />
+            <Aviso error={error ?? partes.error ?? docs.error ?? modelos.error ?? detalle.error} />
 
             <Pestanas<PestanaExp>
-                activa={pestana}
+                activa={activa}
                 cambiar={setPestana}
                 items={[
-                    { id: 'resumen', etiqueta: 'Resumen' },
-                    { id: 'partes', etiqueta: 'Partes', contador: partes.datos?.length },
-                    { id: 'inmuebles', etiqueta: 'Inmuebles', contador: inmuebles.datos?.length },
-                    { id: 'documentos', etiqueta: 'Documentos', contador: docs.datos?.length },
+                    { id: 'modelo', etiqueta: '1 · Modelo' },
+                    { id: 'partes', etiqueta: '2 · Partes', contador: partes.datos?.length },
+                    { id: 'datos', etiqueta: '3 · Datos' },
+                    { id: 'documentos', etiqueta: '4 · Documentos', contador: docs.datos?.length },
                 ]}
             />
 
-            {pestana === 'resumen' && <TabResumen e={e} recargar={exp.recargar} setError={setError} />}
-            {pestana === 'partes' && <TabPartes e={e} partes={partes.datos ?? []} personas={personas.datos ?? []} recargar={() => { partes.recargar(); exp.recargar(); }} setError={setError} />}
-            {pestana === 'inmuebles' && <TabInmuebles expedienteId={id} inmuebles={inmuebles.datos ?? []} personas={personas.datos ?? []} recargar={inmuebles.recargar} />}
-            {pestana === 'documentos' && <TabDocumentos docs={docs.datos ?? []} nuevo={() => setAsistente(true)} recargar={docs.recargar} setError={setError} />}
+            {activa === 'modelo' && (
+                <TabModelo e={e} modelos={modelos.datos ?? []} actual={modelo} visible={visible} ficha={ficha}
+                    elegir={(m) => void elegirModelo(m.id)} siguiente={() => setPestana('partes')} />
+            )}
+            {activa === 'partes' && (
+                <TabPartes
+                    e={e} partes={partes.datos ?? []} personas={personas.datos ?? []} ficha={ficha} hayModelo={!!modelo}
+                    recargar={() => { partes.recargar(); exp.recargar(); }}
+                    recargarPersonas={personas.recargar}
+                    setError={setError}
+                    irModelo={() => setPestana('modelo')}
+                    editarFicha={setFichaDe}
+                    editarDatos={setDatosDe}
+                />
+            )}
+            {activa === 'datos' && (
+                <TabDatos
+                    key={JSON.stringify(e.datos)}
+                    e={e} modelo={modelo} visible={visible} ficha={ficha} partes={partes.datos ?? []}
+                    modo={modoDatos} setModo={setModoDatos}
+                    recargar={exp.recargar} setError={setError}
+                    irModelo={() => setPestana('modelo')} irPartes={() => setPestana('partes')}
+                    editarFicha={setFichaDe} editarDatos={setDatosDe}
+                />
+            )}
+            {activa === 'documentos' && (
+                <TabDocumentos docs={docs.datos ?? []} nuevo={() => setAsistente(true)} recargar={docs.recargar} setError={setError} />
+            )}
 
             {editando && (
-                <EditarExpediente e={e} personas={personas.datos ?? []} cerrar={() => setEditando(false)} guardado={() => { setEditando(false); exp.recargar(); avisar('Expediente actualizado'); }} />
+                <EditarExpediente e={e} personas={personas.datos ?? []} cerrar={() => setEditando(false)}
+                    guardado={() => { setEditando(false); exp.recargar(); avisar('Expediente actualizado'); }} />
             )}
             {asistente && (
-                <AsistenteDocumento expediente={e} cerrar={() => { setAsistente(false); docs.recargar(); exp.recargar(); }} />
+                <AsistenteDocumento
+                    expediente={e}
+                    modeloInicial={modelo?.versionId}
+                    cerrar={() => { setAsistente(false); docs.recargar(); exp.recargar(); }}
+                />
+            )}
+            {datosDe && ficha && (
+                <DatosParte
+                    key={datosDe.id}
+                    p={datosDe}
+                    campos={ficha.datosParte.filter((d) => mismoRol(datosDe.rol, d.rol))}
+                    cerrar={() => setDatosDe(null)}
+                    guardado={() => { setDatosDe(null); partes.recargar(); avisar('Datos de la parte guardados'); }}
+                />
+            )}
+            {fichaDe && (
+                <FormularioPersona
+                    id={fichaDe}
+                    personas={personas.datos ?? []}
+                    cerrar={() => setFichaDe(null)}
+                    guardado={() => { setFichaDe(null); partes.recargar(); personas.recargar(); avisar('Persona actualizada'); }}
+                />
             )}
         </div>
     );
 }
 
-/* ---------------- Resumen ---------------- */
-function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
-    return <div className="dato"><dt>{etiqueta}</dt><dd>{children || '—'}</dd></div>;
-}
+/* ================= 1 · Modelo ================= */
+function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
+    e: ExpedienteResumen;
+    modelos: ModeloResumen[];
+    actual: ModeloResumen | null;
+    visible: ModeloVisible | null;
+    ficha: FichaModelo | null;
+    elegir: (m: ModeloResumen) => void;
+    siguiente: () => void;
+}) {
+    const [q, setQ] = useState('');
+    const lista = useMemo(() => {
+        const k = claveNormalizada(q.trim());
+        return modelos
+            .filter((m) => !k || claveNormalizada(`${m.nombre} ${m.descripcion} ${m.categoria}`).includes(k))
+            .sort((a, b) => Number(b.materia === e.tipo) - Number(a.materia === e.tipo) || a.nombre.localeCompare(b.nombre, 'es'));
+    }, [modelos, q, e.tipo]);
 
-interface CampoDato { clave: string; etiqueta: string; tipo: string }
-
-function EntradaCaso({ c, valor }: { c: CampoDato; valor: string }) {
-    const nombre = `caso.${c.clave}`;
-    // Una fecha guardada a mano que no sea AAAA-MM-DD se muestra como texto para no perderla al guardar.
-    if (c.tipo === 'fecha' && (valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor))) {
-        return <input type="date" name={nombre} defaultValue={valor} />;
-    }
-    if (c.tipo === 'moneda' || c.tipo === 'dolares' || c.tipo === 'superficie' || c.tipo === 'numero') {
-        return <input name={nombre} defaultValue={valor} inputMode="decimal" placeholder="1234,56" />;
-    }
-    if (c.tipo === 'texto_largo') return <textarea name={nombre} defaultValue={valor} />;
-    return <input name={nombre} defaultValue={valor} />;
-}
-
-function TabResumen({ e, recargar, setError }: { e: ExpedienteResumen; recargar: () => void; setError: (m: string | null) => void }) {
-    const s = useServicios();
-    const deModelos = useCargar(() => s.consultas.camposDeModelos(), []);
-    const t = obtenerTipo(e.tipo);
-
-    const mod = new Map((deModelos.datos ?? []).map((c) => [c.clave, c] as const));
-    const campos: CampoDato[] = [];
-    const vistos = new Set<string>();
-    const poner = (c: CampoDato) => {
-        if (vistos.has(c.clave)) return;
-        vistos.add(c.clave);
-        campos.push(c);
-    };
-    for (const c of t.campos) poner({ clave: c.clave, etiqueta: c.etiqueta, tipo: mod.get(c.clave)?.tipo ?? tipoSugerido(c.clave) });
-    for (const c of mod.values()) poner(c);
-    for (const k of Object.keys(e.datos)) poner({ clave: k, etiqueta: etiquetaRol(k), tipo: tipoSugerido(k) });
-
-    async function guardar(ev: FormEvent<HTMLFormElement>) {
-        ev.preventDefault();
-        const f = datosDeForm(ev.currentTarget);
-        const datos: Record<string, string> = {};
-        for (const c of campos) {
-            const v = f[`caso.${c.clave}`];
-            if (v) datos[c.clave] = v;
-        }
-        if (f.nuevo_nombre && f.nuevo_valor) datos[claveCampo(f.nuevo_nombre)] = f.nuevo_valor;
-        try {
-            await s.actualizarExpediente.ejecutar(e.id, { datos });
-            setError(null);
-            recargar();
-            avisar('Datos del caso guardados');
-        } catch (err) {
-            setError(mensajeError(err));
-        }
+    if (modelos.length === 0) {
+        return <Alerta tipo="info">Aún no hay modelos activos. Crea o instala uno en la sección Modelos y vuelve aquí.</Alerta>;
     }
 
     return (
         <>
             <div className="tarjeta">
-                <h3>Datos del expediente</h3>
-                <dl className="datos-lista">
-                    <Dato etiqueta="Tipo">{etiquetaTipo(e.tipo)}</Dato>
-                    <Dato etiqueta="Cliente">{e.clienteNombre}</Dato>
-                    <Dato etiqueta="Referencia">{e.referencia}</Dato>
-                    {t.judicial && <Dato etiqueta="Juzgado">{e.juzgado}</Dato>}
-                    {t.judicial && <Dato etiqueta="N° de causa">{e.nroCausa}</Dato>}
-                    <Dato etiqueta="Creado">{fechaCorta(e.creadoEn)}</Dato>
-                </dl>
-            </div>
-
-            <form key={JSON.stringify(e.datos) + e.tipo} className="tarjeta" onSubmit={(ev) => void guardar(ev)}>
                 <div className="tarjeta-cab">
                     <div>
-                        <h3>Datos del caso</h3>
+                        <h3>¿Con qué modelo vas a trabajar?</h3>
                         <p className="suave">
-                            Aquí se completan los datos que creaste en tus modelos (se usan como {'{{caso.clave}}'}).
-                            Lo que dejes aquí no se vuelve a pedir al generar documentos.
+                            Según el modelo se te piden las partes y los datos. Puedes cambiarlo cuando quieras: lo ya escrito no se pierde.
                         </p>
                     </div>
                 </div>
-                <div className="form-grid">
-                    {campos.map((c) => (
-                        <Campo key={c.clave} etiqueta={c.etiqueta} ancho={c.tipo === 'texto_largo'} ayuda={`caso.${c.clave}`}>
-                            <EntradaCaso c={c} valor={e.datos[c.clave] ?? ''} />
-                        </Campo>
+                <input type="search" placeholder="Buscar modelo…" value={q} onChange={(ev) => setQ(ev.target.value)} />
+                <div className="lista-opciones">
+                    {lista.map((m) => (
+                        <button key={m.id} type="button" className={`opcion${actual?.id === m.id ? ' sel' : ''}`}
+                            onClick={() => { if (actual?.id !== m.id) elegir(m); }}>
+                            <div style={{ flex: 1 }}>
+                                <div className="fila-chica">
+                                    {m.categoria && <Insignia tono="azul">{m.categoria}</Insignia>}
+                                    {m.materia === e.tipo && <Insignia tono="verde">Recomendado</Insignia>}
+                                    {actual?.id === m.id && <Insignia tono="violeta">Elegido</Insignia>}
+                                </div>
+                                <b>{m.nombre}</b>
+                                <span className="suave">{m.descripcion || `v${m.version} · ${m.numCampos} campos`}</span>
+                            </div>
+                        </button>
                     ))}
-                    <Campo etiqueta="Agregar otro dato (nombre)"><input name="nuevo_nombre" placeholder="Ej.: Fecha de entrega" /></Campo>
-                    <Campo etiqueta="Valor"><input name="nuevo_valor" /></Campo>
+                    {lista.length === 0 && <p className="suave">Sin resultados.</p>}
                 </div>
-                <div><button type="submit" className="btn btn-pri">Guardar datos del caso</button></div>
-            </form>
+            </div>
+
+            {actual && (
+                <div className="visor-grid">
+                    <div className="vista-hoja" style={{ height: 'min(62vh, 640px)', minHeight: 360 }}>
+                        {visible
+                            ? <Hoja bloques={visible.bloques} config={visible.config} />
+                            : <p className="suave" style={{ padding: 16 }}>Cargando el modelo…</p>}
+                    </div>
+
+                    <div className="tarjeta">
+                        <div>
+                            <h3>Lo que pide este modelo</h3>
+                            <p className="suave">«{actual.nombre}» · v{actual.version}</p>
+                        </div>
+                        {!ficha ? <p className="suave">Analizando…</p> : (
+                            <>
+                                <div>
+                                    <h4 className="grupo-titulo">Partes</h4>
+                                    {ficha.roles.length === 0
+                                        ? <p className="suave">No usa partes.</p>
+                                        : <div className="chips">{ficha.roles.map((r) => <Insignia key={r} tono="violeta">{etiquetaRol(r)}</Insignia>)}</div>}
+                                </div>
+                                <div>
+                                    <h4 className="grupo-titulo">Datos del caso ({ficha.caso.length})</h4>
+                                    {ficha.caso.length === 0 && <p className="suave">No pide datos del caso.</p>}
+                                    {ficha.caso.map((c) => (
+                                        <div key={c.clave} className="chk-fila">
+                                            <span>{c.etiqueta}{c.requerido ? '' : ' (opcional)'}</span>
+                                            {sinValor(e.datos[c.clave]) ? <Insignia tono="ambar">Falta</Insignia> : <Insignia tono="verde">Listo</Insignia>}
+                                        </div>
+                                    ))}
+                                </div>
+                                {ficha.datosParte.length > 0 && (
+                                    <div>
+                                        <h4 className="grupo-titulo">Datos propios de las partes</h4>
+                                        {ficha.datosParte.map((d) => (
+                                            <div key={`${d.rol}|${d.clave}`} className="chk-fila">
+                                                <span>{d.etiqueta}</span>
+                                                <span className="suave">{etiquetaRol(d.rol)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        <div><button type="button" className="btn btn-pri" onClick={siguiente}>Siguiente: crear las partes</button></div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
 
-function EntradaDato({ nombre, tipo, valor }: { nombre: string; tipo: string; valor: string }) {
-    if (tipo === 'fecha' && (valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor))) {
-        return <input type="date" name={nombre} defaultValue={valor} />;
-    }
-    if (tipo === 'moneda' || tipo === 'dolares' || tipo === 'superficie' || tipo === 'numero') {
-        return <input name={nombre} defaultValue={valor} inputMode="decimal" placeholder="1234,56" />;
-    }
-    if (tipo === 'texto_largo') return <textarea name={nombre} defaultValue={valor} />;
-    return <input name={nombre} defaultValue={valor} />;
-}
-
-function DatosParte({ p, campos, cerrar, guardado }: {
-    p: ParteResumen; campos: CampoDato[]; cerrar: () => void; guardado: () => void;
+/* ================= 2 · Partes ================= */
+function TabPartes({ e, partes, personas, ficha, hayModelo, recargar, recargarPersonas, setError, irModelo, editarFicha, editarDatos }: {
+    e: ExpedienteResumen;
+    partes: ParteResumen[];
+    personas: PersonaResumen[];
+    ficha: FichaModelo | null;
+    hayModelo: boolean;
+    recargar: () => void;
+    recargarPersonas: () => void;
+    setError: (m: string | null) => void;
+    irModelo: () => void;
+    editarFicha: (personaId: string) => void;
+    editarDatos: (p: ParteResumen) => void;
 }) {
     const s = useServicios();
-    const [error, setError] = useState<string | null>(null);
-    const [trabajando, setTrabajando] = useState(false);
-    const conocidos = new Set(campos.map((c) => c.clave));
-    const lista: CampoDato[] = [
-        ...campos,
-        ...Object.keys(p.datos).filter((k) => !conocidos.has(k)).map((k) => ({ clave: k, etiqueta: etiquetaRol(k), tipo: tipoSugerido(k) })),
-    ];
+    const [rol, setRol] = useState('');
+    const [personaId, setPersonaId] = useState('');
+    const [domicilio, setDomicilio] = useState('');
+    const [nueva, setNueva] = useState(false);
 
-    async function enviar(ev: FormEvent<HTMLFormElement>) {
-        ev.preventDefault();
-        const f = datosDeForm(ev.currentTarget);
-        const datos: Record<string, string> = {};
-        for (const c of lista) {
-            const v = f[`datos.${c.clave}`];
-            if (v) datos[c.clave] = v;
-        }
-        if (f.nuevo_nombre && f.nuevo_valor) datos[claveCampo(f.nuevo_nombre)] = f.nuevo_valor;
-        setTrabajando(true);
-        try {
-            await s.actualizarDatosParte.ejecutar(p.id, datos);
-            guardado();
-        } catch (err) {
-            setError(mensajeError(err));
-        } finally {
-            setTrabajando(false);
-        }
-    }
-
-    return (
-        <Modal
-            titulo={`Datos de ${p.nombre} · ${etiquetaRol(p.rol)}`}
-            cerrar={cerrar}
-            pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button><button type="submit" form="form-datos-parte" className="btn btn-pri" disabled={trabajando}>Guardar</button></>}
-        >
-            <Aviso error={error} />
-            {campos.length === 0 && (
-                <Alerta tipo="info">
-                    Ningún modelo define datos propios para este rol todavía. Créalos en el editor de modelos
-                    (panel Campos → Partes → «Crear campo») o agrega uno suelto abajo.
-                </Alerta>
-            )}
-            <form id="form-datos-parte" className="form-grid" onSubmit={(ev) => void enviar(ev)}>
-                {lista.map((c) => (
-                    <Campo key={c.clave} etiqueta={c.etiqueta} ancho={c.tipo === 'texto_largo'} ayuda={`datos.${c.clave}`}>
-                        <EntradaDato nombre={`datos.${c.clave}`} tipo={c.tipo} valor={p.datos[c.clave] ?? ''} />
-                    </Campo>
-                ))}
-                <Campo etiqueta="Agregar otro dato (nombre)"><input name="nuevo_nombre" placeholder="Ej.: Lugar de nacimiento" /></Campo>
-                <Campo etiqueta="Valor"><input name="nuevo_valor" /></Campo>
-            </form>
-        </Modal>
-    );
-}
-
-/* ---------------- Partes ---------------- */
-function TabPartes({ e, partes, personas, recargar, setError }: {
-    e: ExpedienteResumen; partes: ParteResumen[]; personas: PersonaResumen[]; recargar: () => void; setError: (m: string | null) => void;
-}) {
-    const s = useServicios();
-    const t = obtenerTipo(e.tipo);
-    const [rol, setRol] = useState(t.roles[0] ?? '');
-    const [datosDe, setDatosDe] = useState<ParteResumen | null>(null);
-    const deModelos = useCargar(() => s.consultas.camposDePartes(), []);
-
-    /** Datos propios que los modelos definen para el rol de esta parte (sin repetir). */
-    const camposDe = (p: ParteResumen): CampoDato[] => {
-        const m = new Map<string, CampoDato>();
-        for (const c of deModelos.datos ?? []) if (mismoRol(p.rol, c.rol) && !m.has(c.clave)) m.set(c.clave, c);
-        return [...m.values()];
-    };
+    // Primero los roles que pide el modelo; luego los típicos del tipo de expediente.
+    const sugeridos = [...new Set([...(ficha?.roles ?? []), ...obtenerTipo(e.tipo).roles])];
 
     async function agregar(ev: FormEvent<HTMLFormElement>) {
         ev.preventDefault();
-        const form = ev.currentTarget;
-        const f = datosDeForm(form);
         try {
-            await s.agregarParte.ejecutar({ expedienteId: e.id, personaId: f.personaId ?? '', rol, domicilioProcesal: f.domicilioProcesal });
-            form.reset();
+            await s.agregarParte.ejecutar({ expedienteId: e.id, personaId, rol, domicilioProcesal: domicilio || undefined });
+            setPersonaId('');
+            setDomicilio('');
             setError(null);
             recargar();
             avisar('Parte agregada');
@@ -322,15 +352,24 @@ function TabPartes({ e, partes, personas, recargar, setError }: {
 
     return (
         <>
+            {!hayModelo && (
+                <Alerta tipo="adv">
+                    Primero elige el modelo: según él se sugieren los roles y se piden los datos de cada parte.{' '}
+                    <button type="button" className="btn btn-enlace" onClick={irModelo}>Elegir modelo</button>
+                </Alerta>
+            )}
+
             {partes.length === 0 ? (
-                <Vacio icono="personas" titulo="Sin partes" texto="Agrega a las personas que intervienen y su rol. Los modelos las usan para listas, bucles y concordancia de género." />
+                <Vacio icono="personas" titulo="Sin partes"
+                    texto="Agrega a las personas que intervienen y su rol. Los modelos las usan para listas, bloques repetidos y concordancia de género." />
             ) : (
                 <div className="tabla-wrap">
                     <table className="tabla">
                         <thead><tr><th>Rol</th><th>Persona</th><th>Domicilio procesal</th><th /></tr></thead>
                         <tbody>
                             {partes.map((p) => {
-                                const n = Object.keys(p.datos).length;
+                                const pedidos = ficha ? ficha.datosParte.filter((d) => mismoRol(p.rol, d.rol)) : [];
+                                const llenos = pedidos.filter((d) => !sinValor(p.datos[d.clave])).length;
                                 return (
                                     <tr key={p.id}>
                                         <td><Insignia tono="violeta">{etiquetaRol(p.rol)}</Insignia></td>
@@ -338,11 +377,16 @@ function TabPartes({ e, partes, personas, recargar, setError }: {
                                         <td>{p.domicilioProcesal || <span className="suave">—</span>}</td>
                                         <td className="num">
                                             <div className="acciones" style={{ justifyContent: 'flex-end' }}>
-                                                <button type="button" className="btn btn-sec btn-sm" title="Datos propios de esta parte (los que creaste en tus modelos)"
-                                                    onClick={() => setDatosDe(p)}>
-                                                    Datos{n > 0 ? ` (${n})` : ''}
-                                                </button>
-                                                <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar parte" onClick={() => void quitar(p)}><Icono n="papelera" tam={15} /></button>
+                                                <button type="button" className="btn btn-sec btn-sm"
+                                                    title="Editar la ficha de la persona (C.I., estado civil, domicilio…)"
+                                                    onClick={() => editarFicha(p.personaId)}>Ficha</button>
+                                                {pedidos.length > 0 && (
+                                                    <button type="button" className="btn btn-sec btn-sm"
+                                                        title="Datos propios que pide el modelo para esta parte"
+                                                        onClick={() => editarDatos(p)}>Datos {llenos}/{pedidos.length}</button>
+                                                )}
+                                                <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar parte"
+                                                    onClick={() => void quitar(p)}><Icono n="papelera" tam={15} /></button>
                                             </div>
                                         </td>
                                     </tr>
@@ -353,106 +397,68 @@ function TabPartes({ e, partes, personas, recargar, setError }: {
                 </div>
             )}
 
-            <form className="tarjeta" onSubmit={(ev) => void agregar(ev)}>
-                <h3>Agregar parte</h3>
-                {personas.length === 0 && <Alerta tipo="adv">No hay personas registradas. Créalas primero en la sección Personas.</Alerta>}
-                <div className="form-grid">
-                    <Campo etiqueta="Persona *">
-                        <select name="personaId" required defaultValue="">
-                            <option value="" disabled>Elegir…</option>
-                            {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                        </select>
-                    </Campo>
-                    <Campo etiqueta="Rol *">
-                        <input list="roles-expediente" value={rol} onChange={(ev) => setRol(ev.target.value)} required placeholder="demandante, vendedor…" />
-                        <datalist id="roles-expediente">{ROLES_CONOCIDOS.map((r) => <option key={r} value={r} />)}</datalist>
-                    </Campo>
-                    <Campo etiqueta="Domicilio procesal"><input name="domicilioProcesal" /></Campo>
-                    <div className="ancho chips">
-                        {t.roles.map((r) => (
-                            <button key={r} type="button" className={`chip${rol === r ? ' sel' : ''}`} onClick={() => setRol(r)}>{r}</button>
-                        ))}
+            {hayModelo && (
+                <form className="tarjeta" onSubmit={(ev) => void agregar(ev)}>
+                    <h3>Agregar parte</h3>
+                    {personas.length === 0 && <Alerta tipo="adv">Aún no hay personas registradas: crea la primera con «Nueva persona».</Alerta>}
+                    <div className="chips">
+                        {sugeridos.map((r) => {
+                            const hecho = partes.some((p) => mismoRol(p.rol, r));
+                            return (
+                                <button key={r} type="button" className={`chip${mismoRol(rol, r) ? ' sel' : ''}`} onClick={() => setRol(r)}>
+                                    {hecho ? '✓ ' : ''}{r}
+                                </button>
+                            );
+                        })}
                     </div>
-                </div>
-                <div><button type="submit" className="btn btn-pri" disabled={personas.length === 0}>Agregar parte</button></div>
-            </form>
+                    <div className="form-grid">
+                        <Campo etiqueta="Rol *">
+                            <input list="roles-expediente" value={rol} onChange={(ev) => setRol(ev.target.value)} required placeholder="vendedor, demandante…" />
+                            <datalist id="roles-expediente">{sugeridos.map((r) => <option key={r} value={r} />)}</datalist>
+                        </Campo>
+                        <Campo etiqueta="Persona *">
+                            <select value={personaId} onChange={(ev) => setPersonaId(ev.target.value)} required>
+                                <option value="" disabled>Elegir…</option>
+                                {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                            </select>
+                        </Campo>
+                        <Campo etiqueta="Domicilio procesal" ancho>
+                            <input value={domicilio} onChange={(ev) => setDomicilio(ev.target.value)} />
+                        </Campo>
+                    </div>
+                    <div className="acciones">
+                        <button type="submit" className="btn btn-pri" disabled={personas.length === 0}>Agregar parte</button>
+                        <button type="button" className="btn btn-sec" onClick={() => setNueva(true)}><Icono n="mas" tam={16} /> Nueva persona</button>
+                    </div>
+                </form>
+            )}
 
-            {datosDe && (
-                <DatosParte
-                    key={datosDe.id}
-                    p={datosDe}
-                    campos={camposDe(datosDe)}
-                    cerrar={() => setDatosDe(null)}
-                    guardado={() => { setDatosDe(null); recargar(); avisar('Datos de la parte guardados'); }}
+            {nueva && (
+                <FormularioPersona
+                    personas={personas}
+                    cerrar={() => setNueva(false)}
+                    guardado={(nuevoId) => { setNueva(false); recargarPersonas(); setPersonaId(nuevoId); avisar('Persona creada'); }}
                 />
             )}
         </>
     );
 }
 
-/* ---------------- Inmuebles ---------------- */
-const DEPARTAMENTOS = ['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosí', 'Chuquisaca', 'Tarija', 'Beni', 'Pando'];
-
-function TabInmuebles({ expedienteId, inmuebles, personas, recargar }: {
-    expedienteId: string; inmuebles: InmuebleResumen[]; personas: PersonaResumen[]; recargar: () => void;
-}) {
-    const [nuevo, setNuevo] = useState(false);
-    return (
-        <>
-            <div className="acciones"><button type="button" className="btn btn-pri" onClick={() => setNuevo(true)}><Icono n="mas" tam={16} /> Nuevo inmueble</button></div>
-            {inmuebles.length === 0 ? (
-                <Vacio icono="carpeta" titulo="Sin inmuebles" texto="Registra los inmuebles involucrados: matrícula, superficie, colindancias y titulares." />
-            ) : (
-                <div className="tabla-wrap">
-                    <table className="tabla">
-                        <thead><tr><th>Matrícula</th><th>Tipo</th><th>Ubicación</th><th className="num">Superficie (m²)</th><th>Titulares</th></tr></thead>
-                        <tbody>
-                            {inmuebles.map((i) => (
-                                <tr key={i.id}>
-                                    <td><code>{i.matricula || '—'}</code></td>
-                                    <td>{i.tipo || '—'}</td>
-                                    <td>{i.ubicacion || '—'}</td>
-                                    <td className="num">{i.superficieM2 || '—'}</td>
-                                    <td>{i.titulares || '—'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-            {nuevo && <NuevoInmueble expedienteId={expedienteId} personas={personas} cerrar={() => setNuevo(false)} creado={() => { setNuevo(false); recargar(); avisar('Inmueble registrado'); }} />}
-        </>
-    );
-}
-
-function NuevoInmueble({ expedienteId, personas, cerrar, creado }: {
-    expedienteId: string; personas: PersonaResumen[]; cerrar: () => void; creado: () => void;
+/* Datos propios de una parte: solo los que pide el modelo elegido. */
+function DatosParte({ p, campos, cerrar, guardado }: {
+    p: ParteResumen; campos: DatoParteFicha[]; cerrar: () => void; guardado: () => void;
 }) {
     const s = useServicios();
-    const [titulares, setTitulares] = useState([{ personaId: '', porcentaje: '' }]);
+    const [vals, setVals] = useState<Record<string, string>>({ ...p.datos });
     const [error, setError] = useState<string | null>(null);
     const [trabajando, setTrabajando] = useState(false);
+    const poner = (clave: string, valor: string) => setVals((x) => ({ ...x, [clave]: valor }));
 
-    const cambiar = (i: number, p: Partial<{ personaId: string; porcentaje: string }>) =>
-        setTitulares((l) => l.map((t, k) => (k === i ? { ...t, ...p } : t)));
-
-    async function enviar(ev: FormEvent<HTMLFormElement>) {
-        ev.preventDefault();
-        const f = datosDeForm(ev.currentTarget);
-        const unicos = new Map<string, string>();
-        for (const t of titulares) if (t.personaId) unicos.set(t.personaId, t.porcentaje);
+    async function guardar() {
         setTrabajando(true);
         try {
-            await s.crearInmueble.ejecutar({
-                tipo: f.tipo, departamento: f.departamento, provincia: f.provincia, municipio: f.municipio, localidad: f.localidad,
-                superficieM2: f.superficieM2 ? normalizarNumero(f.superficieM2) : undefined,
-                matricula: f.matricula, codigoCatastral: f.codigoCatastral, ubicacion: f.ubicacion,
-                colindancias: { norte: f.norte, sur: f.sur, este: f.este, oeste: f.oeste },
-                gravamenes: f.gravamenes, observaciones: f.observaciones,
-                titulares: [...unicos].map(([personaId, porcentaje]) => ({ personaId, porcentaje: porcentaje ? normalizarNumero(porcentaje) : undefined })),
-                expedienteId,
-            });
-            creado();
+            await s.actualizarDatosParte.ejecutar(p.id, vals);
+            guardado();
         } catch (err) {
             setError(mensajeError(err));
         } finally {
@@ -462,58 +468,178 @@ function NuevoInmueble({ expedienteId, personas, cerrar, creado }: {
 
     return (
         <Modal
-            titulo="Nuevo inmueble"
-            ancho="grande"
+            titulo={`Datos de ${p.nombre} · ${etiquetaRol(p.rol)}`}
             cerrar={cerrar}
-            pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button><button type="submit" form="form-inmueble" className="btn btn-pri" disabled={trabajando}>Guardar inmueble</button></>}
+            pie={
+                <>
+                    <span className="espacio" />
+                    <button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button>
+                    <button type="button" className="btn btn-pri" disabled={trabajando} onClick={() => void guardar()}>Guardar</button>
+                </>
+            }
         >
             <Aviso error={error} />
-            <form id="form-inmueble" className="form-grid" onSubmit={(ev) => void enviar(ev)}>
-                <Campo etiqueta="Tipo">
-                    <input name="tipo" list="tipos-inmueble" placeholder="urbano, rural, lote…" />
-                    <datalist id="tipos-inmueble"><option value="urbano" /><option value="rural" /><option value="lote" /><option value="casa" /><option value="departamento" /><option value="terreno" /></datalist>
-                </Campo>
-                <Campo etiqueta="Matrícula (Derechos Reales)"><input name="matricula" /></Campo>
-                <Campo etiqueta="Código catastral"><input name="codigoCatastral" /></Campo>
-                <Campo etiqueta="Superficie (m²)" ayuda="Con punto o coma decimal, máximo 2 decimales."><input name="superficieM2" inputMode="decimal" /></Campo>
-                <Campo etiqueta="Departamento">
-                    <select name="departamento" defaultValue=""><option value="">—</option>{DEPARTAMENTOS.map((d) => <option key={d}>{d}</option>)}</select>
-                </Campo>
-                <Campo etiqueta="Provincia"><input name="provincia" /></Campo>
-                <Campo etiqueta="Municipio"><input name="municipio" /></Campo>
-                <Campo etiqueta="Localidad"><input name="localidad" /></Campo>
-                <Campo etiqueta="Ubicación (dirección)" ancho><input name="ubicacion" /></Campo>
-                <Campo etiqueta="Colindancia norte"><input name="norte" /></Campo>
-                <Campo etiqueta="Colindancia sur"><input name="sur" /></Campo>
-                <Campo etiqueta="Colindancia este"><input name="este" /></Campo>
-                <Campo etiqueta="Colindancia oeste"><input name="oeste" /></Campo>
-                <Campo etiqueta="Gravámenes" ancho><input name="gravamenes" /></Campo>
-                <Campo etiqueta="Observaciones" ancho><textarea name="observaciones" /></Campo>
-
-                <div className="ancho">
-                    <h4 className="grupo-titulo">Titulares</h4>
-                    <div className="lista-opciones">
-                        {titulares.map((t, i) => (
-                            <div key={i} className="fila-titular">
-                                <select value={t.personaId} onChange={(ev) => cambiar(i, { personaId: ev.target.value })}>
-                                    <option value="">Elegir persona…</option>
-                                    {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                                </select>
-                                <input value={t.porcentaje} onChange={(ev) => cambiar(i, { porcentaje: ev.target.value })} placeholder="% (opcional)" inputMode="decimal" />
-                                <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar titular" onClick={() => setTitulares((l) => (l.length > 1 ? l.filter((_, k) => k !== i) : l))}><Icono n="cerrar" tam={15} /></button>
-                            </div>
-                        ))}
-                    </div>
-                    <div style={{ marginTop: 8 }}>
-                        <button type="button" className="btn btn-sec btn-sm" onClick={() => setTitulares((l) => [...l, { personaId: '', porcentaje: '' }])}>Agregar titular</button>
-                    </div>
-                </div>
-            </form>
+            <div className="form-grid">
+                {campos.map((c) => (
+                    <Campo key={c.clave} etiqueta={`${c.etiqueta}${c.requerido ? ' *' : ''}`} ancho={esLargo(c)}>
+                        <EntradaDato c={c} valor={vals[c.clave] ?? ''} cambiar={(v) => poner(c.clave, v)} />
+                    </Campo>
+                ))}
+            </div>
+            <OtrosDatos conocidos={campos.map((c) => c.clave)} valores={vals} cambiar={poner} />
         </Modal>
     );
 }
 
-/* ---------------- Documentos ---------------- */
+/* ================= 3 · Datos ================= */
+function TabDatos({ e, modelo, visible, ficha, partes, modo, setModo, recargar, setError, irModelo, irPartes, editarFicha, editarDatos }: {
+    e: ExpedienteResumen;
+    modelo: ModeloResumen | null;
+    visible: ModeloVisible | null;
+    ficha: FichaModelo | null;
+    partes: ParteResumen[];
+    modo: ModoDatos;
+    setModo: (m: ModoDatos) => void;
+    recargar: () => void;
+    setError: (m: string | null) => void;
+    irModelo: () => void;
+    irPartes: () => void;
+    editarFicha: (personaId: string) => void;
+    editarDatos: (p: ParteResumen) => void;
+}) {
+    const s = useServicios();
+    const [valores, setValores] = useState<Record<string, string>>({ ...e.datos });
+    const [guardando, setGuardando] = useState(false);
+
+    if (!modelo) {
+        return (
+            <Alerta tipo="adv">
+                Primero elige el modelo: los datos que se piden dependen de él.{' '}
+                <button type="button" className="btn btn-enlace" onClick={irModelo}>Elegir modelo</button>
+            </Alerta>
+        );
+    }
+    if (!ficha || !visible) return <p className="suave">Cargando el modelo…</p>;
+
+    const campos = ficha.caso;
+    const poner = (clave: string, valor: string) => setValores((x) => ({ ...x, [clave]: valor }));
+    const sucio = firma(valores) !== firma(e.datos);
+    const faltan = campos.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
+
+    async function guardar() {
+        setGuardando(true);
+        try {
+            await s.actualizarExpediente.ejecutar(e.id, { datos: valores });
+            setError(null);
+            recargar();
+            avisar('Datos guardados');
+        } catch (err) {
+            setError(mensajeError(err));
+        } finally {
+            setGuardando(false);
+        }
+    }
+
+    return (
+        <>
+            <div className="tarjeta">
+                <div className="tarjeta-cab">
+                    <div>
+                        <h3>Datos del caso</h3>
+                        <p className="suave">
+                            Los que pide «{modelo.nombre}». Llénalos en un formulario o escribe directo sobre el documento, como en Word.
+                        </p>
+                    </div>
+                    {campos.length > 0 && (
+                        <Segmentado<ModoDatos>
+                            valor={modo}
+                            cambiar={setModo}
+                            opciones={[{ id: 'formulario', etiqueta: 'Formulario' }, { id: 'documento', etiqueta: 'Sobre el documento' }]}
+                        />
+                    )}
+                </div>
+
+                {campos.length === 0 && <Alerta tipo="info">Este modelo no pide datos del caso: todo sale de las partes.</Alerta>}
+
+                {campos.length > 0 && modo === 'formulario' && (
+                    <div className="form-grid">
+                        {campos.map((c) => (
+                            <Campo key={c.clave} etiqueta={`${c.etiqueta}${c.requerido ? ' *' : ''}`} ancho={esLargo(c)}>
+                                <EntradaDato c={c} valor={valores[c.clave] ?? ''} cambiar={(v) => poner(c.clave, v)} />
+                            </Campo>
+                        ))}
+                    </div>
+                )}
+
+                {campos.length > 0 && modo === 'documento' && (
+                    <>
+                        <p className="suave">
+                            Escribe en los huecos azules (amarillos = vacíos). Los datos de las partes (nombre, C.I., domicilio…) salen de la pestaña Partes:
+                            toca uno para ir allí.
+                        </p>
+                        <LlenadoEnDocumento
+                            bloques={visible.bloques} config={visible.config} campos={campos} roles={ficha.roles}
+                            valores={valores} cambiar={poner} alChip={irPartes}
+                        />
+                    </>
+                )}
+
+                <OtrosDatos conocidos={campos.map((c) => c.clave)} valores={valores} cambiar={poner} />
+
+                <div className="acciones">
+                    <button type="button" className="btn btn-pri" disabled={!sucio || guardando} onClick={() => void guardar()}>
+                        {guardando ? 'Guardando…' : 'Guardar datos'}
+                    </button>
+                    {sucio && <Insignia tono="ambar">Sin guardar</Insignia>}
+                    {campos.length > 0 && (faltan > 0
+                        ? <Insignia tono="ambar">Faltan {faltan} obligatorio(s)</Insignia>
+                        : <Insignia tono="verde">Datos completos</Insignia>)}
+                </div>
+            </div>
+
+            {ficha.roles.length > 0 && (
+                <div className="tarjeta">
+                    <div>
+                        <h3>Partes y sus datos</h3>
+                        <p className="suave">Revisa la ficha de cada persona (C.I., estado civil, domicilio…) y completa los datos propios que pide el modelo.</p>
+                    </div>
+                    {ficha.roles.map((r) => {
+                        const lista = partes.filter((p) => mismoRol(p.rol, r));
+                        const pedidos = ficha.datosParte.filter((d) => mismoRol(r, d.rol));
+                        return (
+                            <div key={r}>
+                                <h4 className="grupo-titulo">{etiquetaRol(r)}</h4>
+                                {lista.length === 0 ? (
+                                    <p className="suave">
+                                        Aún no hay nadie con este rol.{' '}
+                                        <button type="button" className="btn btn-enlace" onClick={irPartes}>Crear parte</button>
+                                    </p>
+                                ) : lista.map((p) => {
+                                    const llenos = pedidos.filter((d) => !sinValor(p.datos[d.clave])).length;
+                                    return (
+                                        <div key={p.id} className="chk-fila">
+                                            <span className="celda-titulo">{p.nombre}</span>
+                                            <span className="acciones">
+                                                <button type="button" className="btn btn-sec btn-sm" onClick={() => editarFicha(p.personaId)}>Ficha</button>
+                                                {pedidos.length > 0 && (
+                                                    <button type="button" className="btn btn-sec btn-sm" onClick={() => editarDatos(p)}>
+                                                        Datos {llenos}/{pedidos.length}
+                                                    </button>
+                                                )}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </>
+    );
+}
+
+/* ================= 4 · Documentos ================= */
 function TabDocumentos({ docs, nuevo, recargar, setError }: {
     docs: DocumentoResumen[]; nuevo: () => void; recargar: () => void; setError: (m: string | null) => void;
 }) {
@@ -553,7 +679,7 @@ function TabDocumentos({ docs, nuevo, recargar, setError }: {
 
     if (docs.length === 0) {
         return (
-            <Vacio icono="documento" titulo="Aún no hay documentos" texto="Genera el primero a partir de un modelo: se completa con los datos del expediente.">
+            <Vacio icono="documento" titulo="Aún no hay documentos" texto="Genera el primero a partir del modelo: se completa con las partes y los datos del expediente.">
                 <button type="button" className="btn btn-pri" onClick={nuevo}>Nuevo documento</button>
             </Vacio>
         );
@@ -571,13 +697,8 @@ function TabDocumentos({ docs, nuevo, recargar, setError }: {
                         <div className="acciones">
                             <Insignia tono="azul">{d.estado}</Insignia>
                             <button type="button" className="btn btn-sec btn-sm" onClick={() => void adjuntar(d.id)}>Adjuntar versión editada…</button>
-                            <button
-                                type="button"
-                                className="btn btn-fan btn-icono btn-sm"
-                                aria-label="Eliminar documento"
-                                title="Eliminar documento"
-                                onClick={() => void eliminar(d)}
-                            >
+                            <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Eliminar documento" title="Eliminar documento"
+                                onClick={() => void eliminar(d)}>
                                 <Icono n="papelera" tam={15} />
                             </button>
                         </div>
@@ -608,7 +729,7 @@ function TabDocumentos({ docs, nuevo, recargar, setError }: {
     );
 }
 
-/* ---------------- Editar expediente ---------------- */
+/* ================= Editar expediente ================= */
 function EditarExpediente({ e, personas, cerrar, guardado }: {
     e: ExpedienteResumen; personas: PersonaResumen[]; cerrar: () => void; guardado: () => void;
 }) {

@@ -2,7 +2,7 @@ import { nombrePersona } from '../../domain/personas';
 import type { DbPuerto, Fila } from '../puertos/db';
 
 export interface ResultadoBusqueda {
-    tipo: 'persona' | 'expediente' | 'documento' | 'inmueble';
+    tipo: 'persona' | 'expediente' | 'documento';
     id: string;
     titulo: string;
     detalle: string;
@@ -65,20 +65,6 @@ export class Buscar {
             `SELECT * FROM expediente WHERE deleted_at IS NULL AND (codigo LIKE ?1 ESCAPE '\\' OR nro_causa LIKE ?1 ESCAPE '\\') LIMIT ?2`,
             [like, limite],
         )).forEach(expediente);
-
-        (await this.db.consultar<Fila>(
-            `SELECT i.id, i.matricula, i.codigo_catastral, i.ubicacion, e.id AS expediente_id
-       FROM inmueble i
-       LEFT JOIN expediente_inmueble ei ON ei.inmueble_id = i.id
-       LEFT JOIN expediente e ON e.id = ei.expediente_id AND e.deleted_at IS NULL
-       WHERE i.deleted_at IS NULL
-         AND (i.matricula LIKE ?1 ESCAPE '\\' OR i.codigo_catastral LIKE ?1 ESCAPE '\\')
-         AND (ei.expediente_id IS NULL OR e.id IS NOT NULL)
-       LIMIT ?2`,
-            [like, limite],
-        )).forEach((i) =>
-            agregar({ tipo: 'inmueble', id: t(i.id), titulo: `Matrícula ${t(i.matricula)}`, detalle: t(i.ubicacion), expedienteId: t(i.expediente_id) || undefined }),
-        );
 
         return [...salida.values()].slice(0, limite);
     }

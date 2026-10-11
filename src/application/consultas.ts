@@ -1,8 +1,6 @@
 import { nombrePersona } from '../domain/personas';
-import { claveCampo, claveNormalizada, etiquetaRol } from '../domain/texto';
 import type { DatosPersona } from './casosDeUso/crearPersona';
 import type { DbPuerto, Fila } from './puertos/db';
-import { datoDeParteEnRuta } from '../domain/catalogo';
 
 const t = (v: unknown) => (v == null ? '' : String(v));
 
@@ -31,24 +29,24 @@ function datosParte(v: unknown): Record<string, string> {
 export interface ExpedienteResumen {
     id: string; codigo: string; tipo: string; materia: string; referencia: string; estado: string;
     juzgado: string; nroCausa: string; clienteId: string; clienteNombre: string;
+    /** Modelo con el que se trabaja el expediente ('' = aún no elegido). */
+    modeloId: string;
     datos: Record<string, string>; nPartes: number; nDocumentos: number; creadoEn: string;
 }
 export interface PersonaResumen { id: string; tipo: string; nombre: string; ci: string; nit: string; telefono: string }
 export interface ParteResumen { id: string; personaId: string; rol: string; orden: number; nombre: string; domicilioProcesal: string; datos: Record<string, string> }
-export interface CampoParteResumen { rol: string; clave: string; etiqueta: string; tipo: string }
-export interface InmuebleResumen { id: string; tipo: string; ubicacion: string; matricula: string; codigoCatastral: string; superficieM2: string; titulares: string }
 export interface VersionResumen { id: string; nro: number; origen: string; creadoEn: string; ruta: string; sha256: string }
 export interface DocumentoResumen { id: string; titulo: string; estado: string; creadoEn: string; versiones: VersionResumen[] }
 export interface ModeloResumen {
     id: string; nombre: string; materia: string; categoria: string; descripcion: string; activo: boolean;
     versionId: string; version: number; editable: boolean; schemaJson: string; numCampos: number; actualizadoEn: string;
 }
+
 export interface VersionModeloResumen { id: string; version: number; editable: boolean; notas: string; creadoEn: string }
-export interface CampoModeloResumen { clave: string; etiqueta: string; tipo: string }
 
 const SQL_EXPEDIENTE = `
-  SELECT e.id, e.codigo, e.tipo, e.materia, e.referencia, e.estado, e.juzgado, e.nro_causa, e.cliente_id,
-         e.datos_json, e.created_at,
+    SELECT e.id, e.codigo, e.tipo, e.materia, e.referencia, e.estado, e.juzgado, e.nro_causa, e.cliente_id,
+         e.modelo_id, e.datos_json, e.created_at,
          p.tipo AS p_tipo, p.nombres, p.apellido_paterno, p.apellido_materno, p.apellido_casada, p.razon_social,
          (SELECT COUNT(*) FROM expediente_parte ep WHERE ep.expediente_id = e.id) AS n_partes,
          (SELECT COUNT(*) FROM documento d WHERE d.expediente_id = e.id AND d.deleted_at IS NULL) AS n_documentos
@@ -60,6 +58,7 @@ function mapearExpediente(f: Fila): ExpedienteResumen {
         id: t(f.id), codigo: t(f.codigo), tipo: t(f.tipo), materia: t(f.materia), referencia: t(f.referencia),
         estado: t(f.estado), juzgado: t(f.juzgado), nroCausa: t(f.nro_causa), clienteId: t(f.cliente_id),
         clienteNombre: nombrePersona({ ...f, tipo: f.p_tipo }),
+        modeloId: t(f.modelo_id),
         datos: datosCaso(f.datos_json), nPartes: Number(f.n_partes), nDocumentos: Number(f.n_documentos),
         creadoEn: t(f.created_at),
     };
@@ -147,31 +146,6 @@ export class Consultas {
         }));
     }
 
-    async listarInmuebles(expedienteId: string): Promise<InmuebleResumen[]> {
-        const filas = await this.db.consultar<Fila>(
-            `SELECT i.id, i.tipo, i.ubicacion, i.matricula, i.codigo_catastral, i.superficie_m2
-       FROM expediente_inmueble ei JOIN inmueble i ON i.id = ei.inmueble_id
-       WHERE ei.expediente_id = ?1 AND i.deleted_at IS NULL ORDER BY i.created_at`,
-            [expedienteId],
-        );
-        const tit = await this.db.consultar<Fila>(
-            `SELECT it.inmueble_id, p.tipo, p.nombres, p.apellido_paterno, p.apellido_materno, p.apellido_casada, p.razon_social
-       FROM inmueble_titular it JOIN persona p ON p.id = it.persona_id
-       WHERE p.deleted_at IS NULL AND it.inmueble_id IN (SELECT inmueble_id FROM expediente_inmueble WHERE expediente_id = ?1)`,
-            [expedienteId],
-        );
-        const nombres = new Map<string, string[]>();
-        for (const f of tit) {
-            const k = t(f.inmueble_id);
-            nombres.set(k, [...(nombres.get(k) ?? []), nombrePersona(f)]);
-        }
-        return filas.map((f) => ({
-            id: t(f.id), tipo: t(f.tipo), ubicacion: t(f.ubicacion), matricula: t(f.matricula),
-            codigoCatastral: t(f.codigo_catastral), superficieM2: t(f.superficie_m2),
-            titulares: (nombres.get(t(f.id)) ?? []).join(', '),
-        }));
-    }
-
     async listarDocumentos(expedienteId: string): Promise<DocumentoResumen[]> {
         const docs = await this.db.consultar<Fila>(
             'SELECT id, titulo, estado, created_at FROM documento WHERE expediente_id = ?1 AND deleted_at IS NULL ORDER BY created_at DESC',
@@ -218,53 +192,5 @@ export class Consultas {
             id: t(f.id), version: Number(f.version), editable: Number(f.editable) === 1,
             notas: t(f.notas), creadoEn: t(f.created_at),
         }));
-    }
-
-    /** Datos «caso.*» que usan los modelos activos, con la etiqueta y el tipo que les dio el abogado. */
-    async camposDeModelos(): Promise<CampoModeloResumen[]> {
-        const salida = new Map<string, CampoModeloResumen>();
-        for (const m of await this.listarModelos()) {
-            let esquema: unknown;
-            try {
-                esquema = JSON.parse(m.schemaJson);
-            } catch {
-                continue;
-            }
-            if (!Array.isArray(esquema)) continue;
-            for (const c of esquema as unknown[]) {
-                if (typeof c !== 'object' || c === null) continue;
-                const f = c as Record<string, unknown>;
-                const segs = t(f.path).split('.');
-                if (segs.length !== 2 || claveNormalizada(segs[0]) !== 'caso') continue;
-                const clave = claveCampo(segs[1]);
-                if (!clave || salida.has(clave)) continue;
-                salida.set(clave, { clave, etiqueta: t(f.etiqueta) || etiquetaRol(clave), tipo: t(f.tipo) || 'texto' });
-            }
-        }
-        return [...salida.values()];
-    }
-    /** Datos propios de partes («vendedor.datos.x») que usan los modelos activos, con la etiqueta y el tipo que les dio el abogado. */
-    async camposDePartes(): Promise<CampoParteResumen[]> {
-        const salida = new Map<string, CampoParteResumen>();
-        for (const m of await this.listarModelos()) {
-            let esquema: unknown;
-            try {
-                esquema = JSON.parse(m.schemaJson);
-            } catch {
-                continue;
-            }
-            if (!Array.isArray(esquema)) continue;
-            for (const c of esquema as unknown[]) {
-                if (typeof c !== 'object' || c === null) continue;
-                const f = c as Record<string, unknown>;
-                const ambito = Array.isArray(f.ambito) ? f.ambito.map(String) : [];
-                const d = datoDeParteEnRuta(t(f.path), ambito);
-                if (!d?.rol) continue;
-                const k = `${d.rol}|${d.clave}`;
-                if (salida.has(k)) continue;
-                salida.set(k, { rol: d.rol, clave: d.clave, etiqueta: t(f.etiqueta) || etiquetaRol(d.clave), tipo: t(f.tipo) || 'texto' });
-            }
-        }
-        return [...salida.values()];
     }
 }

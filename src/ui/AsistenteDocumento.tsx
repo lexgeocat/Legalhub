@@ -237,7 +237,10 @@ function PasoVerificar({ p, editando, ocupado, editar, descartar, aplicar, resta
     );
 }
 
-export function AsistenteDocumento({ expediente, cerrar }: { expediente: ExpedienteResumen; cerrar: () => void }) {
+export function AsistenteDocumento({ expediente, cerrar, modeloInicial }: {
+    expediente: ExpedienteResumen; cerrar: () => void; modeloInicial?: string;
+}) {
+    const [sel, setSel] = useState(modeloInicial ?? '');
     const s = useServicios();
     const modelos = useCargar(() => s.consultas.listarModelos(), []);
     const docs = useCargar(() => s.consultas.listarDocumentos(expediente.id), [expediente.id]);
@@ -247,7 +250,6 @@ export function AsistenteDocumento({ expediente, cerrar }: { expediente: Expedie
     const [analizando, setAnalizando] = useState(false);
     const [editando, setEditando] = useState(false);
     const [dlg, setDlg] = useState<{ analisis: AnalisisModelo; versionId: string; modelo: ModeloResumen } | null>(null);
-    const [sel, setSel] = useState('');
     const [titulo, setTitulo] = useState('');
     const [q, setQ] = useState('');
     const [guardarCaso, setGuardarCaso] = useState(true);

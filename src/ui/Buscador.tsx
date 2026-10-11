@@ -4,10 +4,10 @@ import { Aviso, Icono, Insignia, type Tono } from './comunes';
 import { mensajeError, useServicios } from './servicios';
 
 const ETIQUETA: Record<ResultadoBusqueda['tipo'], string> = {
-    persona: 'Persona', expediente: 'Expediente', documento: 'Documento', inmueble: 'Inmueble',
+    persona: 'Persona', expediente: 'Expediente', documento: 'Documento'
 };
 const TONO: Record<ResultadoBusqueda['tipo'], Tono> = {
-    persona: 'violeta', expediente: 'azul', documento: 'verde', inmueble: 'ambar',
+    persona: 'violeta', expediente: 'azul', documento: 'verde'
 };
 
 export function Buscador({ cerrar, elegir }: { cerrar: () => void; elegir: (r: ResultadoBusqueda) => void }) {

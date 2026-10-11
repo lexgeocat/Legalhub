@@ -1,6 +1,7 @@
-import { ROL_PENDIENTE, datoDeParteEnRuta } from '../domain/catalogo';
+import { ROL_PENDIENTE, datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
 import type { CampoPropio, FuenteModelo, GrupoDatos, TipoCampo } from '../domain/fuenteModelo';
-import { claveCampo, claveNormalizada } from '../domain/texto';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../domain/texto';
+import { ROLES_CONOCIDOS } from '../domain/tiposExpediente';
 import type { CampoEsquema } from './puertos/motorPlantillas';
 const USO_CASO = /\{\{\s*caso\.([\p{L}_][\p{L}\p{N}_]*)\s*(\?)?/giu;
 
@@ -150,4 +151,62 @@ export function camposDesdeEsquema(esquema: CampoEsquema[]): CampoPropio[] {
         });
     }
     return [...salida.values()];
+}
+/* ---------------- Ficha de un modelo: qué pide, para mostrarlo en el expediente ---------------- */
+export interface DatoCasoFicha { clave: string; etiqueta: string; tipo: string; requerido: boolean }
+export interface DatoParteFicha extends DatoCasoFicha { rol: string }
+export interface FichaModelo {
+    /** Roles (singular) que usa el modelo: vendedor, comprador… */
+    roles: string[];
+    /** Datos «caso.*» que pide el modelo. */
+    caso: DatoCasoFicha[];
+    /** Datos propios de las partes («vendedor.datos.x») que pide el modelo. */
+    datosParte: DatoParteFicha[];
+}
+
+export function fichaDeModelo(esquema: CampoEsquema[], rolesDeclarados: readonly string[] = []): FichaModelo {
+    const roles = new Set(rolesDeclarados.map(normalizarRol).filter(Boolean));
+    const canonico = (texto: string): string => {
+        const t = texto.replace(/^hay_/i, '');
+        return [...roles, ...ROLES_CONOCIDOS].find((r) => mismoRol(r, t)) ?? '';
+    };
+    const caso = new Map<string, DatoCasoFicha>();
+    const datosParte = new Map<string, DatoParteFicha>();
+
+    for (const c of esquema) {
+        const ambito = c.ambito ?? [];
+        for (const a of ambito) {
+            const r = canonico(a);
+            if (r) roles.add(r);
+        }
+        const segs = c.path.split('.');
+        const primero = canonico(segs[0]);
+        if (primero) roles.add(primero);
+
+        const d = datoDeParteEnRuta(c.path, ambito);
+        if (d) {
+            if (!d.rol) continue;
+            const rol = canonico(d.rol) || normalizarRol(d.rol);
+            roles.add(rol);
+            const k = `${rol}|${d.clave}`;
+            const previo = datosParte.get(k);
+            if (previo) previo.requerido ||= c.requerido;
+            else {
+                datosParte.set(k, {
+                    rol, clave: d.clave, etiqueta: c.etiqueta || etiquetaRol(d.clave),
+                    tipo: c.tipo || 'texto', requerido: c.requerido,
+                });
+            }
+            continue;
+        }
+
+        if (segs.length === 2 && claveNormalizada(segs[0]) === 'caso') {
+            const clave = claveCampo(segs[1]);
+            if (!clave) continue;
+            const previo = caso.get(clave);
+            if (previo) previo.requerido ||= c.requerido;
+            else caso.set(clave, { clave, etiqueta: c.etiqueta || etiquetaRol(clave), tipo: c.tipo || 'texto', requerido: c.requerido });
+        }
+    }
+    return { roles: [...roles], caso: [...caso.values()], datosParte: [...datosParte.values()] };
 }

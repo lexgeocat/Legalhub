@@ -8,7 +8,6 @@ import {
 import { AgregarParte } from '../application/casosDeUso/agregarParte';
 import { Buscar } from '../application/casosDeUso/buscar';
 import { CrearExpediente } from '../application/casosDeUso/crearExpediente';
-import { CrearInmueble } from '../application/casosDeUso/crearInmueble';
 import { CrearPersona } from '../application/casosDeUso/crearPersona';
 import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 import { GenerarDocumento } from '../application/casosDeUso/generarDocumento';
@@ -48,7 +47,6 @@ export interface Servicios {
     agregarParte: AgregarParte;
     quitarParte: QuitarParte;
     actualizarDatosParte: ActualizarDatosParte;
-    crearInmueble: CrearInmueble;
     importarModelo: ImportarModelo;
     verModelo: VerModelo;
     editarDatosModelo: EditarDatosModelo;
@@ -93,7 +91,6 @@ export async function crearServicios(): Promise<Servicios> {
         agregarParte: new AgregarParte(db),
         quitarParte: new QuitarParte(db),
         actualizarDatosParte: new ActualizarDatosParte(db),
-        crearInmueble: new CrearInmueble(db),
         importarModelo,
         verModelo: new VerModelo({ modelos, lector }),
         editarDatosModelo: new EditarDatosModelo(db),
