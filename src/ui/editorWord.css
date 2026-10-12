@@ -131,6 +131,9 @@
     outline: none;
     border: none;
     white-space: pre-wrap;
+    font-kerning: none;
+    font-variant-ligatures: none;
+    text-rendering: geometricPrecision;
 }
 
 /*
@@ -149,7 +152,10 @@
 .hoja-ed p,
 .hoja-ed h1,
 .hoja-ed h2 {
-    margin: 0 0 calc(6pt * var(--esc, 1));
+    /* Word suma «después» del párrafo anterior + «antes» del siguiente (no colapsa como el margin de CSS):
+       por eso el «antes» va como padding-top. */
+    margin: 0 0 var(--despues, calc(6pt * var(--esc, 1)));
+    padding-top: var(--antes, 0pt);
     min-height: 1em;
     font-size: inherit;
     font-weight: 400;
@@ -159,15 +165,18 @@
     white-space: pre-wrap;
 }
 
+/* Mismos valores que ESPACIO_TITULO_PT / ESPACIO_SUBTITULO_PT (estilos Title y Subtitle del .docx). */
 .hoja-ed h1 {
-    margin: calc(12pt * var(--esc, 1)) 0;
+    margin: 0 0 calc(12pt * var(--esc, 1));
+    padding-top: calc(12pt * var(--esc, 1));
     font-size: var(--pt-titulo, 1.2em);
     font-weight: 700;
     text-align: center;
 }
 
 .hoja-ed h2 {
-    margin: calc(6pt * var(--esc, 1)) 0;
+    margin: 0 0 calc(6pt * var(--esc, 1));
+    padding-top: calc(6pt * var(--esc, 1));
     font-weight: 700;
     text-align: left;
 }

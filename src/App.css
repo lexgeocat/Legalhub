@@ -1316,6 +1316,9 @@ textarea {
 /* La hoja editable (.hoja-ed) se define en ui/editorWord.css. */
 .hoja-lectura {
   color: #000;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  text-rendering: geometricPrecision;
 }
 
 .hoja-lectura p {

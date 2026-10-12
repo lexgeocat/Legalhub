@@ -1,7 +1,7 @@
 import { strToU8, zipSync, type Zippable } from 'fflate';
 import type { GeneradorDocx } from '../../application/puertos/modelos';
 import {
-    CONFIG_POR_DEFECTO, margenesSeguros, parsearTexto,
+    CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, espacioSeguro, margenesSeguros, parsearTexto,
     type BloqueParrafo, type ConfigPagina, type FuenteModelo, type Tramo,
 } from '../../domain/fuenteModelo';
 
@@ -36,6 +36,8 @@ function configSegura(c: Partial<ConfigPagina> | undefined): ConfigPagina {
         sangria: !!b.sangria,
         margenes: margenesSeguros(b.margenes, tamano),
         simetricos: !!b.simetricos,
+        espacioAntes: espacioSeguro(b.espacioAntes, CONFIG_POR_DEFECTO.espacioAntes),
+        espacioDespues: espacioSeguro(b.espacioDespues, CONFIG_POR_DEFECTO.espacioDespues),
     };
 }
 
@@ -141,14 +143,21 @@ function estilosXml(cfg: ConfigPagina): string {
     const f = escAttr(cfg.fuente);
     const medios = Math.round(cfg.tamanoPt * 2);
     const linea = Math.round(240 * cfg.interlineado);
+    const antes = Math.round(cfg.espacioAntes * 20);
+    const despues = Math.round(cfg.espacioDespues * 20);
+    const sTit = Math.round(ESPACIO_TITULO_PT * 20);
+    const sSub = Math.round(ESPACIO_SUBTITULO_PT * 20);
     return (
         `${CABECERA}<w:styles xmlns:w="${NS_W}"><w:docDefaults>` +
         `<w:rPrDefault><w:rPr><w:rFonts w:ascii="${f}" w:hAnsi="${f}" w:eastAsia="${f}" w:cs="${f}"/>` +
         `<w:sz w:val="${medios}"/><w:szCs w:val="${medios}"/><w:lang w:val="es-BO"/></w:rPr></w:rPrDefault>` +
-        `<w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="${linea}" w:lineRule="auto"/></w:pPr></w:pPrDefault>` +
+        // widowControl=0: Word NO mueve líneas sueltas a otra hoja, igual que la vista previa (quítalo si prefieres control de viudas).
+        `<w:pPrDefault><w:pPr><w:widowControl w:val="0"/><w:spacing w:before="${antes}" w:after="${despues}" w:line="${linea}" w:lineRule="auto"/></w:pPr></w:pPrDefault>` +
         '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
-        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/></w:style>' +
-        '<w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/></w:style></w:styles>'
+        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
+        `<w:pPr><w:spacing w:before="${sTit}" w:after="${sTit}"/></w:pPr></w:style>` +
+        '<w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
+        `<w:pPr><w:spacing w:before="${sSub}" w:after="${sSub}"/></w:pPr></w:style></w:styles>`
     );
 }
 

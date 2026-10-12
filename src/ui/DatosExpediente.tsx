@@ -41,7 +41,7 @@ interface FilaParte {
 interface RefParte { rol: string; propio: boolean; clave: string }
 
 const NOMBRES = new Set(['nombres', 'apellidoPaterno', 'apellidoMaterno', 'razonSocial']);
-const EXPEDIDOS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD'];
+const EXPEDIDOS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD', 'QR'];
 const ESTADOS_CIVILES = ['soltero', 'casado', 'divorciado', 'viudo', 'union libre'];
 
 const ETIQ: Record<string, string> = {

@@ -466,7 +466,8 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
     const mismaConfig = (a: ConfigPagina, b: ConfigPagina) =>
         margenesIguales(a.margenes, b.margenes) && a.tamano === b.tamano && a.fuente === b.fuente
         && a.tamanoPt === b.tamanoPt && a.interlineado === b.interlineado && a.sangria === b.sangria
-        && a.simetricos === b.simetricos;
+        && a.simetricos === b.simetricos
+        && a.espacioAntes === b.espacioAntes && a.espacioDespues === b.espacioDespues;
 
     async function aplicarEdicion(p: DatosVerificar, texto: string, config: ConfigPagina) {
         const base: Original = p.original ?? { preparado: p.preparado, vista: p.vista };

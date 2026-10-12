@@ -6,5 +6,8 @@ export function ci(datos: unknown): string {
   }
   const [numero, complemento, expedido] = (datos as unknown[]).map((v) => String(v ?? '').trim());
   if (!numero) throw new ErrorDeDatos('C.I. sin número');
-  return numero + (complemento ? `-${complemento}` : '') + (expedido ? ` ${expedido}` : '');
+  // Complemento y sigla (LP, CB… o QR en las cédulas nuevas) siempre en mayúsculas.
+  const comp = complemento.toUpperCase();
+  const exp = expedido.length <= 3 ? expedido.toUpperCase() : expedido;
+  return numero + (comp ? `-${comp}` : '') + (exp ? ` ${exp}` : '');
 }

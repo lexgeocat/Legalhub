@@ -92,8 +92,8 @@ export function EditorHoja({
                 <ModalPagina
                     config={config}
                     cerrar={() => setDlgPagina(false)}
-                    aplicar={(tamano, margenes, simetricos) =>
-                        cambiar({ ...config, tamano, margenes: margenesSeguros(margenes, tamano), simetricos })}
+                    aplicar={(tamano, margenes, simetricos, espacio) =>
+                        cambiar({ ...config, tamano, margenes: margenesSeguros(margenes, tamano), simetricos, ...espacio })}
                 />
             )}
         </>

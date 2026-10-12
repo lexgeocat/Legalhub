@@ -46,6 +46,9 @@ export interface ConfigPagina {
     sangria: boolean;
     margenes: Margenes;
     simetricos: boolean;
+    /** Espacio (pt) antes y después de cada párrafo normal: Word → Párrafo → Espaciado. */
+    espacioAntes: number;
+    espacioDespues: number;
 }
 
 export interface FuenteModelo {
@@ -117,9 +120,21 @@ export function margenesSeguros(m: Partial<Margenes> | null | undefined, tamano:
     return { superior, inferior, izquierdo, derecho };
 }
 
+export const ESPACIO_MAX_PT = 72;
+/** Espacio fijo de títulos (#) y subtítulos (##): igual en la vista y en los estilos Title/Subtitle del .docx. */
+export const ESPACIO_TITULO_PT = 12;
+export const ESPACIO_SUBTITULO_PT = 6;
+
+export function espacioSeguro(v: unknown, defecto: number): number {
+    if (v === null || v === undefined || v === '') return defecto;
+    const n = typeof v === 'string' ? Number(v.replace(',', '.')) : Number(v);
+    return Number.isFinite(n) ? Math.min(ESPACIO_MAX_PT, Math.max(0, Math.round(n * 10) / 10)) : defecto;
+}
+
 export const CONFIG_POR_DEFECTO: ConfigPagina = {
     tamano: 'carta', fuente: 'Times New Roman', tamanoPt: 12, interlineado: 1.5, sangria: false,
     margenes: { ...MARGENES_BASE }, simetricos: false,
+    espacioAntes: 0, espacioDespues: 6,
 };
 
 export const fuenteVacia = (): FuenteModelo => ({
@@ -175,6 +190,8 @@ export function leerFuente(json: string): FuenteModelo {
     const config = { ...CONFIG_POR_DEFECTO, ...(r.config ?? {}) };
     config.margenes = margenesSeguros(r.config?.margenes, config.tamano);
     config.simetricos = r.config?.simetricos === true;
+    config.espacioAntes = espacioSeguro(r.config?.espacioAntes, CONFIG_POR_DEFECTO.espacioAntes);
+    config.espacioDespues = espacioSeguro(r.config?.espacioDespues, CONFIG_POR_DEFECTO.espacioDespues);
     return {
         version: 1,
         config,

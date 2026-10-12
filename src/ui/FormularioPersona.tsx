@@ -10,7 +10,7 @@ type TipoPersona = 'natural' | 'juridica';
 
 const ESTADOS_CIVILES = ['soltero', 'casado', 'divorciado', 'viudo', 'union libre'];
 const BASE_ESTADO: Record<string, string> = { soltera: 'soltero', casada: 'casado', divorciada: 'divorciado', viuda: 'viudo' };
-const EXPEDIDOS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD'];
+const EXPEDIDOS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD', 'QR'];
 const SIN_CAJA: CSSProperties = { display: 'contents', border: 0, padding: 0, margin: 0 };
 
 /** Crea (sin `id`) o edita una persona. `guardado` recibe el id de la persona. */

@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
-    CONFIG_POR_DEFECTO, PAGINA_CM,
+    CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, PAGINA_CM,
     type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
 } from '../domain/fuenteModelo';
 import { usePaginacion } from './Paginacion';
 import { pilaCss } from '../domain/fuentes';
 import { describirMarcador } from '../domain/marcadores';
+import { lineaCss, useRazonLinea } from './metricasFuente';
 const PX_POR_CM = 37.7953;
 
 function Tramos({ tramos, estilo, resaltar, escala }: {
@@ -55,11 +56,15 @@ function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: Conf
     const titulo = b.estilo === 'titulo';
     const sub = b.estilo === 'subtitulo';
     const esBloque = resaltar && b.tramos.length === 1 && b.tramos[0].marcador && /^\{\{\s*[#/]/.test(b.tramos[0].texto);
+    const antes = titulo ? ESPACIO_TITULO_PT : sub ? ESPACIO_SUBTITULO_PT : cfg.espacioAntes;
+    const despues = titulo ? ESPACIO_TITULO_PT : sub ? ESPACIO_SUBTITULO_PT : cfg.espacioDespues;
     const estilo: CSSProperties = {
         textAlign: b.alineacion === 'both' ? 'justify' : b.alineacion,
-        margin: `${(titulo ? 12 : sub ? 6 : 0) * escala}pt 0 ${(titulo ? 12 : sub ? 6 : 6) * escala}pt`,
+        // Como Word: el espacio «antes» se suma al «después» del párrafo anterior (no se colapsa).
+        margin: `0 0 ${(despues * escala).toFixed(2)}pt`,
+        paddingTop: `${(antes * escala).toFixed(2)}pt`,
         fontSize: titulo ? `${(cfg.tamanoPt + 2) * escala}pt` : undefined,
-        lineHeight: b.interlineado,
+        lineHeight: b.interlineado ? lineaCss(b.interlineado) : undefined,
         breakBefore: b.nuevaColumna && (b.columnas ?? 1) > 1 ? 'column' : undefined,
         textIndent:
             cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')
@@ -94,7 +99,16 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
     const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
     const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - 28) / (pag.w * PX_POR_CM))) : 0.6;
     const pt = (n: number) => `${(n * escala).toFixed(2)}pt`;
-    const pg = usePaginacion(raiz, config, PX_POR_CM * escala, bloques);
+    const razon = useRazonLinea(config.fuente);
+    // Cualquier cosa que cambie la altura del texto fuerza una nueva paginación.
+    const medida = useMemo(
+        () => ({
+            bloques, razon, i: config.interlineado, a: config.espacioAntes, d: config.espacioDespues,
+            f: config.fuente, t: config.tamanoPt,
+        }),
+        [bloques, razon, config.interlineado, config.espacioAntes, config.espacioDespues, config.fuente, config.tamanoPt],
+    );
+    const pg = usePaginacion(raiz, config, PX_POR_CM * escala, medida);
 
     // Los párrafos consecutivos en columnas van dentro de una región de 2 columnas.
     const piezas: ReactNode[] = [];
@@ -136,8 +150,9 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
                             fontFamily: pilaCss(config.fuente),
                             tabSize: `${(1.25 * escala).toFixed(3)}cm`,
                             fontSize: pt(config.tamanoPt),
-                            lineHeight: config.interlineado,
+                            lineHeight: lineaCss(config.interlineado),
                             '--esc': escala,
+                            '--rl': razon,
                         } as CSSProperties}
                     >
                         {bloques.length === 0 && <p className="hoja-vacia">El documento está vacío.</p>}

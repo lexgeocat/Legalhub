@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import {
-    AREA_MIN_CM, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES, presetDe,
+    AREA_MIN_CM, ESPACIO_MAX_PT, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES, presetDe,
     type ConfigPagina, type Margenes, type TamanoPagina,
 } from '../domain/fuenteModelo';
 import { coma } from './BarraFormato';
@@ -10,6 +10,8 @@ const LADOS: (keyof Margenes)[] = ['superior', 'inferior', 'izquierdo', 'derecho
 const NOMBRE_LADO: Record<keyof Margenes, string> = {
     superior: 'Superior', inferior: 'Inferior', izquierdo: 'Izquierdo', derecho: 'Derecho',
 };
+
+export interface EspacioParrafo { espacioAntes: number; espacioDespues: number }
 
 const aTextos = (m: Margenes): Record<keyof Margenes, string> => ({
     superior: coma(m.superior), inferior: coma(m.inferior), izquierdo: coma(m.izquierdo), derecho: coma(m.derecho),
@@ -41,12 +43,14 @@ function MiniPagina({ w, h, m }: { w: number; h: number; m: Margenes | null }) {
 
 export function ModalPagina({ config, aplicar, cerrar }: {
     config: ConfigPagina;
-    aplicar: (tamano: TamanoPagina, m: Margenes, simetricos: boolean) => void;
+    aplicar: (tamano: TamanoPagina, m: Margenes, simetricos: boolean, espacio: EspacioParrafo) => void;
     cerrar: () => void;
 }) {
     const [tamano, setTamano] = useState<TamanoPagina>(config.tamano);
     const [txt, setTxt] = useState(aTextos(config.margenes));
     const [sim, setSim] = useState(config.simetricos);
+    const [antes, setAntes] = useState(coma(config.espacioAntes));
+    const [despues, setDespues] = useState(coma(config.espacioDespues));
     const [error, setError] = useState<string | null>(null);
 
     const nums: Margenes = {
@@ -75,7 +79,13 @@ export function ModalPagina({ config, aplicar, cerrar }: {
             setError(`Los márgenes superior e inferior dejan menos de ${AREA_MIN_CM} cm de alto para el texto.`);
             return;
         }
-        aplicar(tamano, nums, sim);
+        const nAntes = aNumero(antes);
+        const nDespues = aNumero(despues);
+        if ([nAntes, nDespues].some((n) => !Number.isFinite(n) || n < 0 || n > ESPACIO_MAX_PT)) {
+            setError(`El espacio antes y después va de 0 a ${ESPACIO_MAX_PT} pt (por ejemplo 6).`);
+            return;
+        }
+        aplicar(tamano, nums, sim, { espacioAntes: nAntes, espacioDespues: nDespues });
         cerrar();
     };
 
@@ -119,6 +129,21 @@ export function ModalPagina({ config, aplicar, cerrar }: {
                         <input type="checkbox" checked={sim} onChange={(e) => setSim(e.target.checked)} />
                         Márgenes simétricos (espejo): el izquierdo pasa a ser el interior y se alterna en cada hoja
                     </label>
+
+                    <h4 className="ancho grupo-titulo">Párrafo</h4>
+                    <Campo etiqueta="Espacio antes (pt)">
+                        <input inputMode="decimal" value={antes}
+                            onChange={(e) => { setAntes(e.target.value); setError(null); }} />
+                    </Campo>
+                    <Campo etiqueta="Espacio después (pt)">
+                        <input inputMode="decimal" value={despues}
+                            onChange={(e) => { setDespues(e.target.value); setError(null); }} />
+                    </Campo>
+                    <p className="suave ancho">
+                        Equivale a Word → Párrafo → Espaciado (predeterminado: antes 0 · después 6). Se aplica a todo el texto normal;
+                        los títulos (#) y subtítulos (##) llevan su propio espacio. El interlineado se cambia desde la cinta.
+                    </p>
+
                     <p className="suave ancho">
                         Memorial: superior 5,5 · inferior 2 · izquierdo 4 · derecho 2. Los márgenes se aplican a todas las páginas, como en Word.
                     </p>

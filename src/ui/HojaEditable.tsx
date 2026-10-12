@@ -12,6 +12,7 @@ import './editorWord.css';
 import { pilaCss } from '../domain/fuentes';
 import { htmlABloques } from './pegadoHtml';
 import { SIN_CONTEXTO, describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
+import { lineaCss, useRazonLinea } from './metricasFuente';
 
 const PX_POR_CM = 37.7953;
 const MARGEN_LIENZO = 48;
@@ -250,7 +251,7 @@ function parrafoADom(b: BloqueParrafo): HTMLElement {
     if (b.alineacion !== BASE[b.estilo]) el.style.textAlign = A_CSS[b.alineacion];
     if (b.interlineado) {
         el.dataset.lh = String(b.interlineado);
-        el.style.lineHeight = String(b.interlineado);
+        el.style.lineHeight = lineaCss(b.interlineado);
     }
     if (b.nuevaColumna) el.dataset.nc = '1';
     if (b.tramos.length === 0) {
@@ -1346,10 +1347,17 @@ export function HojaEditable({
     const mg = margenesSeguros(config.margenes, config.tamano);
     const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
     const pg = usePaginacion(raizRef, config, PX_POR_CM * escala);
+    const razon = useRazonLinea(config.fuente);
 
     useEffect(() => {
         cb.current.onPaginas(pg.paginas);
     }, [pg.paginas]);
+
+    // Interlineado, espaciado o métricas de fuente cambian la altura del texto: hay que volver a paginar.
+    useEffect(() => {
+        pg.remedir();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [razon, config.interlineado, config.espacioAntes, config.espacioDespues, config.fuente, config.tamanoPt]);
 
     /* ----- historial propio (deshacer / rehacer) ----- */
     function registrar() {
@@ -1757,7 +1765,7 @@ export function HojaEditable({
                 b.style.removeProperty('line-height');
             } else {
                 b.dataset.lh = String(v);
-                b.style.lineHeight = String(v);
+                b.style.lineHeight = lineaCss(v);
             }
             if (!b.getAttribute('style')) b.removeAttribute('style');
         }
@@ -2117,9 +2125,12 @@ export function HojaEditable({
         ...pg.estiloRaiz,
         fontFamily: pilaCss(config.fuente),
         fontSize: pt(config.tamanoPt),
-        lineHeight: config.interlineado,
+        lineHeight: lineaCss(config.interlineado),
         tabSize: cm(TAB_CM),
         '--esc': escala,
+        '--rl': razon,
+        '--antes': pt(config.espacioAntes),
+        '--despues': pt(config.espacioDespues),
         '--pt-titulo': pt(config.tamanoPt + 2),
         '--sangria': cm(1.25),
     } as CSSProperties;

@@ -12,7 +12,7 @@ export interface Generales {
     razonSocial?: string; nit?: string;
 }
 
-const SIGLAS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD'];
+const SIGLAS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD', 'QR'];
 const DEPARTAMENTOS: Record<string, string> = {
     'la paz': 'LP', cochabamba: 'CB', 'santa cruz': 'SC', oruro: 'OR', potosi: 'PT',
     chuquisaca: 'CH', sucre: 'CH', tarija: 'TJ', beni: 'BN', pando: 'PD',
@@ -30,7 +30,7 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 
 const RE_NAC = new RegExp(`\\b(${NACIONALIDADES.map((n) => `${n.slice(0, -1)}[oa]`).join('|')})\\b`, 'i');
 const RE_CI = /(?:\bc\.?\s?i\.?|\bc[eé]dula(?:\s+de\s+identidad)?|\bcarn[eé]t(?:\s+de\s+identidad)?)\s*(?:n[°ºo]\.?\s*)?:?\s*(\d[\d.]*\d)(?:\s*-\s*(\d[A-Za-z]))?/i;
-const RE_EXPEDIDO = /^\s*,?\s*(?:expedid[oa]\s+en\s+|exp\.?\s*)?(LP|CB|SC|OR|PT|CH|TJ|BN|PD|La Paz|Santa Cruz|Cochabamba|Oruro|Potos[íi]|Chuquisaca|Sucre|Tarija|Beni|Pando)\b/i;
+const RE_EXPEDIDO = /^\s*,?\s*(?:expedid[oa]\s+en\s+|exp\.?\s*)?(LP|CB|SC|OR|PT|CH|TJ|BN|PD|QR|La Paz|Santa Cruz|Cochabamba|Oruro|Potos[íi]|Chuquisaca|Sucre|Tarija|Beni|Pando)\b/i;
 const RE_ESTADO = /\b(soltero|soltera|casado|casada|divorciado|divorciada|viudo|viuda|uni[oó]n\s+libre)\b/i;
 const RE_DOMICILIO = /(?:domiciliad[oa]\s+en|con\s+domicilio\s+(?:real\s+|legal\s+)?en|con\s+domicilio\s*:|domicilio\s+en|vecin[oa]\s+de|residente\s+en)\s*(.+)$/i;
 const RE_PROFESION = /(?:de\s+profesi[oó]n|de\s+ocupaci[oó]n|de\s+oficio|profesi[oó]n|ocupaci[oó]n|oficio)\s*:?\s*([^,;.]+)/i;
