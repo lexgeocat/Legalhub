@@ -81,6 +81,11 @@ function parrafo(b: BloqueParrafo, cfg: ConfigPagina): string {
     if (b.interlineado) {
         pPr.push(`<w:spacing w:line="${Math.round(240 * acotar(b.interlineado, 0.5, 5, cfg.interlineado))}" w:lineRule="auto"/>`);
     }
+    // Sangría de primera línea (1,25 cm = 709 twips), igual que en el editor.
+    if (cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')) {
+        pPr.push('<w:ind w:firstLine="709"/>');
+    }
+
     pPr.push(`<w:jc w:val="${b.alineacion}"/>`);
     // Salto de columna: va primero y lo que sigue empieza en la columna siguiente (solo tiene sentido dentro de columnas).
     const salto = b.nuevaColumna && (b.columnas ?? 1) > 1 ? '<w:r><w:br w:type="column"/></w:r>' : '';

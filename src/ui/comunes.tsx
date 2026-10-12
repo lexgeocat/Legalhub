@@ -278,11 +278,6 @@ export async function copiarTexto(texto: string): Promise<boolean> {
     }
 }
 
-export async function copiarConAviso(texto: string): Promise<void> {
-    const ok = await copiarTexto(texto);
-    avisar(ok ? 'Marcador copiado al portapapeles' : 'No se pudo copiar', ok ? 'ok' : 'error');
-}
-
 export async function confirmar(mensaje: string, titulo = 'Confirmar'): Promise<boolean> {
     try {
         return await ask(mensaje, { title: titulo, kind: 'warning', okLabel: 'Aceptar', cancelLabel: 'Cancelar' });

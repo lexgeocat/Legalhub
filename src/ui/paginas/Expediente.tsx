@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { fichaDeModelo, seccionesDeModelo, type FichaModelo } from '../../application/camposModelo';
 import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
 import type { DocumentoResumen, ExpedienteResumen, ModeloResumen, PersonaResumen } from '../../application/consultas';
@@ -38,7 +38,10 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
         () => (modelo ? s.verModelo.ejecutar(modelo.versionId) : Promise.resolve(null)),
         [modelo?.versionId ?? ''],
     );
-    const visible = modelo && detalle.datos?.versionId === modelo.versionId ? detalle.datos : null;
+    const visibleActual = modelo && detalle.datos?.versionId === modelo.versionId ? detalle.datos : null;
+    const ultimoVisible = useRef<{ modeloId: string; v: ModeloVisible } | null>(null);
+    if (modelo && visibleActual) ultimoVisible.current = { modeloId: modelo.id, v: visibleActual };
+    const visible = visibleActual ?? (modelo && ultimoVisible.current?.modeloId === modelo.id ? ultimoVisible.current.v : null);
     const ficha = useMemo(
         () => (visible ? fichaDeModelo(visible.esquema, visible.fuente?.partes ?? []) : null),
         [visible],
@@ -163,6 +166,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                     personas={personas.datos ?? []}
                     recargar={() => { partes.recargar(); exp.recargar(); }}
                     recargarPersonas={personas.recargar}
+                    recargarModelos={modelos.recargar}
                     irModelo={() => void irA('modelo')}
                     irPartes={() => setPestana('partes')}
                     irDatos={() => setPestana('datos')}

@@ -1240,74 +1240,15 @@ textarea {
   padding: 6px 10px 12px;
 }
 
-.pc-grupo-tit {
-  list-style: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 4px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 13px;
-  border-bottom: 1px solid var(--borde);
-  background: transparent;
-  border-top: 0;
-  border-left: 0;
-  border-right: 0;
-  width: 100%;
-  font-family: inherit;
-  color: var(--texto);
-  text-align: left;
-}
-
 .pc-ayuda {
   font-size: 12px;
   color: var(--texto-3);
   padding: 6px 4px;
 }
 
-.pc-item {
-  display: flex;
-  gap: 4px;
-  align-items: stretch;
-  padding: 3px 0;
-}
-
-.pc-insertar {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 6px 8px;
-  cursor: pointer;
-  font: inherit;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .pc-insertar:hover {
   background: var(--primario-claro);
   border-color: #cfd8fb;
-}
-
-.pc-etiq {
-  font-size: 13px;
-  font-weight: 550;
-}
-
-.pc-codigo {
-  font-size: 11.5px;
-  color: var(--texto-3);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 @media (max-width: 1180px) {
@@ -1431,66 +1372,7 @@ textarea {
 }
 
 
-/* ===== Llenar sobre el documento ===== */
-.papel {
-  background: #fff;
-  color: #000;
-  border: 1px solid var(--borde-fuerte);
-  border-radius: 8px;
-  box-shadow: var(--sombra);
-  padding: 28px 36px;
-  max-height: 64vh;
-  overflow: auto;
-}
 
-.papel-p {
-  margin: 0 0 .6em;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.papel-salto {
-  border: 0;
-  border-top: 1.5px dashed #aeb6cb;
-  margin: 18px 0;
-}
-
-.papel input.en-linea,
-.papel textarea.en-linea {
-  display: inline-block;
-  width: auto;
-  min-width: 8ch;
-  padding: 0 5px 1px;
-  font: inherit;
-  line-height: inherit;
-  color: #1f3fae;
-  background: #eef2ff;
-  border: 0;
-  border-bottom: 1.5px solid #8b9bd9;
-  border-radius: 3px;
-}
-
-.papel input.en-linea.sin-valor,
-.papel textarea.en-linea.sin-valor {
-  background: #fff4d6;
-  border-bottom-color: #d99a1f;
-}
-
-.papel input.en-linea:focus,
-.papel textarea.en-linea:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(53, 86, 216, .16);
-}
-
-.papel textarea.en-linea.largo {
-  display: block;
-  width: 100%;
-  margin: 4px 0;
-  padding: 6px 8px;
-  min-height: 4.5em;
-  border: 1px solid #8b9bd9;
-  resize: vertical;
-}
 
 /* Lista «lo que pide el modelo» y partes del paso Datos */
 .chk-fila {
@@ -1543,31 +1425,6 @@ textarea {
   backdrop-filter: blur(4px);
   border: 1px solid var(--borde-fuerte);
   border-radius: var(--radio);
-}
-
-/* Listas desplegables escritas directo sobre el documento (género, expedido, estado civil…) */
-.papel select.en-linea {
-  display: inline-block;
-  width: auto;
-  min-width: 8ch;
-  padding: 0 4px 1px;
-  font: inherit;
-  line-height: inherit;
-  color: #1f3fae;
-  background: #eef2ff;
-  border: 0;
-  border-bottom: 1.5px solid #8b9bd9;
-  border-radius: 3px;
-}
-
-.papel select.en-linea.sin-valor {
-  background: #fff4d6;
-  border-bottom-color: #d99a1f;
-}
-
-.papel select.en-linea:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(53, 86, 216, .16);
 }
 
 /* Datos insertados, agrupados por categoría (vista previa) */

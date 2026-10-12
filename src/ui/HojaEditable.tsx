@@ -78,13 +78,18 @@ export interface MenuCampoInfo {
     editar: () => void;
 }
 
+/** Modo «llenar»: cada campo muestra el dato real del expediente y al hacer clic se edita. */
+export interface LlenadoHoja {
+    /** Texto del dato: '' = falta, undefined = este campo no se llena aquí (queda como etiqueta). */
+    valor(marcador: string, ambito: string[]): string | undefined;
+    editar(marcador: string, ambito: string[], chip: HTMLElement): void;
+}
 
 export interface ControlHoja {
     leerTexto(): string;
     insertar(texto: string, bloque: boolean): void;
     comando(c: 'negrita' | 'cursiva' | 'subrayado'): void;
     alinear(a: Alineacion): void;
-    estilo(e: 'titulo' | 'subtitulo'): void;
     saltoPagina(): void;
     deshacer(): void;
     rehacer(): void;
@@ -145,26 +150,31 @@ function extraerDeSeccion(b: HTMLElement): void {
     }
     sec.after(b);
 }
-interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo: string; detalle: string; codigo: string }
+interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo: string; detalle: string; codigo: string; ayuda: string }
 
 /** Etiquetas y colores del modelo que se está editando (lo fija el componente al montarse). */
 let CONTEXTO: ContextoMarcadores = SIN_CONTEXTO;
+/** Si está definido, los campos muestran su dato real (modo «llenar»). */
+let LLENADO: LlenadoHoja | undefined;
 
-/** Un campo se ve como etiqueta corta; el código real vive en data-mk y se muestra con «Códigos». */
-function pintarChip(chip: HTMLElement, marcador: string): void {
+/** Un campo se ve como etiqueta corta (o como su dato real al llenar); el código real vive en data-mk. */
+function pintarChip(chip: HTMLElement, marcador: string, ambito: readonly string[] = []): void {
     const i = describirMarcador(marcador, CONTEXTO);
-    const clave = `${i.tipo}|${i.matiz}|${i.corto}`;
+    const v = LLENADO?.valor(marcador, [...ambito]);
+    const tipo = v === undefined ? i.tipo : v === '' ? 'falta' : 'lleno';
+    const corto = v ? v : i.corto;
+    const clave = `${tipo}|${i.matiz}|${corto}`;
     if (chip.dataset.mk === marcador && chip.dataset.v === clave && chip.childElementCount === 2) return;
     chip.className = 'mk';
     chip.contentEditable = 'false';
     chip.dataset.mk = marcador;
-    chip.dataset.k = i.tipo;
+    chip.dataset.k = tipo;
     chip.dataset.v = clave;
     chip.style.setProperty('--h', String(i.matiz));
-    chip.setAttribute('aria-label', i.titulo);
+    chip.setAttribute('aria-label', v ? `${i.titulo}: ${v}` : i.titulo);
     const etiqueta = document.createElement('span');
     etiqueta.className = 'mk-e';
-    etiqueta.textContent = i.corto;
+    etiqueta.textContent = corto;
     const codigo = document.createElement('span');
     codigo.className = 'mk-c';
     codigo.textContent = marcador;
@@ -178,7 +188,26 @@ function crearChip(texto: string): HTMLElement {
 }
 
 function repintar(raiz: HTMLElement): void {
-    for (const chip of Array.from(raiz.querySelectorAll<HTMLElement>('.mk'))) pintarChip(chip, chip.dataset.mk ?? '');
+    const pila: string[] = [];
+    for (const chip of Array.from(raiz.querySelectorAll<HTMLElement>('.mk'))) {
+        const m = chip.dataset.mk ?? '';
+        pintarChip(chip, m, pila);
+        const ap = RE_APERTURA.exec(m);
+        if (ap) {
+            pila.push(ap[1]);
+            continue;
+        }
+        const ci = RE_CIERRE.exec(m);
+        if (ci) {
+            const k = ci[1].toLowerCase();
+            for (let i = pila.length - 1; i >= 0; i--) {
+                if (pila[i].toLowerCase() === k) {
+                    pila.length = i;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 function envolver(tag: 'b' | 'i' | 'u', hijo: Node): HTMLElement {
@@ -1249,7 +1278,7 @@ const instantanea = (el: HTMLElement) => el.innerHTML
 
 export function HojaEditable({
     ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito,
-    onMenuCampo, contexto, verCodigos,
+    onMenuCampo, contexto, verCodigos, soloLectura, llenado,
 }: {
     ref?: Ref<ControlHoja>;
     textoInicial: string;
@@ -1267,6 +1296,8 @@ export function HojaEditable({
     /** Muestra el código {{…}} de cada campo en vez de su etiqueta corta. */
     verCodigos?: boolean;
     onMenuCampo?: (info: MenuCampoInfo) => void;
+    soloLectura?: boolean;
+    llenado?: LlenadoHoja;
 }) {
     const raizRef = useRef<HTMLDivElement>(null);
     const cfgRef = useRef(config);
@@ -1297,6 +1328,8 @@ export function HojaEditable({
         chipTip.current = chip;
         const m = chip.dataset.mk ?? '';
         const i = describirMarcador(m, CONTEXTO);
+        const el = raizRef.current;
+        const llena = !!LLENADO && !!el && LLENADO.valor(m, ambitoDeChip(el, chip)) !== undefined;
         const r = chip.getBoundingClientRect();
         const debajo = r.top < 120;
         setTip({
@@ -1304,6 +1337,7 @@ export function HojaEditable({
             arriba: debajo ? r.bottom + 8 : null,
             abajo: debajo ? null : window.innerHeight - r.top + 8,
             titulo: i.titulo, detalle: i.detalle, codigo: m,
+            ayuda: LLENADO ? (llena ? 'Clic para llenar este dato' : '') : 'Doble clic para editar',
         });
     }
 
@@ -1419,6 +1453,7 @@ export function HojaEditable({
         const el = raizRef.current;
         if (!el) return;
         normalizar(el, completo ? null : bloqueActual(el));
+        if (LLENADO) repintar(el);
         pg.remedir();
         if (inmediato) registrar();
         else programarSnapshot();
@@ -1672,23 +1707,6 @@ export function HojaEditable({
         tras(true);
     }
 
-    /** Alterna título/subtítulo; si el bloque ya tiene ese estilo vuelve a párrafo normal. */
-    function estilo(e: 'titulo' | 'subtitulo') {
-        const el = raizRef.current;
-        if (!el) return;
-        foco();
-        const bloques = bloquesSeleccionados(el);
-        if (bloques.length === 0) return;
-        registrar();
-        for (const b of bloques) {
-            const nuevo: EstiloParrafo = estiloDe(b) === e ? 'normal' : e;
-            const n = renombrar(b, TAG[nuevo]);
-            if (n.style.textAlign === A_CSS[BASE[nuevo]]) n.style.removeProperty('text-align');
-            if (!n.getAttribute('style')) n.removeAttribute('style');
-        }
-        tras(true);
-    }
-
     function saltoPagina() {
         insertar('===', true);
     }
@@ -1832,7 +1850,7 @@ export function HojaEditable({
     useImperativeHandle(
         ref,
         () => ({
-            leerTexto, insertar, comando, alinear, estilo, saltoPagina, deshacer, rehacer, enfocar: foco,
+            leerTexto, insertar, comando, alinear, saltoPagina, deshacer, rehacer, enfocar: foco,
             fuente: ponerFuente, tamano: ponerTamano, interlineado: ponerInterlineado, columnas: ponerColumnas, saltoColumna,
             contarPendientes: () => raizRef.current?.querySelectorAll('.mk[data-k="pendiente"]').length ?? 0,
             reasignar: (fn) => {
@@ -1853,13 +1871,19 @@ export function HojaEditable({
 
     useEffect(() => {
         CONTEXTO = contexto ?? SIN_CONTEXTO;
+        LLENADO = llenado;
         const el = raizRef.current;
         if (el) {
             repintar(el);
             pg.remedir();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [contexto]);
+    }, [contexto, llenado]);
+
+    useEffect(() => () => {
+        CONTEXTO = SIN_CONTEXTO;
+        LLENADO = undefined;
+    }, []);
 
     useEffect(() => {
         pg.remedir();
@@ -1882,6 +1906,7 @@ export function HojaEditable({
         if (!el) return;
         el.replaceChildren(...bloquesADom(textoInicial));
         normalizar(el);
+        repintar(el);
         registrar();
         pg.remedir();
         try {
@@ -2039,8 +2064,23 @@ export function HojaEditable({
         cb.current.onEditarCampo(chip.dataset.mk ?? '', (nuevo) => reemplazarChip(chip, nuevo));
     }
 
-    /** Doble clic en un campo del texto: pide al padre que lo edite. */
+    /** Llenar: un clic en un dato abre su cuadro de edición. */
+    function alClic(e: MouseEvent<HTMLDivElement>) {
+        const ll = LLENADO;
+        const el = raizRef.current;
+        const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
+        if (!ll || !el || !chip) return;
+        const m = chip.dataset.mk ?? '';
+        const amb = ambitoDeChip(el, chip);
+        if (ll.valor(m, amb) === undefined) return;
+        e.preventDefault();
+        ocultarTip();
+        ll.editar(m, amb, chip);
+    }
+
+    /** Doble clic en un campo del texto: pide al padre que lo edite (no aplica al llenar). */
     function alDobleClic(e: MouseEvent<HTMLDivElement>) {
+        if (LLENADO) return;
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
         if (!chip) return;
         e.preventDefault();
@@ -2116,7 +2156,7 @@ export function HojaEditable({
                         ref={raizRef}
                         className={`hoja-ed${config.sangria ? ' con-sangria' : ''}${verCodigos ? ' ver-codigos' : ''}`}
                         style={estiloHoja}
-                        contentEditable
+                        contentEditable={!soloLectura}
                         suppressContentEditableWarning
                         spellCheck
                         lang="es"
@@ -2126,6 +2166,7 @@ export function HojaEditable({
                         onInput={alEscribir}
                         onKeyDown={alTeclear}
                         onPaste={alPegar}
+                        onClick={alClic}
                         onDoubleClick={alDobleClic}
                         onContextMenu={alMenuContextual}
                         onMouseOver={alPasar}
@@ -2139,7 +2180,7 @@ export function HojaEditable({
                     <b>{tip.titulo}</b>
                     {tip.detalle && <span>{tip.detalle}</span>}
                     <code>{tip.codigo}</code>
-                    <em>Doble clic para editar</em>
+                    {tip.ayuda && <em>{tip.ayuda}</em>}
                 </div>
             )}
         </div>

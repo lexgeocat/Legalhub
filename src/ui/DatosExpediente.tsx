@@ -1,24 +1,25 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { seccionesDeModelo, type DatoSeccion, type FichaModelo, type SeccionModelo } from '../application/camposModelo';
 import type { ModeloVisible } from '../application/casosDeUso/administrarModelos';
 import { validarPersona, type DatosPersona } from '../application/casosDeUso/crearPersona';
 import { limpiarDatos } from '../application/casosDeUso/gestionExpediente';
 import type { ExpedienteResumen, ModeloResumen, ParteResumen, PersonaResumen } from '../application/consultas';
 import { mismoRol } from '../domain/catalogo';
-import type { Bloque, BloqueParrafo, ConfigPagina } from '../domain/fuenteModelo';
-import { pilaCss } from '../domain/fuentes';
+import { FILTROS, ci as cedula } from '../domain/filtros';
+import { bloquesATexto, type FuenteModelo } from '../domain/fuenteModelo';
 import { partirNombre } from '../domain/generalesDeLey';
 import { nuevoId } from '../domain/id';
-import { analizarMarcador, describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
+import { analizarMarcador, type FiltroMarcador } from '../domain/marcadores';
+import { atributoConcordado, estadoCivilConcordado } from '../domain/personas';
 import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../domain/texto';
 import { clienteAlInicio, obtenerTipo } from '../domain/tiposExpediente';
 import { Alerta, Aviso, Campo, Icono, Insignia, Segmentado, avisar, confirmar } from './comunes';
 import { EntradaDato, OtrosDatos, type CampoForm } from './DatosCaso';
+import { EditorModeloVentana, type LlenadoVentana } from './EditorModelo';
 import { FormularioPersona } from './FormularioPersona';
 import { mensajeError, useServicios } from './servicios';
 
 type Campos = Record<string, string>;
-type Modo = 'formulario' | 'documento';
 
 /** Una persona en un rol del expediente, tal como se edita en pantalla. */
 interface FilaParte {
@@ -326,26 +327,6 @@ function FilaCampos({ f, n, total, campos, propios, clienteId, acc }: {
     );
 }
 
-/* ================= Sobre el documento ================= */
-function ambitosPorParrafo(bloques: Bloque[]): string[][] {
-    const pila: string[] = [];
-    return bloques.map((b) => {
-        const antes = [...pila];
-        if (b.tipo === 'parrafo') {
-            for (const t of b.tramos) {
-                if (!t.marcador) continue;
-                const a = analizarMarcador(t.texto);
-                if (a?.tipo === 'apertura') pila.push(a.ruta);
-                else if (a?.tipo === 'cierre') {
-                    const i = pila.map(claveNormalizada).lastIndexOf(claveNormalizada(a.ruta));
-                    if (i >= 0) pila.length = i;
-                }
-            }
-        }
-        return antes;
-    });
-}
-
 /** ¿El marcador es un dato de una parte? («vendedor.nombre», «vendedor.datos.depto» o, dentro de un bloque, «nombre»). */
 function refDeParte(ruta: string, ambito: readonly string[], roles: readonly string[]): RefParte | null {
     const segs = ruta.split('.').map((x) => x.trim()).filter(Boolean);
@@ -432,135 +413,51 @@ function EntradaParteDoc({ r, f, editar, conGenero, propio }: {
     );
 }
 
-function ParrafoDoc({ b, i, ambito, config, campos, propios, roles, valores, cambiar, contexto, primeros, fila, editar }: {
-    b: BloqueParrafo; i: number; ambito: readonly string[]; config: ConfigPagina;
-    campos: ReadonlyMap<string, CampoForm>; propios: ReadonlyMap<string, DatoSeccion>; roles: readonly string[];
-    valores: Campos; cambiar: (k: string, v: string) => void; contexto: ContextoMarcadores;
-    primeros: ReadonlySet<string>; fila: (rol: string) => FilaParte | undefined;
-    editar: (rol: string, fn: (f: FilaParte) => FilaParte) => void;
-}) {
-    const estilo: CSSProperties = {
-        textAlign: b.alineacion === 'both' ? 'justify' : b.alineacion,
-        lineHeight: b.interlineado,
-        fontWeight: b.estilo === 'normal' ? undefined : 700,
-        fontSize: b.estilo === 'titulo' ? `${config.tamanoPt + 2}pt` : undefined,
-    };
-    return (
-        <p className="papel-p" style={estilo}>
-            {b.tramos.length === 0 && '\u00A0'}
-            {b.tramos.map((t, j) => {
-                if (!t.marcador) {
-                    return (
-                        <span key={j} style={{
-                            fontWeight: t.negrita ? 700 : undefined,
-                            fontStyle: t.cursiva ? 'italic' : undefined,
-                            textDecoration: t.subrayado ? 'underline' : undefined,
-                            fontFamily: t.fuente ? pilaCss(t.fuente) : undefined,
-                            fontSize: t.tamanoPt ? `${t.tamanoPt}pt` : undefined,
-                        }}>{t.texto}</span>
-                    );
-                }
-                // Negrita y cursiva puestas al campo en el editor: se ven también al llenarlo.
-                const fmt: CSSProperties = {
-                    fontWeight: t.negrita ? 700 : undefined,
-                    fontStyle: t.cursiva ? 'italic' : undefined,
-                };
-                const a = analizarMarcador(t.texto);
-                if (a?.tipo === 'valor') {
-                    const segs = a.ruta.split('.').map((x) => x.trim());
-                    if (segs.length === 2 && claveNormalizada(segs[0]) === 'caso') {
-                        const clave = claveCampo(segs[1]);
-                        const c = campos.get(clave);
-                        if (c) {
-                            return (
-                                <span key={j} style={fmt}>
-                                    <EntradaDato enLinea c={c} valor={valores[clave] ?? ''} cambiar={(v) => cambiar(clave, v)} />
-                                </span>
-                            );
-                        }
-                    }
-                    const r = refDeParte(a.ruta, ambito, roles);
-                    const f = r ? fila(r.rol) : undefined;
-                    if (r && f) {
-                        return (
-                            <span key={j} style={fmt}>
-                                <EntradaParteDoc r={r} f={f} editar={(fn) => editar(r.rol, fn)}
-                                    conGenero={primeros.has(`${i}:${j}`)} propio={propios.get(r.clave)} />
-                            </span>
-                        );
-                    }
-                }
-                const m = describirMarcador(t.texto, contexto);
-                return (
-                    <span key={j} className="mk" data-k={m.tipo} style={{ '--h': m.matiz, ...fmt } as CSSProperties}
-                        title={`${m.titulo}${m.detalle ? ` — ${m.detalle}` : ''}`}>
-                        <span className="mk-e">{m.corto}</span>
-                    </span>
-                );
-            })}
-        </p>
-    );
+/* ================= Datos reales dentro del editor ================= */
+type Resuelto =
+    | { tipo: 'caso'; c: CampoForm; filtros: FiltroMarcador[] }
+    | { tipo: 'parte'; r: RefParte; f: FilaParte; filtros: FiltroMarcador[] };
+
+const FILTROS_VISIBLES = new Set(['mayus', 'minus', 'titulo', 'fecha', 'fechalarga', 'moneda', 'dolares', 'superficie', 'literal']);
+
+function conFiltros(valor: string, filtros: readonly FiltroMarcador[]): string {
+    if (valor.trim() === '') return '';
+    let v = valor;
+    for (const f of filtros) {
+        if (!FILTROS_VISIBLES.has(f.nombre)) continue;
+        try {
+            v = FILTROS[f.nombre](v, ...f.args);
+        } catch {
+            return valor;
+        }
+    }
+    return v;
 }
 
-function LlenadoDocumento({ bloques, config, campos, propios, roles, valores, cambiar, fila, editar }: {
-    bloques: Bloque[]; config: ConfigPagina; campos: CampoForm[]; propios: ReadonlyMap<string, DatoSeccion>;
-    roles: string[]; valores: Campos; cambiar: (k: string, v: string) => void;
-    fila: (rol: string) => FilaParte | undefined;
-    editar: (rol: string, fn: (f: FilaParte) => FilaParte) => void;
-}) {
-    const mapa = useMemo(() => new Map(campos.map((c) => [c.clave, c] as const)), [campos]);
-    const contexto = useMemo<ContextoMarcadores>(
-        () => ({ campos: Object.fromEntries(campos.map((c) => [c.clave, c.etiqueta])), partes: roles }),
-        [campos, roles],
-    );
-    const ambitos = useMemo(() => ambitosPorParrafo(bloques), [bloques]);
-
-    /** El género se pregunta junto a la primera vez que aparece el nombre de cada parte. */
-    const { primeros, conNombre: rolesConNombre } = useMemo(() => {
-        const primeros = new Set<string>();
-        const conNombre = new Set<string>();
-        bloques.forEach((b, i) => {
-            if (b.tipo !== 'parrafo') return;
-            b.tramos.forEach((t, j) => {
-                if (!t.marcador) return;
-                const a = analizarMarcador(t.texto);
-                if (a?.tipo !== 'valor') return;
-                const r = refDeParte(a.ruta, ambitos[i], roles);
-                if (r && !r.propio && r.clave === 'nombre' && !conNombre.has(r.rol)) {
-                    conNombre.add(r.rol);
-                    primeros.add(`${i}:${j}`);
-                }
-            });
-        });
-        return { primeros, conNombre };
-    }, [bloques, ambitos, roles]);
-
-    const sinNombre = roles.filter((r) => !rolesConNombre.has(r));
-
-    return (
-        <>
-            <div className="papel" style={{ fontFamily: pilaCss(config.fuente), fontSize: `${config.tamanoPt}pt`, lineHeight: config.interlineado }}>
-                {bloques.length === 0 && <p className="suave">El documento está vacío.</p>}
-                {bloques.map((b, i) => (b.tipo === 'salto'
-                    ? <hr key={i} className="papel-salto" />
-                    : (
-                        <ParrafoDoc key={i} b={b} i={i} ambito={ambitos[i]} config={config} campos={mapa} propios={propios}
-                            roles={roles} valores={valores} cambiar={cambiar} contexto={contexto} primeros={primeros}
-                            fila={fila} editar={editar} />
-                    )))}
-            </div>
-            {sinNombre.length > 0 && (
-                <Alerta tipo="adv">
-                    El documento no muestra el nombre de: {sinNombre.map(etiquetaRol).join(', ')}. Regístralo en la pestaña «Partes».
-                </Alerta>
-            )}
-        </>
-    );
+/** Lo que se ve en el documento para un dato de una parte (con concordancia de género). */
+function textoDeParte(r: RefParte, f: FilaParte): string {
+    if (r.propio) return f.d[r.clave] ?? '';
+    const g = f.p.tipo === 'juridica' ? f.p.generoGramatical : f.p.genero;
+    const genero = g === 'M' || g === 'F' ? g : null;
+    if (r.clave === 'nombre') return textoNombre(f);
+    if (r.clave === 'ci') {
+        return sinValor(f.p.ciNumero) ? '' : cedula([f.p.ciNumero ?? '', f.p.ciComplemento ?? '', f.p.ciExpedido ?? '']);
+    }
+    const def = FICHA[r.clave];
+    const v = f.p[def?.principal ?? def?.campos[0] ?? r.clave] ?? '';
+    if (r.clave === 'estado_civil') return estadoCivilConcordado(v, genero);
+    if (r.clave === 'nacionalidad' || r.clave === 'profesion') return atributoConcordado(v, genero);
+    return v;
 }
+
+const fuenteDeBloques = (v: ModeloVisible): FuenteModelo => ({
+    version: 1, config: v.config, texto: bloquesATexto(v.bloques), campos: [], partes: [], grupos: [],
+});
+
 /* ================= Pestañas «Partes» y «Datos» (comparten estado) ================= */
 export function DatosExpediente({
     pestana, e, modelo, visible, ficha, partes, personas,
-    recargar, recargarPersonas, irModelo, irPartes, irDatos, irDocumento, onSucio,
+    recargar, recargarPersonas, recargarModelos, irModelo, irPartes, irDatos, irDocumento, onSucio,
 }: {
     /** «Partes»: solo quién interviene. «Datos»: formulario por categorías y «Sobre el documento». Comparten lo escrito. */
     pestana: 'partes' | 'datos';
@@ -572,6 +469,7 @@ export function DatosExpediente({
     personas: PersonaResumen[];
     recargar: () => void;
     recargarPersonas: () => void;
+    recargarModelos: () => void;
     irModelo: () => void;
     irPartes: () => void;
     irDatos: () => void;
@@ -580,7 +478,7 @@ export function DatosExpediente({
     onSucio: (sucio: boolean) => void;
 }) {
     const s = useServicios();
-    const [modo, setModo] = useState<Modo>('formulario');
+    const [editor, setEditor] = useState(false);
     const [valores, setValores] = useState<Campos>({ ...e.datos });
     const [filas, setFilas] = useState<FilaParte[] | null>(null);
     const [eliminadas, setEliminadas] = useState<string[]>([]);
@@ -731,13 +629,14 @@ export function DatosExpediente({
     }
 
     /** Guarda partes y datos del caso juntos. `despues` se ejecuta solo si todo se guardó bien. */
-    async function guardar(despues?: () => void) {
+    async function guardar(despues?: () => void): Promise<boolean> {
         const lista = filas ?? [];
         const errores = validar(lista);
         if (errores.length > 0) {
             setErr(errores.join('\n'));
-            if (pestana === 'datos') irPartes(); // los errores son de las partes: se lleva a donde se corrigen
-            return;
+            if (editor) avisar(errores.join('\n'), 'error'); // el editor tapa la pantalla: se avisa con un toast
+            else if (pestana === 'datos') irPartes(); // los errores son de las partes: se lleva a donde se corrigen
+            return false;
         }
         setGuardando(true);
         try {
@@ -774,8 +673,11 @@ export function DatosExpediente({
             recargarPersonas();
             avisar('Datos guardados');
             despues?.();
+            return true;
         } catch (error) {
             setErr(mensajeError(error));
+            if (editor) avisar(mensajeError(error), 'error');
+            return false;
         } finally {
             setGuardando(false);
         }
@@ -824,26 +726,46 @@ export function DatosExpediente({
         ponerD,
     };
 
-    const selector = (
-        <Segmentado<Modo>
-            valor={modo}
-            cambiar={setModo}
-            opciones={[{ id: 'formulario', etiqueta: 'Formulario' }, { id: 'documento', etiqueta: 'Sobre el documento' }]}
-        />
-    );
+    /* ----- datos reales dentro del editor a pantalla completa ----- */
+    const mapaCaso = new Map(ficha.caso.map((c) => [c.clave, c] as const));
+    const resolver = (marcador: string, ambito: readonly string[]): Resuelto | null => {
+        const a = analizarMarcador(marcador);
+        if (a?.tipo !== 'valor') return null;
+        const segs = a.ruta.split('.').map((x) => x.trim());
+        if (segs.length === 2 && claveNormalizada(segs[0]) === 'caso') {
+            const c = mapaCaso.get(claveCampo(segs[1]));
+            if (c) return { tipo: 'caso', c, filtros: a.filtros };
+        }
+        const r = refDeParte(a.ruta, ambito, roles);
+        const f = r ? filaDe(r.rol) : undefined;
+        return r && f ? { tipo: 'parte', r, f, filtros: a.filtros } : null;
+    };
 
-    const documento = (
-        <div className="tarjeta">
-            <p className="suave">
-                Escribe en los huecos (amarillos = vacíos). Al escribir el nombre de una parte, elige también su <b>género</b>: es obligatorio.
-                Si hay varios vendedores o compradores, agrégalos en la pestaña Partes.
-            </p>
-            <LlenadoDocumento
-                bloques={visible.bloques} config={visible.config} campos={ficha.caso} propios={mapaPropios}
-                roles={ficha.roles} valores={valores} cambiar={poner} fila={filaDe} editar={editarPrimera}
-            />
-        </div>
-    );
+    const llenado: LlenadoVentana = {
+        sucio,
+        guardando,
+        soloLectura: !visible.editable,
+        guardarDatos: () => guardar(),
+        valor: (m, amb) => {
+            const x = resolver(m, amb);
+            if (!x) return undefined;
+            const bruto = x.tipo === 'caso' ? (valores[x.c.clave] ?? '') : textoDeParte(x.r, x.f);
+            return conFiltros(bruto, x.filtros);
+        },
+        editor: (m, amb): ReactNode => {
+            const x = resolver(m, amb);
+            if (!x) return null;
+            if (x.tipo === 'caso') {
+                return <EntradaDato enLinea c={x.c} valor={valores[x.c.clave] ?? ''} cambiar={(v) => poner(x.c.clave, v)} />;
+            }
+            return (
+                <div className="mk-pop-fila">
+                    <EntradaParteDoc r={x.r} f={x.f} conGenero propio={mapaPropios.get(x.r.clave)}
+                        editar={(fn) => editarPrimera(x.r.rol, fn)} />
+                </div>
+            );
+        },
+    };
 
     const haciaDatos = pestana === 'partes' && hayDatos;
     const siguiente = () => {
@@ -934,7 +856,9 @@ export function DatosExpediente({
                                     Los que pide «{modelo.nombre}», ordenados por categoría. Llénalos en un formulario o escribe directo sobre el documento.
                                 </p>
                             </div>
-                            {selector}
+                            <button type="button" className="btn btn-pri" onClick={() => setEditor(true)}>
+                                <Icono n="documento" tam={16} /> Llenar sobre el documento
+                            </button>
                         </div>
                         <div className="acciones">
                             {faltanPartes + faltanCaso === 0 ? <Insignia tono="verde">Datos completos</Insignia> : (
@@ -954,11 +878,11 @@ export function DatosExpediente({
                         </Alerta>
                     )}
 
-                    {modo === 'formulario' && !hayDatos && (
+                    {!hayDatos && (
                         <Alerta tipo="info">Este modelo no pide más datos que los de las partes.</Alerta>
                     )}
 
-                    {modo === 'formulario' && categorias.map(({ sec, partes: bloques }) => (
+                    {categorias.map(({ sec, partes: bloques }) => (
                         <div key={sec.id} className="tarjeta">
                             <div className="tarjeta-cab">
                                 <div>
@@ -994,8 +918,6 @@ export function DatosExpediente({
                         </div>
                     ))}
 
-                    {modo === 'documento' && documento}
-
                     <OtrosDatos conocidos={ficha.caso.map((c) => c.clave)} valores={valores} cambiar={poner} />
                 </>
             )}
@@ -1029,6 +951,18 @@ export function DatosExpediente({
                         refrescar(id).catch((error) => setErr(mensajeError(error)));
                         avisar('Persona actualizada');
                     }}
+                />
+            )}
+            {editor && (
+                <EditorModeloVentana
+                    modeloId={modelo.id}
+                    inicial={{
+                        nombre: modelo.nombre, materia: modelo.materia, categoria: modelo.categoria, descripcion: modelo.descripcion,
+                        fuente: visible.fuente ?? fuenteDeBloques(visible),
+                    }}
+                    volver={() => setEditor(false)}
+                    guardado={() => recargarModelos()}
+                    llenado={llenado}
                 />
             )}
         </>

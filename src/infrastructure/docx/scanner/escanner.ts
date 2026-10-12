@@ -174,8 +174,3 @@ export function escanear(plantilla: Uint8Array, opciones: OpcionesEscaneo = {}):
     esquema,
   };
 }
-
-export function lint(plantilla: Uint8Array): { errores: string[]; advertencias: string[] } {
-  const r = escanear(plantilla);
-  return { errores: r.errores, advertencias: r.advertencias };
-}

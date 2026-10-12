@@ -219,17 +219,14 @@ function Entrada({ c, valor }: { c: CampoEsquema; valor: string }) {
 }
 
 /* ---------------- Paso 3: revisar el documento en limpio (y editarlo) ---------------- */
-function PasoVerificar({ p, proxima, existe, cambiarTitulo, editando, ocupado, editar, descartar, aplicar, restaurar, actualizarModelo }: {
+function PasoVerificar({ p, proxima, existe, cambiarTitulo, ocupado, editar, restaurar, actualizarModelo }: {
     p: DatosVerificar;
     proxima: number;
     /** Ya hay un documento con este título (se guarda como versión nueva). */
     existe: boolean;
     cambiarTitulo: (t: string) => void;
-    editando: boolean;
     ocupado: boolean;
     editar: () => void;
-    descartar: () => void;
-    aplicar: (texto: string, config: ConfigPagina) => void;
     restaurar: () => void;
     actualizarModelo: () => void;
 }) {
@@ -240,20 +237,6 @@ function PasoVerificar({ p, proxima, existe, cambiarTitulo, editando, ocupado, e
         () => agrupar(preparado.verificacion, (v) => b.categoria(v.ruta), b.orden),
         [preparado.verificacion, b],
     );
-
-    if (editando) {
-        return (
-            <EditorDocumento
-                bloques={vista.bloques}
-                config={vista.config}
-                aviso={!vista.editable
-                    ? 'Este modelo viene de Word: al editar aquí se simplifica el formato (sin encabezados, pies, tablas ni imágenes) y se usa la página estándar.'
-                    : undefined}
-                aplicar={aplicar}
-                descartar={descartar}
-            />
-        );
-    }
 
     return (
         <>
@@ -480,10 +463,14 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
         setEditando(true);
     }
 
+    const mismaConfig = (a: ConfigPagina, b: ConfigPagina) =>
+        margenesIguales(a.margenes, b.margenes) && a.tamano === b.tamano && a.fuente === b.fuente
+        && a.tamanoPt === b.tamanoPt && a.interlineado === b.interlineado && a.sangria === b.sangria
+        && a.simetricos === b.simetricos;
+
     async function aplicarEdicion(p: DatosVerificar, texto: string, config: ConfigPagina) {
         const base: Original = p.original ?? { preparado: p.preparado, vista: p.vista };
-        const sinCambios = mismoTexto(bloquesATexto(base.vista.bloques), texto)
-            && margenesIguales(base.vista.config.margenes, config.margenes);
+        const sinCambios = mismoTexto(bloquesATexto(base.vista.bloques), texto) && mismaConfig(base.vista.config, config);
         if (sinCambios) {
             setPaso({ ...p, preparado: base.preparado, vista: base.vista, original: null });
             setEditando(false);
@@ -577,7 +564,7 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
     }
 
     async function cerrarSeguro() {
-        if (dlg) return;
+        if (dlg || editando) return;
         if (paso.n === 'listo') {
             cerrar(true);
             return;
@@ -624,12 +611,7 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
         );
     } else if (paso.n === 'verificar') {
         const p = paso;
-        pie = editando ? (
-            <>
-                <span className="suave">Estás editando: pulsa «Aplicar al documento» para volver a la vista previa.</span>
-                <span className="espacio" />
-            </>
-        ) : (
+        pie = (
             <>
                 <span className="espacio" />
                 <button type="button" className="btn btn-sec" disabled={trabajando || analizando} onClick={() => void volverAtras(p)}>Atrás</button>
@@ -654,7 +636,7 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
 
     return (
         <>
-            <Modal titulo="Nuevo documento" ancho={editando ? 'completa' : 'grande'} cerrar={() => void cerrarSeguro()} pie={pie}>
+            <Modal titulo="Nuevo documento" ancho="grande" cerrar={() => void cerrarSeguro()} pie={pie}>
                 <p className="suave">Expediente <code>{expediente.codigo}</code> · {expediente.materia}</p>
 
                 <div className="pasos">
@@ -789,11 +771,8 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
                         proxima={proxima}
                         existe={!!existente}
                         cambiarTitulo={cambiarTitulo}
-                        editando={editando}
                         ocupado={trabajando || analizando}
                         editar={() => void iniciarEdicion(paso)}
-                        descartar={() => setEditando(false)}
-                        aplicar={(texto, config) => void aplicarEdicion(paso, texto, config)}
                         restaurar={() => void restaurar(paso)}
                         actualizarModelo={() => void abrirActualizarModelo(paso)}
                     />
@@ -817,6 +796,17 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
                     analisis={dlg.analisis}
                     cerrar={() => setDlg(null)}
                     aplicado={modeloActualizado}
+                />
+            )}
+            {editando && paso.n === 'verificar' && (
+                <EditorDocumento
+                    bloques={paso.vista.bloques}
+                    config={paso.vista.config}
+                    aviso={!paso.vista.editable
+                        ? 'Este modelo viene de Word: al editar aquí se simplifica el formato (sin encabezados, pies, tablas ni imágenes) y se usa la página estándar.'
+                        : undefined}
+                    aplicar={(texto, config) => void aplicarEdicion(paso, texto, config)}
+                    descartar={() => setEditando(false)}
                 />
             )}
         </>
