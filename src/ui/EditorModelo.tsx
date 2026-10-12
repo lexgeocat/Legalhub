@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { esTextoLargo, tipoSugerido, usosCaso } from '../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
 import { datoAsignable, reasignarDato } from '../domain/camposParte';
@@ -18,7 +18,7 @@ import {
 } from './comunes';
 import { EditorHoja } from './EditorHoja';
 import { ModalMarcador } from './EditorMarcador';
-import type { ControlHoja, LlenadoHoja, MenuCampoInfo } from './HojaEditable';
+import type { ControlHoja, EdicionDirecta, LlenadoHoja, MenuCampoInfo } from './HojaEditable';
 import { MenuCampo } from './MenuCampo';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
@@ -32,11 +32,13 @@ type Dialogo =
 
 type VistaEditor = 'llenar' | 'modelo';
 
-/** Lo que aporta Expediente → Datos para llenar los datos reales dentro del editor. */
+/** Lo que aporta Expediente → Datos para llenar los datos reales escribiendo directamente sobre el documento. */
 export interface LlenadoVentana {
-    /** Texto del dato en el documento: '' = falta, undefined = no se llena aquí (queda como etiqueta). */
+    /** Texto del dato tal como se ve en el documento: '' = falta, undefined = no se llena aquí (queda como etiqueta). */
     valor: (marcador: string, ambito: string[]) => string | undefined;
-    /** Guarda directamente el nuevo valor (edición inline sin popup). */
+    /** Texto crudo (sin filtros) que se edita sobre el propio documento. */
+    crudo: (marcador: string, ambito: string[]) => EdicionDirecta | undefined;
+    /** Recibe lo escrito sobre el documento (queda en el estado del expediente; «Guardar datos» lo persiste). */
     guardar: (marcador: string, ambito: readonly string[], valor: string) => void;
     sucio: boolean;
     guardando: boolean;
@@ -153,7 +155,9 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     const [modificado, setModificado] = useState(false);
     const [ultima, setUltima] = useState<number | null>(null);
     const [verCodigos, setVerCodigos] = useState(false);
+    const [verEjemplos, setVerEjemplos] = useState(false);
     const [pendientes, setPendientes] = useState(0);
+    const [menu, setMenu] = useState<MenuCampoInfo | null>(null);
     const cerrarMenu = useCallback(() => setMenu(null), []);
 
     const contextoMarcadores = useMemo<ContextoMarcadores>(
@@ -161,13 +165,10 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
         [campos, grupos, partes],
     );
 
-    /** «Llenar datos»: el dato real, clic → edición inline directa. «Ejemplos»: solo vista. */
+    /** «Llenar datos»: se escribe directamente sobre el dato del documento. «Ejemplos»: solo vista. */
     const llenadoHoja = useMemo<LlenadoHoja | undefined>(() => {
         if (llenado && vista === 'llenar') {
-            return {
-                valor: llenado.valor,
-                guardar: llenado.guardar,
-            };
+            return { valor: llenado.valor, crudo: llenado.crudo, guardar: llenado.guardar };
         }
         if (verEjemplos && vista === 'modelo') {
             return {
@@ -187,6 +188,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
 
     function cambiarVista(v: VistaEditor) {
         setMenu(null);
+        setVerEjemplos(false);
         setVista(v);
     }
 
@@ -442,7 +444,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                 ) : undefined}
                 ayuda={modoModelo
                     ? 'Pasa el mouse sobre un campo para ver qué es · doble clic: editarlo · Ctrl+G guardar'
-                    : 'Clic en un dato para llenarlo · Ctrl+G guardar datos'}
+                    : 'Clic en un dato y escribe · Enter confirma · Esc cancela · Tab siguiente dato · Ctrl+G guardar datos'}
             />
 
             {/* ===== Diálogos ===== */}
@@ -508,17 +510,6 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
             )}
 
             {menu && <MenuCampo info={menu} partes={partes} contexto={contextoMarcadores} cerrar={cerrarMenu} />}
-
-            {popover && llenado && (
-                <EditorInline
-                    x={popover.x}
-                    y={popover.y}
-                    chip={popover.chip}
-                    cerrar={cerrarPopover}
-                >
-                    {llenado.editor(popover.m, popover.amb) ?? <p className="suave">Este dato no se llena aquí.</p>}
-                </EditorInline>
-            )}
         </div>
     );
 }

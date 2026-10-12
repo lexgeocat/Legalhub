@@ -80,15 +80,27 @@ export interface MenuCampoInfo {
     editar: () => void;
 }
 
-/** Modo «llenar»: cada campo muestra el dato real del expediente y al hacer clic se edita. */
+/** Cómo se edita un dato directamente sobre el documento. */
+export interface EdicionDirecta {
+    /** Texto crudo (sin filtros) que se edita. */
+    texto: string;
+    /** El valor real se edita en su caja natural, pero se VE con esta transformación (filtros mayus / minus / titulo). */
+    transformar?: 'mayus' | 'minus' | 'titulo';
+    /** true: Enter inserta salto de línea y Ctrl+Enter confirma. */
+    multilinea?: boolean;
+    /** Formato esperado: se muestra mientras el campo está vacío. */
+    pista?: string;
+}
+
+/** Modo «llenar»: cada campo muestra el dato real del expediente y al hacer clic su propio texto se vuelve editable. */
 export interface LlenadoHoja {
     /** Texto del dato: '' = falta, undefined = este campo no se llena aquí (queda como etiqueta). */
     valor(marcador: string, ambito: string[]): string | undefined;
-    /** Guarda directamente el nuevo valor sin abrir nada (edición inline en el texto). */
+    /** Texto crudo editable. Si no se define, se edita lo que se ve. */
+    crudo?(marcador: string, ambito: string[]): EdicionDirecta | undefined;
+    /** Recibe el texto escrito al confirmar. */
     guardar?(marcador: string, ambito: readonly string[], valor: string): void;
-    /** Abre un cuadro de edición (fallback si guardar no está definido). */
-    editar?(marcador: string, ambito: string[], chip: HTMLElement): void;
-    /** Solo muestra valores de ejemplo: no abre cuadros de llenado y los campos se siguen pudiendo editar. */
+    /** Solo muestra valores de ejemplo: no se editan y los campos se siguen pudiendo editar como código. */
     soloVista?: boolean;
 }
 
@@ -163,9 +175,12 @@ interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo
 let CONTEXTO: ContextoMarcadores = SIN_CONTEXTO;
 /** Si está definido, los campos muestran su dato real (modo «llenar»). */
 let LLENADO: LlenadoHoja | undefined;
+/** Campo cuyo texto se está editando directamente (no se debe repintar mientras tanto). */
+let CHIP_EDITANDO: HTMLElement | null = null;
 
 /** Un campo se ve como etiqueta corta (o como su dato real al llenar); el código real vive en data-mk. */
 function pintarChip(chip: HTMLElement, marcador: string, ambito: readonly string[] = []): void {
+    if (chip === CHIP_EDITANDO) return; // se está editando: no se toca su contenido
     const i = describirMarcador(marcador, CONTEXTO);
     const v = LLENADO?.valor(marcador, [...ambito]);
     const tipo = v === undefined ? i.tipo : v === '' ? 'falta' : 'lleno';
@@ -1267,6 +1282,58 @@ function heredarParrafo(de: HTMLElement, a: HTMLElement, alineacion: boolean): v
     }
 }
 
+/* ================= Edición directa de un dato (llenar) ================= */
+type Salida = 'blur' | 'enter' | 'esc' | 'sig' | 'ant';
+
+const TRANSFORMAR_CSS = { mayus: 'uppercase', minus: 'lowercase', titulo: 'capitalize' } as const;
+
+function aplicarTransformacion(t: string, k?: EdicionDirecta['transformar']): string {
+    if (k === 'mayus') return t.toUpperCase();
+    if (k === 'minus') return t.toLowerCase();
+    if (k === 'titulo') return t.replace(/(^|\s)(\p{L})/gu, (_m, s: string, c: string) => s + c.toUpperCase());
+    return t;
+}
+
+/** Texto plano de lo escrito dentro del campo (soporta <br> y bloques que meta el navegador). */
+function textoEditado(raiz: HTMLElement): string {
+    let s = '';
+    const rec = (n: Node) => {
+        for (const h of Array.from(n.childNodes)) {
+            if (h.nodeType === 3) s += (h as Text).data;
+            else if (h.nodeName === 'BR') s += '\n';
+            else if (h instanceof HTMLElement) {
+                if ((h.tagName === 'DIV' || h.tagName === 'P') && s !== '' && !s.endsWith('\n')) s += '\n';
+                rec(h);
+            }
+        }
+    };
+    rec(raiz);
+    return s.replace(/[\u200B\uFEFF]/g, '').replace(/\u00A0/g, ' ').replace(/\r\n?/g, '\n');
+}
+
+const normalizarEntrada = (t: string, multilinea: boolean): string =>
+    multilinea ? t.replace(/[ \t]+\n/g, '\n').trim() : t.replace(/\s+/g, ' ').trim();
+
+/** Cursor justo detrás del campo (con el truco del carácter invisible si es lo último del párrafo). */
+function cursorTras(chip: HTMLElement): Range {
+    const r = document.createRange();
+    const sig = chip.nextSibling;
+    if (!sig || sig.nodeName === 'BR') {
+        const zw = document.createTextNode('\u200B');
+        chip.parentNode?.insertBefore(zw, sig);
+        r.setStart(zw, 1);
+    } else {
+        r.setStartAfter(chip);
+    }
+    r.collapse(true);
+    return r;
+}
+
+function caretEn(x: number, y: number): Range | null {
+    const d = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
+    return d.caretRangeFromPoint?.(x, y) ?? null;
+}
+
 /* ================= Componente ================= */
 const MAX_HISTORIAL = 200;
 const MAX_HISTORIAL_CHARS = 24_000_000;
@@ -1316,6 +1383,7 @@ export function HojaEditable({
     const ultimoAmbito = useRef('');
     const pegando = useRef(false);
     const cuadro = useRef(0);
+    const edicion = useRef<{ chip: HTMLElement; cerrar: (confirmar: boolean, salida: Salida) => void } | null>(null);
     const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo }); const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void } | null>(null);
     const [tip, setTip] = useState<Tip | null>(null);
     const chipTip = useRef<HTMLElement | null>(null);
@@ -1328,6 +1396,10 @@ export function HojaEditable({
     function alPasar(e: MouseEvent<HTMLDivElement>) {
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
         if (!chip) {
+            if (chipTip.current) ocultarTip();
+            return;
+        }
+        if (chip.classList.contains('mk-editando')) {
             if (chipTip.current) ocultarTip();
             return;
         }
@@ -1373,6 +1445,7 @@ export function HojaEditable({
 
     /* ----- historial propio (deshacer / rehacer) ----- */
     function registrar() {
+        if (CHIP_EDITANDO) return; // mientras se edita un dato el DOM está a medias: no se toma instantánea
         const el = raizRef.current;
         if (!el) return;
         const h = hist.current;
@@ -1484,6 +1557,7 @@ export function HojaEditable({
     function restaurar(s: Snap) {
         const el = raizRef.current;
         if (!el) return;
+        edicion.current?.cerrar(false, 'blur');
         const h = hist.current;
         window.clearTimeout(h.timer);
         h.pendiente = false;
@@ -1901,8 +1975,10 @@ export function HojaEditable({
     }, [contexto, llenado]);
 
     useEffect(() => () => {
+        edicion.current?.cerrar(true, 'blur'); // si se cierra la ventana con un dato a medias, no se pierde
         CONTEXTO = SIN_CONTEXTO;
         LLENADO = undefined;
+        CHIP_EDITANDO = null;
     }, []);
 
     useEffect(() => {
@@ -2089,84 +2165,185 @@ export function HojaEditable({
         );
     }
 
-    /** Edición directa sobre el chip: lo convierte en un input inline transparente, sin cuadros ni popups. */
-    function activarEdicionInline(
-        chip: HTMLElement,
-        marcador: string,
-        ambito: readonly string[],
-        valorInicial: string,
-        guardar: (m: string, amb: readonly string[], v: string) => void,
-    ): void {
-        const etiqueta = chip.querySelector<HTMLElement>('.mk-e');
-        if (!etiqueta) return;
+    /**
+     * Edición directa: el propio texto del campo se vuelve editable (contenteditable), como en Word.
+     * Enter confirma · Esc cancela · Tab / Mayús+Tab saltan al siguiente / anterior dato · al perder el foco se guarda.
+     */
+    function iniciarEdicion(chip: HTMLElement, origen?: { x: number; y: number }): boolean {
+        const el = raizRef.current;
+        const ll = LLENADO;
+        if (!el || !ll?.guardar || ll.soloVista || !chip.isConnected) return false;
+        if (CHIP_EDITANDO === chip) return true;
+        const etiqueta = chip.querySelector<HTMLElement>(':scope > .mk-e');
+        if (!etiqueta) return false;
 
+        const marcador = chip.dataset.mk ?? '';
+        const ambito = ambitoDeChip(el, chip);
+        const mostrado = ll.valor(marcador, ambito);
+        if (mostrado === undefined) return false;
+
+        edicion.current?.cerrar(true, 'blur');
+
+        const info = describirMarcador(marcador, CONTEXTO);
+        const edit: EdicionDirecta = ll.crudo?.(marcador, ambito) ?? { texto: mostrado };
+        const multilinea = !!edit.multilinea;
+        const original = normalizarEntrada(edit.texto, multilinea);
+        const visible = etiqueta.textContent ?? '';
+
+        // El texto del campo pasa a ser editable.
+        CHIP_EDITANDO = chip;
         chip.classList.add('mk-editando');
-
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = valorInicial;
-        // Se ve exactamente como texto del documento: sin fondo, sin borde visible salvo subrayado
-        input.setAttribute('style', [
-            'font:inherit', 'color:inherit', 'background:transparent',
-            'border:none', 'border-bottom:2px solid currentColor', 'outline:none',
-            'padding:0 1px', 'margin:0', 'vertical-align:baseline', 'border-radius:0',
-            `width:${Math.max(6, valorInicial.length + 2)}ch`, 'max-width:70ch',
-        ].join(';'));
+        etiqueta.textContent = edit.texto;
+        etiqueta.dataset.ph = edit.pista ?? info.corto;
+        etiqueta.spellcheck = multilinea;
+        etiqueta.setAttribute('role', 'textbox');
+        etiqueta.setAttribute('aria-label', info.titulo);
+        if (edit.transformar) etiqueta.style.textTransform = TRANSFORMAR_CSS[edit.transformar];
+        try {
+            etiqueta.contentEditable = 'plaintext-only'; // sin formato ni pegado enriquecido
+        } catch {
+            etiqueta.contentEditable = 'true';
+        }
 
         let cerrado = false;
-        const cerrar = (confirmar: boolean) => {
+        let raf = 0;
+        const ac = new AbortController();
+        const op = { signal: ac.signal };
+
+        const cerrar = (confirmar: boolean, salida: Salida) => {
             if (cerrado) return;
             cerrado = true;
+            ac.abort();
+            cancelAnimationFrame(raf);
+            if (edicion.current?.chip === chip) edicion.current = null;
+            if (CHIP_EDITANDO === chip) CHIP_EDITANDO = null;
+
+            const nuevo = normalizarEntrada(textoEditado(etiqueta), multilinea);
+            const cambio = confirmar && nuevo !== original;
+
+            for (const a of ['contenteditable', 'data-ph', 'role', 'aria-label', 'spellcheck']) etiqueta.removeAttribute(a);
+            etiqueta.style.removeProperty('text-transform');
             chip.classList.remove('mk-editando');
-            chip.contentEditable = 'false';
-            if (confirmar && input.value !== valorInicial) {
-                guardar(marcador, ambito, input.value);
+            // Pintado provisional hasta que React vuelva a renderizar con el dato nuevo.
+            etiqueta.textContent = cambio ? (nuevo ? aplicarTransformacion(nuevo, edit.transformar) : info.corto) : visible;
+            chip.dataset.v = ''; // fuerza el repintado real en el siguiente ciclo
+
+            if (cambio) LLENADO?.guardar?.(marcador, ambito, nuevo);
+            pg.remedir();
+
+            const tras = document.createRange();
+            tras.setStartAfter(chip);
+            tras.collapse(true);
+            guardada.current = tras;
+
+            if (salida === 'enter' || salida === 'esc') {
+                el.focus({ preventScroll: true });
+                ponerRango(cursorTras(chip));
+            } else if (salida === 'sig' || salida === 'ant') {
+                const todos = Array.from(el.querySelectorAll<HTMLElement>('.mk'));
+                const paso = salida === 'sig' ? 1 : -1;
+                let destino: HTMLElement | null = null;
+                for (let k = todos.indexOf(chip) + paso; k >= 0 && k < todos.length; k += paso) {
+                    const c = todos[k];
+                    if (LLENADO?.valor(c.dataset.mk ?? '', ambitoDeChip(el, c)) !== undefined) {
+                        destino = c;
+                        break;
+                    }
+                }
+                if (destino) {
+                    const d = destino;
+                    window.setTimeout(() => iniciarEdicion(d), 0); // espera a que React aplique el dato anterior
+                } else {
+                    el.focus({ preventScroll: true });
+                    ponerRango(cursorTras(chip));
+                }
             }
-            // Restaurar el chip visualmente de inmediato (React actualizará luego)
-            const et2 = document.createElement('span');
-            et2.className = 'mk-e';
-            et2.textContent = confirmar ? (input.value || valorInicial) : valorInicial;
-            const co2 = document.createElement('span');
-            co2.className = 'mk-c';
-            co2.textContent = marcador;
-            chip.replaceChildren(et2, co2);
         };
 
-        input.addEventListener('blur', () => cerrar(true), { once: true });
-        input.addEventListener('keydown', (ev) => {
-            ev.stopPropagation(); // no interferir con atajos del editor
-            if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
-            if (ev.key === 'Escape') { ev.preventDefault(); input.value = valorInicial; input.blur(); }
-        });
-        input.addEventListener('input', (ev) => {
-            ev.stopPropagation();
-            input.style.width = `${Math.max(6, input.value.length + 2)}ch`;
-        });
+        etiqueta.addEventListener('blur', () => cerrar(true, 'blur'), op);
 
-        etiqueta.replaceChildren(input);
-        // El chip es contentEditable=false; temporalmente lo habilitamos para que el input sea interactivo
-        chip.contentEditable = 'true';
-        requestAnimationFrame(() => { input.focus(); input.select(); });
+        etiqueta.addEventListener('keydown', (ev) => {
+            ev.stopPropagation(); // el editor del documento no debe ver estas teclas
+            if (ev.isComposing || ev.keyCode === 229) return;
+            const ctrl = ev.ctrlKey || ev.metaKey;
+            const k = ev.key.toLowerCase();
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                cerrar(false, 'esc');
+            } else if (ev.key === 'Enter') {
+                ev.preventDefault();
+                if (multilinea && !ctrl) {
+                    if (!document.execCommand('insertLineBreak')) document.execCommand('insertText', false, '\n');
+                } else cerrar(true, 'enter');
+            } else if (ev.key === 'Tab' && !ctrl && !ev.altKey) {
+                ev.preventDefault();
+                cerrar(true, ev.shiftKey ? 'ant' : 'sig');
+            } else if (ctrl && !ev.altKey && !ev.shiftKey && (k === 'g' || k === 's')) {
+                // Guardar datos: se confirma el campo y se relanza el atajo cuando React ya aplicó el valor.
+                ev.preventDefault();
+                cerrar(true, 'enter');
+                window.setTimeout(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', ctrlKey: true })), 0);
+            }
+        }, op);
+
+        etiqueta.addEventListener('beforeinput', (ev) => {
+            ev.stopPropagation();
+            const t = (ev as InputEvent).inputType;
+            if (!multilinea && (t === 'insertParagraph' || t === 'insertLineBreak')) {
+                ev.preventDefault();
+                cerrar(true, 'enter');
+            }
+        }, op);
+
+        etiqueta.addEventListener('input', (ev) => {
+            ev.stopPropagation();
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => pg.remedir()); // el texto crece: se vuelven a calcular las páginas
+        }, op);
+
+        etiqueta.addEventListener('paste', (ev) => {
+            ev.stopPropagation();
+            ev.preventDefault();
+            let t = ev.clipboardData?.getData('text/plain') ?? '';
+            t = multilinea ? t.replace(/\r\n?/g, '\n') : t.replace(/\s*[\r\n]+\s*/g, ' ');
+            if (t) document.execCommand('insertText', false, t);
+        }, op);
+
+        edicion.current = { chip, cerrar };
+
+        // Cursor: donde se hizo clic (si el texto no cambió) o todo seleccionado para reemplazar de una vez.
+        etiqueta.focus({ preventScroll: true });
+        const mismoTexto = edit.texto.toLowerCase() === visible.toLowerCase();
+        const punto = origen && mismoTexto ? caretEn(origen.x, origen.y) : null;
+        if (punto && etiqueta.contains(punto.startContainer)) ponerRango(punto);
+        else {
+            const r = document.createRange();
+            r.selectNodeContents(etiqueta);
+            ponerRango(r);
+        }
+        mostrarCursor(el);
+        return true;
     }
 
-    /** Llenar: un clic en un dato lo convierte en texto editable directamente. */
-    function alClic(e: MouseEvent<HTMLDivElement>) {
+    /** Llenar: mousedown sobre un dato → su texto pasa a ser editable en el mismo lugar. */
+    function alMouseDown(e: MouseEvent<HTMLDivElement>) {
         const ll = LLENADO;
         const el = raizRef.current;
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
-        if (!ll || ll.soloVista || !el || !chip) return;
-        const m = chip.dataset.mk ?? '';
-        const amb = ambitoDeChip(el, chip);
-        const valorActual = ll.valor(m, amb);
-        if (valorActual === undefined) return;
+        if (!ll?.guardar || ll.soloVista || !el || !chip) return;
+        if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (chip === CHIP_EDITANDO) return; // ya se edita: el navegador coloca el cursor donde se hizo clic
+        if (ll.valor(chip.dataset.mk ?? '', ambitoDeChip(el, chip)) === undefined) return; // no se llena aquí
         e.preventDefault();
         ocultarTip();
-        // Edición inline directa (sin popup)
-        if (ll.guardar) {
-            activarEdicionInline(chip, m, amb, valorActual, ll.guardar);
-            return;
+        const origen = { x: e.clientX, y: e.clientY };
+        if (edicion.current) {
+            // Se confirma el campo anterior y se espera a que React aplique su valor antes de abrir el nuevo.
+            edicion.current.cerrar(true, 'blur');
+            window.setTimeout(() => iniciarEdicion(chip, origen), 0);
+        } else {
+            iniciarEdicion(chip, origen);
         }
-        ll.editar?.(m, amb, chip);
     }
 
     /** Doble clic en un campo del texto: pide al padre que lo edite (no aplica al llenar). */
@@ -2260,7 +2437,7 @@ export function HojaEditable({
                         onInput={alEscribir}
                         onKeyDown={alTeclear}
                         onPaste={alPegar}
-                        onClick={alClic}
+                        onMouseDown={alMouseDown}
                         onDoubleClick={alDobleClic}
                         onContextMenu={alMenuContextual}
                         onMouseOver={alPasar}

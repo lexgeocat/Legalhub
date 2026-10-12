@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { seccionesDeModelo, type DatoSeccion, type FichaModelo, type SeccionModelo } from '../application/camposModelo';
 import type { ModeloVisible } from '../application/casosDeUso/administrarModelos';
 import { validarPersona, type DatosPersona } from '../application/casosDeUso/crearPersona';
@@ -15,8 +15,9 @@ import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../dom
 import { clienteAlInicio, obtenerTipo } from '../domain/tiposExpediente';
 import { Alerta, Aviso, Campo, Icono, Insignia, Segmentado, avisar, confirmar, fechaHora } from './comunes';
 import { borrarBorrador, guardarBorrador, leerBorrador } from './borradores';
-import { EntradaDato, OtrosDatos, type CampoForm } from './DatosCaso';
+import { CampoForm, EntradaDato, OtrosDatos, esLargo } from './DatosCaso';
 import { EditorModeloVentana, type LlenadoVentana } from './EditorModelo';
+import type { EdicionDirecta } from './HojaEditable';
 import { FormularioPersona } from './FormularioPersona';
 import { mensajeError, useServicios } from './servicios';
 
@@ -351,74 +352,6 @@ function refDeParte(ruta: string, ambito: readonly string[], roles: readonly str
     return null;
 }
 
-function EntradaParteDoc({ r, f, editar, conGenero, propio }: {
-    r: RefParte; f: FilaParte; editar: (fn: (f: FilaParte) => FilaParte) => void; conGenero: boolean; propio?: DatoSeccion;
-}) {
-    const p = f.p;
-    const jur = p.tipo === 'juridica';
-    const rolTxt = etiquetaRol(r.rol).toLowerCase();
-    const caja = (v: string) => `en-linea${v.trim() ? '' : ' sin-valor'}`;
-    const ancho = (v: string, min = 10): CSSProperties => ({ width: `${Math.min(48, Math.max(min, v.length + 2))}ch` });
-    const poner = (k: string, v: string) =>
-        editar((x) => ({ ...x, nombreLibre: NOMBRES.has(k) ? undefined : x.nombreLibre, p: { ...x.p, [k]: v } }));
-
-    if (r.propio) {
-        const c: CampoForm = {
-            clave: r.clave, etiqueta: propio?.etiqueta ?? etiquetaRol(r.clave), tipo: propio?.tipo ?? 'texto',
-            requerido: propio?.requerido, ejemplo: propio?.ejemplo,
-        };
-        return <EntradaDato enLinea c={c} valor={f.d[r.clave] ?? ''} cambiar={(v) => editar((x) => ({ ...x, d: { ...x.d, [r.clave]: v } }))} />;
-    }
-
-    if (r.clave === 'nombre') {
-        const v = textoNombre(f);
-        const kg = jur ? 'generoGramatical' : 'genero';
-        const g = p[kg] ?? '';
-        return (
-            <>
-                <input className={caja(v)} aria-label={`Nombre del ${rolTxt}`} placeholder={`Nombre del ${rolTxt}`}
-                    value={v} style={ancho(v, 18)} onChange={(ev) => editar((x) => conNombre(x, ev.target.value))} />
-                {conGenero && (
-                    <select className={caja(g)} aria-label={`Género del ${rolTxt}`} title="El género es obligatorio" value={g}
-                        onChange={(ev) => poner(kg, ev.target.value)}>
-                        <option value="">¿Género?</option>
-                        <option value="M">{jur ? 'Masculino (el)' : 'Masculino'}</option>
-                        <option value="F">{jur ? 'Femenino (la)' : 'Femenino'}</option>
-                    </select>
-                )}
-            </>
-        );
-    }
-
-    const def = FICHA[r.clave];
-    const campo = def?.principal ?? def?.campos[0] ?? r.clave;
-    const v = p[campo] ?? '';
-    const selExpedido = (
-        <select className={caja(p.ciExpedido ?? '')} aria-label="Expedido en" value={p.ciExpedido ?? ''} onChange={(ev) => poner('ciExpedido', ev.target.value)}>
-            <option value="">Exp.</option>
-            {EXPEDIDOS.map((x) => <option key={x} value={x}>{x}</option>)}
-        </select>
-    );
-
-    if (campo === 'ciExpedido') return selExpedido;
-    if (campo === 'estadoCivil') {
-        return (
-            <select className={caja(v)} aria-label="Estado civil" value={v} onChange={(ev) => poner(campo, ev.target.value)}>
-                <option value="">Estado civil</option>
-                {(!v || ESTADOS_CIVILES.includes(v) ? ESTADOS_CIVILES : [...ESTADOS_CIVILES, v]).map((x) => <option key={x} value={x}>{etiquetaRol(x)}</option>)}
-            </select>
-        );
-    }
-    if (campo === 'fechaNacimiento') return <input type="date" className={caja(v)} aria-label={ETIQ[campo]} value={v} onChange={(ev) => poner(campo, ev.target.value)} />;
-    return (
-        <>
-            <input className={caja(v)} aria-label={ETIQ[campo] ?? campo} placeholder={ETIQ[campo] ?? campo} value={v}
-                style={ancho(v)} onChange={(ev) => poner(campo, ev.target.value)} />
-            {r.clave === 'ci' && selExpedido}
-        </>
-    );
-}
-
 /* ================= Datos reales dentro del editor ================= */
 type Resuelto =
     | { tipo: 'caso'; c: CampoForm; filtros: FiltroMarcador[] }
@@ -459,6 +392,38 @@ function textoDeParte(r: RefParte, f: FilaParte): string {
 const fuenteDeBloques = (v: ModeloVisible): FuenteModelo => ({
     version: 1, config: v.config, texto: bloquesATexto(v.bloques), campos: [], partes: [], grupos: [],
 });
+
+/* ---------- Edición directa sobre el documento ---------- */
+const TRANSFORMACIONES_VISIBLES = ['mayus', 'minus', 'titulo'] as const;
+const transformacionDe = (filtros: readonly FiltroMarcador[]): EdicionDirecta['transformar'] =>
+    TRANSFORMACIONES_VISIBLES.find((t) => filtros.some((f) => f.nombre === t));
+
+const PISTA_TIPO: Partial<Record<string, string>> = {
+    fecha: 'AAAA-MM-DD', fechalarga: 'AAAA-MM-DD', moneda: '1234,56', dolares: '1234,56', superficie: '250', numero: '12',
+};
+
+/** «1234567-1A LP» → número, complemento y expedido. */
+function leerCi(texto: string): Campos {
+    const [primero = '', ...resto] = texto.trim().replace(/\s*-\s*/g, '-').split(/\s+/);
+    const m = /^(.*?)(?:-(\d[A-Za-z]))?$/.exec(primero);
+    const exp = resto.join(' ');
+    return {
+        ciNumero: (m?.[1] ?? primero).replace(/\./g, ''),
+        ciComplemento: (m?.[2] ?? '').toUpperCase(),
+        ciExpedido: exp.length <= 3 ? exp.toUpperCase() : exp,
+    };
+}
+
+/** Lo escrito sobre el documento vuelve a la ficha / datos propios de la parte. */
+function conValorParte(r: RefParte, f: FilaParte, texto: string): FilaParte {
+    if (r.propio) return { ...f, d: { ...f.d, [r.clave]: texto } };
+    if (r.clave === 'nombre') return conNombre(f, texto);
+    if (r.clave === 'ci') return { ...f, p: { ...f.p, ...leerCi(texto) } };
+    const def = FICHA[r.clave];
+    const campo = def?.principal ?? def?.campos[0] ?? r.clave;
+    const valor = r.clave === 'estado_civil' ? estadoCivilConcordado(texto, 'M') : texto; // se guarda en masculino
+    return { ...f, nombreLibre: NOMBRES.has(campo) ? undefined : f.nombreLibre, p: { ...f.p, [campo]: valor } };
+}
 
 /* ================= Pestañas «Partes» y «Datos» (comparten estado) ================= */
 export function DatosExpediente({
@@ -797,18 +762,29 @@ export function DatosExpediente({
             const bruto = x.tipo === 'caso' ? (valores[x.c.clave] ?? '') : textoDeParte(x.r, x.f);
             return conFiltros(bruto, x.filtros);
         },
-        editor: (m, amb): ReactNode => {
+        crudo: (m, amb) => {
             const x = resolver(m, amb);
-            if (!x) return null;
+            if (!x) return undefined;
+            const transformar = transformacionDe(x.filtros);
             if (x.tipo === 'caso') {
-                return <EntradaDato enLinea c={x.c} valor={valores[x.c.clave] ?? ''} cambiar={(v) => poner(x.c.clave, v)} />;
+                return {
+                    texto: valores[x.c.clave] ?? '', transformar,
+                    multilinea: esLargo(x.c), pista: PISTA_TIPO[x.c.tipo],
+                };
             }
-            return (
-                <div className="mk-pop-fila">
-                    <EntradaParteDoc r={x.r} f={x.f} conGenero propio={mapaPropios.get(x.r.clave)}
-                        editar={(fn) => editarPrimera(x.r.rol, fn)} />
-                </div>
-            );
+            const propio = x.r.propio ? mapaPropios.get(x.r.clave) : undefined;
+            return {
+                texto: textoDeParte(x.r, x.f),
+                transformar,
+                multilinea: propio ? esLargo(propio) : false,
+                pista: propio ? PISTA_TIPO[propio.tipo] : x.r.clave === 'fecha_nacimiento' ? 'AAAA-MM-DD' : undefined,
+            };
+        },
+        guardar: (m, amb, valor) => {
+            const x = resolver(m, amb);
+            if (!x) return;
+            if (x.tipo === 'caso') poner(x.c.clave, valor);
+            else editarPrimera(x.r.rol, (f) => conValorParte(x.r, f, valor));
         },
     };
 
