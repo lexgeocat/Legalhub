@@ -121,6 +121,7 @@ async function analizarModelo(s: Servicios, exp: ExpedienteResumen, m: ModeloRes
     }
 
     const pendientes: Pendiente[] = [];
+    let enPartes = false; // lo que falta se resuelve en «Partes» (quién interviene), no en «Datos»
 
     // 1) Partes: que exista alguien por rol y que tenga los datos que pide el modelo
     for (const rol of ficha.roles) {
@@ -128,12 +129,16 @@ async function analizarModelo(s: Servicios, exp: ExpedienteResumen, m: ModeloRes
         const personas: unknown[] = Array.isArray(lista) ? lista : [];
         if (personas.length === 0) {
             pendientes.push({ seccion: PARTES, texto: `Falta registrar al ${etiquetaRol(rol).toLowerCase()}` });
+            enPartes = true;
             continue;
         }
         personas.forEach((p, i) => {
             const quien = etiquetaRol(rol) + (personas.length > 1 ? ` ${i + 1}` : '');
             const g = leerRuta(p, 'genero');
-            if (g !== 'M' && g !== 'F') pendientes.push({ seccion: PARTES, texto: `${quien}: falta el género` });
+            if (g !== 'M' && g !== 'F') {
+                pendientes.push({ seccion: PARTES, texto: `${quien}: falta el género` });
+                enPartes = true;
+            }
             for (const u of ficha.fichaParte) {
                 if (!u.requerido || !mismoRol(u.rol, rol) || !sinValor(leerRuta(p, u.clave))) continue;
                 const d = fichaSec.get(u.clave);
@@ -146,7 +151,6 @@ async function analizarModelo(s: Servicios, exp: ExpedienteResumen, m: ModeloRes
             }
         });
     }
-    const nParte = pendientes.length;
     // 2) Datos del caso
     for (const c of ficha.caso) {
         if (!c.requerido || !sinValor(leerRuta(base, `caso.${c.clave}`))) continue;
@@ -170,6 +174,7 @@ async function analizarModelo(s: Servicios, exp: ExpedienteResumen, m: ModeloRes
             if (!clienteAvisado) {
                 pendientes.push({ seccion: PARTES, texto: 'Falta definir al cliente (en «Partes», marca «Es mi cliente»)' });
                 clienteAvisado = true;
+                enPartes = true;
             }
             continue;
         }
@@ -190,7 +195,7 @@ async function analizarModelo(s: Servicios, exp: ExpedienteResumen, m: ModeloRes
     };
 
     const orden = [...new Set([...secciones.map((x) => x.nombre), PARTES, EXPEDIENTE, OTROS])];
-    return { detalle, pendientes, otros, categoria, orden, destino: nParte > 0 || clienteAvisado ? 'partes' : 'datos' };
+    return { detalle, pendientes, otros, categoria, orden, destino: enPartes ? 'partes' : 'datos' };
 }
 
 /** Prepara la vista previa con el MISMO .docx que se va a guardar. */

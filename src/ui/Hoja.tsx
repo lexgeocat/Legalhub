@@ -18,7 +18,15 @@ function Tramos({ tramos, estilo, resaltar, escala }: {
                 if (resaltar && t.marcador) {
                     const m = describirMarcador(t.texto);
                     return (
-                        <span key={i} className="mk" data-k={m.tipo} style={{ '--h': m.matiz } as CSSProperties}
+                        <span key={i} className="mk" data-k={m.tipo}
+                            style={{
+                                '--h': m.matiz,
+                                fontWeight: t.negrita || estilo !== 'normal' ? 700 : undefined,
+                                fontStyle: t.cursiva ? 'italic' : undefined,
+                                textDecoration: t.subrayado ? 'underline' : undefined,
+                                fontFamily: t.fuente ? pilaCss(t.fuente) : undefined,
+                                fontSize: t.tamanoPt ? `${(t.tamanoPt * escala * 0.82).toFixed(2)}pt` : undefined,
+                            } as CSSProperties}
                             title={`${m.titulo}${m.detalle ? ` — ${m.detalle}` : ''}`}>
                             <span className="mk-e">{m.corto}</span>
                         </span>

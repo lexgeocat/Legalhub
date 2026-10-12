@@ -295,6 +295,102 @@ function formatoEn(nodo: Node, hasta: HTMLElement): Fmt {
     return cadena.reduce((f, el) => formatoDe(el, f), SIN_FMT);
 }
 
+/* ================= Negrita, cursiva y subrayado también sobre los campos {{…}} ================= */
+const CLAVE_FMT = { negrita: 'b', cursiva: 'i', subrayado: 'u' } as const;
+type ComandoFmt = keyof typeof CLAVE_FMT;
+
+/** Texto y campos que toca un rango. Los campos no son editables: el navegador no les aplica formato. */
+function objetivosFormato(r: Range): { textos: Text[]; campos: HTMLElement[] } {
+    const textos: Text[] = [];
+    const campos: HTMLElement[] = [];
+    const base = r.commonAncestorContainer.nodeType === 3 ? r.commonAncestorContainer.parentNode : r.commonAncestorContainer;
+    if (!(base instanceof Element)) return { textos, campos };
+    const dentro = base.closest<HTMLElement>('.mk');
+    if (dentro) return { textos, campos: [dentro] };
+    const w = document.createTreeWalker(base, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode(n: Node): number {
+            if (!r.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
+            if (n instanceof HTMLElement) {
+                if (n.classList.contains('mk')) return NodeFilter.FILTER_ACCEPT;
+                return n.dataset.salto !== undefined ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
+            }
+            if (n.nodeType === 3) {
+                return (n as Text).parentElement?.closest('.mk, [data-salto]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+            }
+            return NodeFilter.FILTER_SKIP;
+        },
+    });
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+        if (n instanceof HTMLElement) {
+            campos.push(n);
+            continue;
+        }
+        const t = n as Text;
+        const desde = t === r.startContainer ? r.startOffset : 0;
+        const hasta = t === r.endContainer ? r.endOffset : t.length;
+        if (hasta > desde && t.data.slice(desde, hasta).replace(/\u200B/g, '') !== '') textos.push(t);
+    }
+    return { textos, campos };
+}
+
+/** ¿Todo lo seleccionado (texto y campos) ya tiene ese formato? */
+function formatoUniforme(raiz: HTMLElement, r: Range, c: ComandoFmt): boolean {
+    const { textos, campos } = objetivosFormato(r);
+    const k = CLAVE_FMT[c];
+    const nodos: Node[] = [...textos, ...campos];
+    return nodos.length > 0 && nodos.every((n) => formatoEn(n, raiz)[k]);
+}
+
+/** El ancestro más cercano (dentro del bloque) que aplica ese formato. */
+function ancestroConFormato(nodo: Node, k: 'b' | 'i' | 'u', raiz: HTMLElement): HTMLElement | null {
+    for (let n = nodo.parentElement; n && n !== raiz && !BLOQUES.has(n.tagName); n = n.parentElement) {
+        if (formatoDe(n, SIN_FMT)[k]) return n;
+    }
+    return null;
+}
+
+/** Saca `nodo` del ancestro `a`: lo anterior y lo posterior conservan el formato; el nodo queda sin él. */
+function aislarDe(a: HTMLElement, nodo: Node): void {
+    const antes = document.createRange();
+    antes.setStart(a, 0);
+    antes.setEndBefore(nodo);
+    const despues = document.createRange();
+    despues.setStartAfter(nodo);
+    despues.setEnd(a, a.childNodes.length);
+    const trasF = despues.extractContents();
+    const previoF = antes.extractContents();
+    const conFormato = (f: DocumentFragment): HTMLElement | null => {
+        if ((f.textContent ?? '').replace(/\u200B/g, '') === '' && !f.querySelector('.mk, br')) return null;
+        const c = a.cloneNode(false) as HTMLElement;
+        c.appendChild(f);
+        return c;
+    };
+    const ini = conFormato(previoF);
+    const fin = conFormato(trasF);
+    const piezas: Node[] = [];
+    if (ini) piezas.push(ini);
+    piezas.push(...Array.from(a.childNodes));
+    if (fin) piezas.push(fin);
+    a.replaceWith(...piezas);
+}
+
+/** Pone o quita el formato a un campo {{…}} envolviéndolo (o sacándolo) de <b>, <i> o <u>. */
+function formatearCampo(raiz: HTMLElement, chip: HTMLElement, c: ComandoFmt, activar: boolean): void {
+    const k = CLAVE_FMT[c];
+    if (formatoEn(chip, raiz)[k] === activar) return;
+    if (activar) {
+        const e = document.createElement(k);
+        chip.before(e);
+        e.appendChild(chip);
+        return;
+    }
+    for (let i = 0; i < 8 && formatoEn(chip, raiz)[k]; i++) {
+        const a = ancestroConFormato(chip, k, raiz);
+        if (!a) break;
+        aislarDe(a, chip);
+    }
+}
+
 function recolectar(nodo: Node, f: Fmt, salida: Pieza[]): void {
     for (const h of Array.from(nodo.childNodes)) {
         if (h.nodeType === 3) {
@@ -1273,13 +1369,17 @@ export function HojaEditable({
             }
         };
         const explicito = formatoEn(s.anchorNode, b);
-        const letra = letraEn(nodoInicial(s.getRangeAt(0)), el);
+        const rango = s.getRangeAt(0);
+        const letra = letraEn(nodoInicial(rango), el);
+        // Con campos {{…}} seleccionados el navegador no conoce su formato: se calcula aparte.
+        const conCampos = !s.isCollapsed && objetivosFormato(rango).campos.length > 0;
+        const activo = (c: ComandoFmt, nativo: string) => (conCampos ? formatoUniforme(el, rango, c) : q(nativo));
         const lh = Number(b.dataset.lh);
         const padre = b.parentNode;
         const f: FormatoActivo = {
-            negrita: estilo === 'normal' ? q('bold') : explicito.b,
-            cursiva: q('italic'),
-            subrayado: q('underline'),
+            negrita: estilo === 'normal' ? activo('negrita', 'bold') : explicito.b,
+            cursiva: activo('cursiva', 'italic'),
+            subrayado: activo('subrayado', 'underline'),
             alineacion: leerAlineacion(b) ?? BASE[estilo],
             estilo,
             fuente: letra.fam,
@@ -1522,7 +1622,7 @@ export function HojaEditable({
         mostrarCursor(el);
     }
 
-    function comando(c: 'negrita' | 'cursiva' | 'subrayado') {
+    function comando(c: ComandoFmt) {
         const el = raizRef.current;
         if (!el) return;
         foco();
@@ -1530,7 +1630,30 @@ export function HojaEditable({
         const b = s?.anchorNode ? bloqueRaiz(el, s.anchorNode) : null;
         if (c === 'negrita' && b && estiloDe(b) !== 'normal') return; // títulos y subtítulos van siempre en negrita
         registrar();
+
+        // Los campos {{…}} no son editables: el navegador no les aplica formato, se hace aparte.
+        const r0 = s && s.rangeCount > 0 && !s.isCollapsed && el.contains(s.anchorNode) ? s.getRangeAt(0).cloneRange() : null;
+        const camposSel = r0 ? objetivosFormato(r0).campos : [];
+        const activarAntes = !!r0 && !formatoUniforme(el, r0, c);
+
         document.execCommand(c === 'negrita' ? 'bold' : c === 'cursiva' ? 'italic' : 'underline');
+
+        if (camposSel.length > 0) {
+            const s2 = window.getSelection();
+            const textos = s2 && s2.rangeCount > 0 && el.contains(s2.anchorNode) ? objetivosFormato(s2.getRangeAt(0)).textos : [];
+            const k = CLAVE_FMT[c];
+            // Con texto en la selección, los campos siguen lo que hizo el navegador con el texto.
+            const activar = textos.length > 0 ? textos.every((n) => formatoEn(n, el)[k]) : activarAntes;
+            const g = guardarNodos();
+            const vivos = camposSel.filter((x) => x.isConnected);
+            for (const chip of vivos) formatearCampo(el, chip, c, activar);
+            if (textos.length === 0 && vivos.length > 0) {
+                const r = document.createRange();
+                r.setStartBefore(vivos[0]);
+                r.setEndAfter(vivos[vivos.length - 1]);
+                ponerRango(r);
+            } else restaurarNodos(g);
+        }
         tras(true);
     }
 

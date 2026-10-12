@@ -133,23 +133,36 @@ function validar(filas: FilaParte[]): string[] {
     return errores;
 }
 
-/** Cuántos datos obligatorios del modelo faltan en esta persona. */
-function faltantesDe(f: FilaParte, ficha: FichaModelo): number {
-    let n = 0;
+/** Falta el nombre o el género: lo que se pide en la pestaña «Partes». */
+const faltaIdentidad = (f: FilaParte): boolean => {
     const p = f.p;
-    const identidad = p.tipo === 'juridica'
-        ? !sinValor(p.razonSocial) && !!p.generoGramatical
-        : !sinValor(p.nombres) && (!sinValor(p.apellidoPaterno) || !sinValor(p.apellidoMaterno)) && !!p.genero;
-    if (!identidad) n += 1;
+    return p.tipo === 'juridica'
+        ? sinValor(p.razonSocial) || !p.generoGramatical
+        : sinValor(p.nombres) || (sinValor(p.apellidoPaterno) && sinValor(p.apellidoMaterno)) || !p.genero;
+};
+
+/** Cuántos datos obligatorios del modelo (pestaña «Datos») faltan en esta persona. */
+function faltantesCampos(f: FilaParte, ficha: FichaModelo): number {
+    let n = 0;
     for (const u of ficha.fichaParte) {
         if (!u.requerido || !mismoRol(u.rol, f.rol)) continue;
         const campo = FICHA[u.clave]?.principal;
-        if (campo && sinValor(p[campo])) n += 1;
+        if (campo && !NOMBRES.has(campo) && sinValor(f.p[campo])) n += 1;
     }
     for (const d of ficha.datosParte) {
         if (d.requerido && mismoRol(d.rol, f.rol) && sinValor(f.d[d.clave])) n += 1;
     }
     return n;
+}
+
+/** Datos de la ficha y datos propios que una categoría pide de una parte. */
+function camposDe(sec: SeccionModelo, rol: string, ficha: FichaModelo): { campos: string[]; propios: DatoSeccion[] } {
+    const usaFicha = (k: string) => ficha.fichaParte.some((u) => mismoRol(u.rol, rol) && u.clave === k);
+    const usaPropio = (k: string) => ficha.datosParte.some((d) => mismoRol(d.rol, rol) && d.clave === k);
+    return {
+        campos: [...new Set(sec.ficha.filter((d) => usaFicha(d.clave)).flatMap((d) => FICHA[d.clave]?.campos ?? []))],
+        propios: sec.propios.filter((d) => usaPropio(d.clave)),
+    };
 }
 
 /* ================= Formulario: una persona ================= */
@@ -210,15 +223,12 @@ function BuscarPersona({ personas, elegir }: { personas: PersonaResumen[]; elegi
         />
     );
 }
-function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, puedeQuitarCliente, acc }: {
-    f: FilaParte; n: number; total: number; sec: SeccionModelo; ficha: FichaModelo; identidad: boolean;
-    personas: PersonaResumen[]; clienteId: string; puedeQuitarCliente: boolean; acc: Acciones;
+/** Pestaña «Partes»: quién interviene (persona, nombre y género). */
+function FilaIdentidad({ f, n, total, personas, clienteId, puedeQuitarCliente, acc }: {
+    f: FilaParte; n: number; total: number; personas: PersonaResumen[]; clienteId: string;
+    puedeQuitarCliente: boolean; acc: Acciones;
 }) {
     const natural = f.p.tipo !== 'juridica';
-    const usaFicha = (k: string) => ficha.fichaParte.some((u) => mismoRol(u.rol, f.rol) && u.clave === k);
-    const usaPropio = (k: string) => ficha.datosParte.some((d) => mismoRol(d.rol, f.rol) && d.clave === k);
-    const campos = [...new Set(sec.ficha.filter((d) => usaFicha(d.clave)).flatMap((d) => FICHA[d.clave]?.campos ?? []))];
-    const propios = sec.propios.filter((d) => usaPropio(d.clave));
     const esCliente = !!f.personaId && f.personaId === clienteId;
     const poner = (k: string, v: string) => acc.poner(f.id, k, v);
 
@@ -228,7 +238,7 @@ function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, pue
                 <Insignia tono="violeta">{etiquetaRol(f.rol)}{total > 1 ? ` ${n + 1}` : ''}</Insignia>
                 {esCliente && <Insignia tono="verde">Cliente</Insignia>}
                 <span className="espacio" />
-                {identidad && !f.parteId && (f.personaId ? (
+                {!f.parteId && (f.personaId ? (
                     <>
                         <Insignia tono="azul">Persona registrada</Insignia>
                         <button type="button" className="btn btn-fan btn-sm" onClick={() => acc.elegir(f.id, '')}>Cambiar persona</button>
@@ -236,7 +246,7 @@ function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, pue
                 ) : personas.length > 0 && (
                     <BuscarPersona personas={personas} elegir={(pid) => acc.elegir(f.id, pid)} />
                 ))}
-                {identidad && f.parteId && (
+                {f.parteId && (
                     <>
                         <button type="button" className="btn btn-sec btn-sm" disabled={esCliente && !puedeQuitarCliente}
                             onClick={() => acc.cliente(f, !esCliente)}>
@@ -245,7 +255,7 @@ function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, pue
                         <button type="button" className="btn btn-fan btn-sm" onClick={() => acc.ficha(f.personaId as string)}>Ficha completa</button>
                     </>
                 )}
-                {identidad && (f.parteId || total > 1) && (
+                {(f.parteId || total > 1) && (
                     <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar" onClick={() => acc.quitar(f)}>
                         <Icono n="papelera" tam={15} />
                     </button>
@@ -253,42 +263,58 @@ function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, pue
             </div>
 
             <div className="form-grid">
-                {identidad && (
+                <div className="ancho">
+                    <Segmentado<'natural' | 'juridica'>
+                        valor={natural ? 'natural' : 'juridica'}
+                        cambiar={(v) => poner('tipo', v)}
+                        opciones={[{ id: 'natural', etiqueta: 'Persona natural' }, { id: 'juridica', etiqueta: 'Persona jurídica' }]}
+                    />
+                </div>
+                {natural ? (
                     <>
-                        <div className="ancho">
-                            <Segmentado<'natural' | 'juridica'>
-                                valor={natural ? 'natural' : 'juridica'}
-                                cambiar={(v) => poner('tipo', v)}
-                                opciones={[{ id: 'natural', etiqueta: 'Persona natural' }, { id: 'juridica', etiqueta: 'Persona jurídica' }]}
-                            />
-                        </div>
-                        {natural ? (
-                            <>
-                                <Campo etiqueta="Nombres *"><input value={f.p.nombres ?? ''} onChange={(ev) => poner('nombres', ev.target.value)} /></Campo>
-                                <Campo etiqueta="Apellido paterno"><input value={f.p.apellidoPaterno ?? ''} onChange={(ev) => poner('apellidoPaterno', ev.target.value)} /></Campo>
-                                <Campo etiqueta="Apellido materno"><input value={f.p.apellidoMaterno ?? ''} onChange={(ev) => poner('apellidoMaterno', ev.target.value)} /></Campo>
-                                <Campo etiqueta="Género *" ayuda="Se usa para concordar (el/la, vendedor/vendedora…).">
-                                    <select value={f.p.genero ?? ''} onChange={(ev) => poner('genero', ev.target.value)}>
-                                        <option value="" disabled>Elegir…</option>
-                                        <option value="M">Masculino</option>
-                                        <option value="F">Femenino</option>
-                                    </select>
-                                </Campo>
-                            </>
-                        ) : (
-                            <>
-                                <Campo etiqueta="Razón social *" ancho><input value={f.p.razonSocial ?? ''} onChange={(ev) => poner('razonSocial', ev.target.value)} /></Campo>
-                                <Campo etiqueta="Género gramatical *" ayuda="Para concordar con la razón social (el / la).">
-                                    <select value={f.p.generoGramatical ?? ''} onChange={(ev) => poner('generoGramatical', ev.target.value)}>
-                                        <option value="" disabled>Elegir…</option>
-                                        <option value="M">Masculino (el)</option>
-                                        <option value="F">Femenino (la)</option>
-                                    </select>
-                                </Campo>
-                            </>
-                        )}
+                        <Campo etiqueta="Nombres *"><input value={f.p.nombres ?? ''} onChange={(ev) => poner('nombres', ev.target.value)} /></Campo>
+                        <Campo etiqueta="Apellido paterno"><input value={f.p.apellidoPaterno ?? ''} onChange={(ev) => poner('apellidoPaterno', ev.target.value)} /></Campo>
+                        <Campo etiqueta="Apellido materno"><input value={f.p.apellidoMaterno ?? ''} onChange={(ev) => poner('apellidoMaterno', ev.target.value)} /></Campo>
+                        <Campo etiqueta="Género *" ayuda="Se usa para concordar (el/la, vendedor/vendedora…).">
+                            <select value={f.p.genero ?? ''} onChange={(ev) => poner('genero', ev.target.value)}>
+                                <option value="" disabled>Elegir…</option>
+                                <option value="M">Masculino</option>
+                                <option value="F">Femenino</option>
+                            </select>
+                        </Campo>
+                    </>
+                ) : (
+                    <>
+                        <Campo etiqueta="Razón social *" ancho><input value={f.p.razonSocial ?? ''} onChange={(ev) => poner('razonSocial', ev.target.value)} /></Campo>
+                        <Campo etiqueta="Género gramatical *" ayuda="Para concordar con la razón social (el / la).">
+                            <select value={f.p.generoGramatical ?? ''} onChange={(ev) => poner('generoGramatical', ev.target.value)}>
+                                <option value="" disabled>Elegir…</option>
+                                <option value="M">Masculino (el)</option>
+                                <option value="F">Femenino (la)</option>
+                            </select>
+                        </Campo>
                     </>
                 )}
+            </div>
+        </div>
+    );
+}
+
+/** Pestaña «Datos»: los datos de una parte que pide una categoría (C.I., domicilio, datos propios…). */
+function FilaCampos({ f, n, total, campos, propios, clienteId, acc }: {
+    f: FilaParte; n: number; total: number; campos: string[]; propios: DatoSeccion[];
+    clienteId: string; acc: Acciones;
+}) {
+    const esCliente = !!f.personaId && f.personaId === clienteId;
+    const poner = (k: string, v: string) => acc.poner(f.id, k, v);
+    return (
+        <div className="parte-card">
+            <div className="parte-cab">
+                <Insignia tono="violeta">{etiquetaRol(f.rol)}{total > 1 ? ` ${n + 1}` : ''}</Insignia>
+                <b>{textoNombre(f) || 'Sin nombre'}</b>
+                {esCliente && <Insignia tono="verde">Cliente</Insignia>}
+            </div>
+            <div className="form-grid">
                 {campos.map((k) => <CampoP key={k} k={k} f={f} poner={poner} />)}
                 {propios.map((d) => (
                     <Campo key={d.clave} etiqueta={`${d.etiqueta}${d.requerido ? ' *' : ''}`}>
@@ -434,26 +460,39 @@ function ParrafoDoc({ b, i, ambito, config, campos, propios, roles, valores, cam
                         }}>{t.texto}</span>
                     );
                 }
+                // Negrita y cursiva puestas al campo en el editor: se ven también al llenarlo.
+                const fmt: CSSProperties = {
+                    fontWeight: t.negrita ? 700 : undefined,
+                    fontStyle: t.cursiva ? 'italic' : undefined,
+                };
                 const a = analizarMarcador(t.texto);
                 if (a?.tipo === 'valor') {
                     const segs = a.ruta.split('.').map((x) => x.trim());
                     if (segs.length === 2 && claveNormalizada(segs[0]) === 'caso') {
                         const clave = claveCampo(segs[1]);
                         const c = campos.get(clave);
-                        if (c) return <EntradaDato key={j} enLinea c={c} valor={valores[clave] ?? ''} cambiar={(v) => cambiar(clave, v)} />;
+                        if (c) {
+                            return (
+                                <span key={j} style={fmt}>
+                                    <EntradaDato enLinea c={c} valor={valores[clave] ?? ''} cambiar={(v) => cambiar(clave, v)} />
+                                </span>
+                            );
+                        }
                     }
                     const r = refDeParte(a.ruta, ambito, roles);
                     const f = r ? fila(r.rol) : undefined;
                     if (r && f) {
                         return (
-                            <EntradaParteDoc key={j} r={r} f={f} editar={(fn) => editar(r.rol, fn)}
-                                conGenero={primeros.has(`${i}:${j}`)} propio={propios.get(r.clave)} />
+                            <span key={j} style={fmt}>
+                                <EntradaParteDoc r={r} f={f} editar={(fn) => editar(r.rol, fn)}
+                                    conGenero={primeros.has(`${i}:${j}`)} propio={propios.get(r.clave)} />
+                            </span>
                         );
                     }
                 }
                 const m = describirMarcador(t.texto, contexto);
                 return (
-                    <span key={j} className="mk" data-k={m.tipo} style={{ '--h': m.matiz } as CSSProperties}
+                    <span key={j} className="mk" data-k={m.tipo} style={{ '--h': m.matiz, ...fmt } as CSSProperties}
                         title={`${m.titulo}${m.detalle ? ` — ${m.detalle}` : ''}`}>
                         <span className="mk-e">{m.corto}</span>
                     </span>
@@ -512,19 +551,18 @@ function LlenadoDocumento({ bloques, config, campos, propios, roles, valores, ca
             </div>
             {sinNombre.length > 0 && (
                 <Alerta tipo="adv">
-                    El documento no muestra el nombre de: {sinNombre.map(etiquetaRol).join(', ')}. Regístralo en la vista «Formulario».
+                    El documento no muestra el nombre de: {sinNombre.map(etiquetaRol).join(', ')}. Regístralo en la pestaña «Partes».
                 </Alerta>
             )}
         </>
     );
 }
-
 /* ================= Pestañas «Partes» y «Datos» (comparten estado) ================= */
 export function DatosExpediente({
     pestana, e, modelo, visible, ficha, partes, personas,
     recargar, recargarPersonas, irModelo, irPartes, irDatos, irDocumento, onSucio,
 }: {
-    /** Qué se muestra: la pestaña «Partes» o «Datos». Las dos comparten lo escrito y se guardan juntas. */
+    /** «Partes»: solo quién interviene. «Datos»: formulario por categorías y «Sobre el documento». Comparten lo escrito. */
     pestana: 'partes' | 'datos';
     e: ExpedienteResumen;
     modelo: ModeloResumen | null;
@@ -607,15 +645,6 @@ export function DatosExpediente({
         for (const f of filas ?? []) if (!l.some((r) => mismoRol(r, f.rol))) l.push(f.rol);
         return l;
     }, [ficha, filas]);
-    const vista = useMemo(() => {
-        const l = [...secciones];
-        let idx = l.findIndex((x) => x.ficha.length + x.propios.length > 0);
-        if (idx < 0 && roles.length > 0) {
-            l.unshift({ id: '_partes', nombre: 'Partes', caso: [], ficha: [], propios: [] });
-            idx = 0;
-        }
-        return { secciones: l, identidad: idx };
-    }, [secciones, roles.length]);
     const mapaPropios = useMemo(
         () => new Map(secciones.flatMap((x) => x.propios).map((d) => [d.clave, d] as const)),
         [secciones],
@@ -756,29 +785,35 @@ export function DatosExpediente({
     if (!modelo) {
         return (
             <Alerta tipo="adv">
-                Primero elige el modelo: según él se arma el formulario con las partes y los datos que necesita.{' '}
+                Primero elige el modelo: según él se arma la lista de partes y el formulario de datos.{' '}
                 <button type="button" className="btn btn-enlace" onClick={irModelo}>Elegir modelo</button>
             </Alerta>
         );
     }
     if (!ficha || !visible || !filas) return <p className="suave">Cargando el modelo…</p>;
 
-    const seccionesPartes = vista.secciones
-        .map((sec, idx) => ({ sec, identidad: idx === vista.identidad }))
-        .filter(({ sec, identidad }) => identidad || sec.ficha.length + sec.propios.length > 0);
-    const seccionesCaso = vista.secciones.filter((sec) => sec.caso.length > 0);
-    const hayCaso = seccionesCaso.length > 0;
+    const registradas = (rol: string) => filas.filter((f) => mismoRol(f.rol, rol) && !vacia(f));
 
+    // «Partes»: ¿quién falta registrar?
     const resumen = ficha.roles.map((rol) => {
-        const lista = filas.filter((f) => mismoRol(f.rol, rol));
-        const registradas = lista.filter((f) => !vacia(f)).length;
-        const falta = lista.length === 0
-            ? 1
-            : lista.reduce((a, f, i) => a + (i === 0 || !vacia(f) ? faltantesDe(f, ficha) : 0), 0);
-        return { rol, registradas, falta };
+        const reg = registradas(rol);
+        return { rol, registradas: reg.length, falta: reg.length === 0 ? 1 : reg.filter(faltaIdentidad).length };
     });
-    const faltanCaso = ficha.caso.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
+    const sinRegistrar = resumen.filter((r) => r.registradas === 0).map((r) => r.rol);
     const clienteSinParte = !!e.clienteId && ficha.roles.length > 0 && !filas.some((f) => f.personaId === e.clienteId);
+
+    // «Datos»: categorías del modelo con lo que pide de cada parte y del caso
+    const categorias = secciones
+        .map((sec) => ({
+            sec,
+            partes: roles
+                .map((rol) => ({ rol, ...camposDe(sec, rol, ficha) }))
+                .filter((x) => x.campos.length + x.propios.length > 0),
+        }))
+        .filter((c) => c.sec.caso.length > 0 || c.partes.length > 0);
+    const hayDatos = categorias.length > 0;
+    const faltanCaso = ficha.caso.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
+    const faltanPartes = filas.filter((f) => !vacia(f)).reduce((a, f) => a + faltantesCampos(f, ficha), 0);
 
     const acc: Acciones = {
         elegir: (id, personaId) => void elegirPersona(id, personaId),
@@ -801,7 +836,7 @@ export function DatosExpediente({
         <div className="tarjeta">
             <p className="suave">
                 Escribe en los huecos (amarillos = vacíos). Al escribir el nombre de una parte, elige también su <b>género</b>: es obligatorio.
-                Si hay varios vendedores o compradores, agrégalos en la vista «Formulario» de la pestaña Partes.
+                Si hay varios vendedores o compradores, agrégalos en la pestaña Partes.
             </p>
             <LlenadoDocumento
                 bloques={visible.bloques} config={visible.config} campos={ficha.caso} propios={mapaPropios}
@@ -810,9 +845,9 @@ export function DatosExpediente({
         </div>
     );
 
-    const haciaDatos = pestana === 'partes' && hayCaso;
+    const haciaDatos = pestana === 'partes' && hayDatos;
     const siguiente = () => {
-        if (haciaDatos) irDatos();
+        if (haciaDatos) irDatos(); // entre Partes y Datos no se pierde nada: comparten estado
         else if (sucio) void guardar(irDocumento);
         else irDocumento();
     };
@@ -826,17 +861,17 @@ export function DatosExpediente({
                             <div>
                                 <h3>Partes del expediente</h3>
                                 <p className="suave">
-                                    Según «{modelo.nombre}» hay un formulario listo por cada parte. Elige una persona registrada y se autocompleta,
-                                    o escribe sus datos: quedan en el registro para la próxima vez.
+                                    Quién interviene según «{modelo.nombre}». Busca una persona ya registrada y se autocompleta, o escribe su nombre y género.
+                                    Los demás datos (C.I., domicilio…) se llenan en «Datos».
                                 </p>
                             </div>
-                            {selector}
                         </div>
                         <div className="acciones">
                             {e.clienteId && <Insignia tono="verde">Cliente: {e.clienteNombre}</Insignia>}
                             {resumen.map((r) => (
-                                <Insignia key={r.rol} tono={r.falta === 0 ? 'verde' : 'ambar'}>
-                                    {etiquetaRol(r.rol)}{r.registradas > 1 ? ` ×${r.registradas}` : ''} · {r.falta === 0 ? 'completo' : `faltan ${r.falta}`}
+                                <Insignia key={r.rol} tono={r.registradas > 0 && r.falta === 0 ? 'verde' : 'ambar'}>
+                                    {etiquetaRol(r.rol)}{r.registradas > 1 ? ` ×${r.registradas}` : ''} ·{' '}
+                                    {r.registradas === 0 ? 'sin registrar' : r.falta === 0 ? 'completo' : `faltan ${r.falta}`}
                                 </Insignia>
                             ))}
                             {sucio && <Insignia tono="rojo">Sin guardar</Insignia>}
@@ -866,50 +901,35 @@ export function DatosExpediente({
                         </Alerta>
                     )}
 
-                    {modo === 'formulario' && seccionesPartes.map(({ sec, identidad }) => {
-                        const rolesSec = roles.filter((r) => identidad
-                            || ficha.fichaParte.some((u) => mismoRol(u.rol, r) && sec.ficha.some((d) => d.clave === u.clave))
-                            || ficha.datosParte.some((d) => mismoRol(d.rol, r) && sec.propios.some((x) => x.clave === d.clave)));
-                        const total = sec.ficha.length + sec.propios.length;
+                    {roles.map((rol) => {
+                        const lista = filas.filter((f) => mismoRol(f.rol, rol));
+                        const reg = lista.filter((f) => !vacia(f)).length;
                         return (
-                            <div key={sec.id} className="tarjeta">
+                            <div key={rol} className="tarjeta">
                                 <div className="tarjeta-cab">
                                     <div>
-                                        <h3>{sec.nombre}</h3>
-                                        {total > 0 && <p className="suave">{total} dato(s) de cada parte</p>}
+                                        <h3>{etiquetaRol(rol)}</h3>
+                                        <p className="suave">{reg === 0 ? 'Sin registrar' : `${reg} registrado(s)`}</p>
                                     </div>
+                                    <button type="button" className="btn btn-sec btn-sm"
+                                        onClick={() => { setFilas((l) => [...(l ?? []), filaNueva(rol)]); tocar(); }}>
+                                        + Agregar otro {etiquetaRol(rol).toLowerCase()}
+                                    </button>
                                 </div>
-                                {rolesSec.map((rol) => {
-                                    const lista = filas.filter((f) => mismoRol(f.rol, rol));
-                                    return (
-                                        <div key={rol} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                            {lista.map((f, n) => (
-                                                <FilaForm key={f.id} f={f} n={n} total={lista.length} sec={sec} ficha={ficha} identidad={identidad}
-                                                    personas={personas} clienteId={e.clienteId} puedeQuitarCliente={!alInicio} acc={acc} />
-                                            ))}
-                                            {identidad && (
-                                                <div>
-                                                    <button type="button" className="btn btn-fan btn-sm"
-                                                        onClick={() => { setFilas((l) => [...(l ?? []), filaNueva(rol)]); tocar(); }}>
-                                                        + Agregar otro {etiquetaRol(rol).toLowerCase()}
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                {lista.map((f, n) => (
+                                    <FilaIdentidad key={f.id} f={f} n={n} total={lista.length} personas={personas}
+                                        clienteId={e.clienteId} puedeQuitarCliente={!alInicio} acc={acc} />
+                                ))}
                             </div>
                         );
                     })}
-
-                    {modo === 'documento' && documento}
                 </>
             ) : (
                 <>
                     <div className="tarjeta">
                         <div className="tarjeta-cab">
                             <div>
-                                <h3>Datos del caso</h3>
+                                <h3>Datos del expediente</h3>
                                 <p className="suave">
                                     Los que pide «{modelo.nombre}», ordenados por categoría. Llénalos en un formulario o escribe directo sobre el documento.
                                 </p>
@@ -917,32 +937,60 @@ export function DatosExpediente({
                             {selector}
                         </div>
                         <div className="acciones">
-                            {faltanCaso === 0
-                                ? <Insignia tono="verde">Datos completos</Insignia>
-                                : <Insignia tono="ambar">Faltan {faltanCaso} dato(s) del caso</Insignia>}
+                            {faltanPartes + faltanCaso === 0 ? <Insignia tono="verde">Datos completos</Insignia> : (
+                                <>
+                                    {faltanPartes > 0 && <Insignia tono="ambar">Faltan {faltanPartes} dato(s) de las partes</Insignia>}
+                                    {faltanCaso > 0 && <Insignia tono="ambar">Faltan {faltanCaso} dato(s) del caso</Insignia>}
+                                </>
+                            )}
                             {sucio && <Insignia tono="rojo">Sin guardar</Insignia>}
                         </div>
                     </div>
 
-                    {modo === 'formulario' && !hayCaso && (
-                        <Alerta tipo="info">Este modelo no pide datos del caso: todo sale de las partes.</Alerta>
+                    {sinRegistrar.length > 0 && (
+                        <Alerta tipo="adv">
+                            Aún no registraste a: {sinRegistrar.map(etiquetaRol).join(', ')}.{' '}
+                            <button type="button" className="btn btn-enlace" onClick={irPartes}>Ir a Partes</button>
+                        </Alerta>
                     )}
 
-                    {modo === 'formulario' && seccionesCaso.map((sec) => (
+                    {modo === 'formulario' && !hayDatos && (
+                        <Alerta tipo="info">Este modelo no pide más datos que los de las partes.</Alerta>
+                    )}
+
+                    {modo === 'formulario' && categorias.map(({ sec, partes: bloques }) => (
                         <div key={sec.id} className="tarjeta">
                             <div className="tarjeta-cab">
                                 <div>
                                     <h3>{sec.nombre}</h3>
-                                    <p className="suave">{sec.caso.length} dato(s)</p>
+                                    <p className="suave">{sec.caso.length + sec.ficha.length + sec.propios.length} dato(s)</p>
                                 </div>
                             </div>
-                            <div className="form-grid">
-                                {sec.caso.map((c) => (
-                                    <Campo key={c.clave} etiqueta={`${c.etiqueta}${c.requerido ? ' *' : ''}`} ancho={c.tipo === 'texto_largo'}>
-                                        <EntradaDato c={c} valor={valores[c.clave] ?? ''} cambiar={(v) => poner(c.clave, v)} />
-                                    </Campo>
-                                ))}
-                            </div>
+
+                            {bloques.map(({ rol, campos, propios }) => {
+                                const lista = registradas(rol);
+                                return (
+                                    <div key={rol} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                        {lista.length === 0 && (
+                                            <p className="suave">Aún no hay {etiquetaRol(rol).toLowerCase()} registrado: agrégalo en la pestaña Partes.</p>
+                                        )}
+                                        {lista.map((f, n) => (
+                                            <FilaCampos key={f.id} f={f} n={n} total={lista.length} campos={campos} propios={propios}
+                                                clienteId={e.clienteId} acc={acc} />
+                                        ))}
+                                    </div>
+                                );
+                            })}
+
+                            {sec.caso.length > 0 && (
+                                <div className="form-grid">
+                                    {sec.caso.map((c) => (
+                                        <Campo key={c.clave} etiqueta={`${c.etiqueta}${c.requerido ? ' *' : ''}`} ancho={c.tipo === 'texto_largo'}>
+                                            <EntradaDato c={c} valor={valores[c.clave] ?? ''} cambiar={(v) => poner(c.clave, v)} />
+                                        </Campo>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))}
 
@@ -963,7 +1011,7 @@ export function DatosExpediente({
                     <button type="button" className="btn btn-fan" onClick={irPartes}>← Partes</button>
                 )}
                 <button type="button" className="btn btn-sec" disabled={guardando} onClick={siguiente}>
-                    {haciaDatos ? 'Siguiente: datos del caso' : sucio ? 'Guardar y ver vista previa' : 'Siguiente: vista previa y edición'}
+                    {haciaDatos ? 'Siguiente: llenar los datos' : sucio ? 'Guardar y ver vista previa' : 'Siguiente: vista previa y edición'}
                 </button>
             </div>
 

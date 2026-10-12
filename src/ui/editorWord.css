@@ -1076,3 +1076,25 @@
 .ed-cinta select.ed-fuente {
     max-width: 190px;
 }
+
+/* ===== Formato aplicado a un campo =====
+   La etiqueta del campo fija su propio peso y fuente: hay que dejar pasar el del contenedor (<b>, <i>, <u>, fuente). */
+.hoja-ed b .mk[data-k],
+.hoja-ed strong .mk[data-k],
+.hoja-ed.ver-codigos b .mk[data-k],
+.hoja-ed.ver-codigos strong .mk[data-k] {
+    font-weight: 700;
+}
+
+.hoja-ed i .mk[data-k],
+.hoja-ed em .mk[data-k] {
+    font-style: italic;
+}
+
+.hoja-ed u .mk[data-k] {
+    text-decoration: underline;
+}
+
+.hoja-ed:not(.ver-codigos) [data-fam] .mk[data-k] {
+    font-family: inherit;
+}
