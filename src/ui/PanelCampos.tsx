@@ -707,7 +707,6 @@ function TabDatos({ campos, grupos, partes, ambito, onCampos, onGrupos, onInsert
 }
 
 /* ================= Pestaña PARTES ================= */
-/* ================= Pestaña PARTES ================= */
 function TabPartes({ lista, pendientes, onAgregar, onQuitar, onAsignarPendientes }: {
     lista: Parte[];
     pendientes: number;

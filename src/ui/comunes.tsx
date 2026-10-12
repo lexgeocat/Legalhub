@@ -13,7 +13,6 @@ const ICONOS = {
     buscar: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M21 21l-4.5-4.5',
     mas: 'M12 5v14 M5 12h14',
     papelera: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3',
-    copiar: 'M9 9h11v11H9z M5 15V4h11',
     editar: 'M4 20h4L19 9l-4-4L4 16z M13 7l4 4',
     ok: 'M5 12l5 5 9-10',
     cerrar: 'M6 6l12 12 M18 6L6 18',
@@ -177,7 +176,7 @@ export function Segmentado<T extends string>({ opciones, valor, cambiar }: {
 /* ---------------- Estructura ---------------- */
 export function Modal({ titulo, cerrar, children, pie, ancho = 'media' }: {
     titulo: string; cerrar: () => void; children: ReactNode; pie?: ReactNode;
-    ancho?: 'chica' | 'media' | 'grande' | 'completa';
+    ancho?: 'chica' | 'media' | 'grande';
 }) {
     useEffect(() => {
         const f = (e: KeyboardEvent) => {

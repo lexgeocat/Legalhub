@@ -529,25 +529,6 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-.avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--primario-claro);
-  color: var(--primario);
-  display: inline-grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 650;
-  flex: none;
-}
-
-.celda-persona {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .insignia {
   display: inline-flex;
   align-items: center;
@@ -1246,11 +1227,6 @@ textarea {
   padding: 6px 4px;
 }
 
-.pc-insertar:hover {
-  background: var(--primario-claro);
-  border-color: #cfd8fb;
-}
-
 @media (max-width: 1180px) {
   .visor-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1386,11 +1362,6 @@ textarea {
   padding: 6px 0;
   border-bottom: 1px solid var(--borde);
   font-size: 13px;
-}
-
-/* ===== Modal ancho (editar documento) ===== */
-.m-completa {
-  max-width: min(1280px, 96vw);
 }
 
 /* ===== Datos del expediente ===== */

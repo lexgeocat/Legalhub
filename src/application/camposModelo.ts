@@ -88,7 +88,6 @@ export function analizarCampos(fuente: Pick<FuenteModelo, 'texto' | 'campos'>): 
 }
 
 /** Aplica etiqueta y tipo de los campos declarados sobre el esquema escaneado. El filtro del marcador (moneda, fecha…) manda sobre el tipo declarado. */
-/** Aplica etiqueta y tipo de los campos declarados sobre el esquema escaneado. El filtro del marcador (moneda, fecha…) manda sobre el tipo declarado. */
 export function aplicarCampos(
     esquema: CampoEsquema[], campos: CampoPropio[], grupos: readonly GrupoDatos[] = [],
 ): CampoEsquema[] {

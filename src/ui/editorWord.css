@@ -152,8 +152,8 @@
 .hoja-ed p,
 .hoja-ed h1,
 .hoja-ed h2 {
-    /* Word suma «después» del párrafo anterior + «antes» del siguiente (no colapsa como el margin de CSS):
-       por eso el «antes» va como padding-top. */
+    /* Word suma "después" del párrafo anterior + "antes" del siguiente (no colapsa como el margin de CSS):
+       por eso el "antes" va como padding-top. */
     margin: 0 0 var(--despues, calc(6pt * var(--esc, 1)));
     padding-top: var(--antes, 0pt);
     min-height: 1em;
@@ -278,10 +278,6 @@
     pointer-events: none;
 }
 
-/* ===== Panel de campos (complementa .pc de App.css) ===== */
-
-
-
 @media (max-width: 1100px) {
     .ed-cuerpo {
         grid-template-columns: minmax(0, 1fr) 280px;
@@ -330,10 +326,6 @@
     color: var(--texto-3);
 }
 
-.pc-mas:hover {
-    background: var(--primario-claro);
-}
-
 .pc-pie {
     display: flex;
     flex-direction: column;
@@ -360,17 +352,6 @@
     align-items: center;
     margin: 6px 0 10px;
 }
-
-.pc-crear .pc-acciones {
-    margin: 0;
-}
-
-/* ===== Edición del documento dentro del asistente ===== */
-
-.asist-edit .ed-cinta {
-    padding: 6px 10px;
-}
-
 
 /* ===== Lista de cambios al actualizar un modelo ===== */
 .cambio-modelo {
@@ -507,7 +488,6 @@
     flex-wrap: wrap;
 }
 
-.cb-datos,
 .cb-formas {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -586,7 +566,7 @@
     font-size: inherit;
 }
 
-/* Modo «Códigos»: se ve el {{…}} real en vez de la etiqueta corta */
+/* Modo "Códigos": se ve el {{…}} real en vez de la etiqueta corta */
 .hoja-ed.ver-codigos .mk .mk-e {
     display: none;
 }
@@ -723,11 +703,6 @@
     min-height: 74px;
 }
 
-
-.cb-quien-fila select {
-    font-weight: 600;
-}
-
 .cb-cab-seccion {
     display: flex;
     justify-content: space-between;
@@ -759,16 +734,6 @@
     outline: 2px solid var(--primario);
     outline-offset: 2px;
     border-radius: 4px;
-}
-
-.cb-insertar:disabled {
-    opacity: .5;
-    cursor: default;
-}
-
-.cb-insertar:disabled:hover {
-    background: transparent;
-    border-color: transparent;
 }
 
 .cb-sub .cb-punto {
