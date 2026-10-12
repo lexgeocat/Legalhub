@@ -176,7 +176,8 @@ export function Segmentado<T extends string>({ opciones, valor, cambiar }: {
 
 /* ---------------- Estructura ---------------- */
 export function Modal({ titulo, cerrar, children, pie, ancho = 'media' }: {
-    titulo: string; cerrar: () => void; children: ReactNode; pie?: ReactNode; ancho?: 'chica' | 'media' | 'grande';
+    titulo: string; cerrar: () => void; children: ReactNode; pie?: ReactNode;
+    ancho?: 'chica' | 'media' | 'grande' | 'completa';
 }) {
     useEffect(() => {
         const f = (e: KeyboardEvent) => {
@@ -288,6 +289,18 @@ export async function confirmar(mensaje: string, titulo = 'Confirmar'): Promise<
     } catch {
         return window.confirm(mensaje);
     }
+}
+/* ---------------- Cambios sin guardar (guarda de navegación) ---------------- */
+let cambiosPendientes = false;
+export const hayCambiosPendientes = (): boolean => cambiosPendientes;
+export const marcarCambiosPendientes = (v: boolean): void => {
+    cambiosPendientes = v;
+};
+
+/** true si se puede salir: no hay cambios pendientes o la persona aceptó descartarlos. */
+export async function permitirSalir(): Promise<boolean> {
+    if (!cambiosPendientes) return true;
+    return confirmar('Hay cambios sin guardar en las partes o datos del expediente. ¿Salir sin guardarlos?', 'Cambios sin guardar');
 }
 
 export function fechaHora(iso: string): string {

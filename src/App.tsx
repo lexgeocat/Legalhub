@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { VERSION_APP } from './domain/version';
 import { Buscador } from './ui/Buscador';
-import { Icono, Notificaciones, avisar, type NombreIcono } from './ui/comunes';
+import { Icono, Notificaciones, avisar, permitirSalir, type NombreIcono } from './ui/comunes';
 import { FormularioPersona } from './ui/FormularioPersona';
 import { Configuracion } from './ui/paginas/Configuracion';
 import { Expediente } from './ui/paginas/Expediente';
 import { Expedientes } from './ui/paginas/Expedientes';
 import { Modelos } from './ui/paginas/Modelos';
+import { PanelClientes } from './ui/PanelClientes';
 import { useCargar, useServicios } from './ui/servicios';
 
 type Item = 'expedientes' | 'modelos' | 'config';
@@ -18,7 +19,7 @@ const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
 ];
 
-/** Ficha de una persona abierta desde el buscador (ya no hay página «Personas»). */
+/** Ficha de una persona abierta desde el buscador o desde el panel de clientes. */
 function FichaPersona({ id, cerrar }: { id: string; cerrar: () => void }) {
   const s = useServicios();
   const lista = useCargar(() => s.consultas.listarPersonas(), []);
@@ -49,7 +50,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', f);
   }, []);
 
-  const ir = (n: Item) => setVista({ n });
+  /** Toda navegación pasa por aquí: si hay datos sin guardar en un expediente, pregunta antes de salir. */
+  async function navegar(destino: Vista) {
+    if (destino.n === 'expediente' && vista.n === 'expediente' && vista.id === destino.id) return;
+    if (!(await permitirSalir())) return;
+    setVista(destino);
+  }
+
+  const ir = (n: Item) => void navegar({ n });
+  const expedienteActivo = vista.n === 'expediente' ? vista.id : null;
 
   return (
     <div className="app">
@@ -71,12 +80,21 @@ export default function App() {
             <Icono n={m.icono} /> {m.etiqueta}
           </button>
         ))}
+
+        <PanelClientes
+          activo={expedienteActivo}
+          abrir={(id) => void navegar({ n: 'expediente', id })}
+          ficha={setPersona}
+        />
+
         <div className="nav-pie">Versión {VERSION_APP}</div>
       </nav>
 
       <main className="contenido">
-        {vista.n === 'expedientes' && <Expedientes abrir={(id) => setVista({ n: 'expediente', id })} />}
-        {vista.n === 'expediente' && <Expediente key={vista.id} id={vista.id} volver={() => setVista({ n: 'expedientes' })} />}
+        {vista.n === 'expedientes' && <Expedientes abrir={(id) => void navegar({ n: 'expediente', id })} />}
+        {vista.n === 'expediente' && (
+          <Expediente key={vista.id} id={vista.id} volver={() => void navegar({ n: 'expedientes' })} />
+        )}
         {vista.n === 'modelos' && <Modelos />}
         {vista.n === 'config' && <Configuracion />}
       </main>
@@ -87,8 +105,8 @@ export default function App() {
           elegir={(r) => {
             setBuscando(false);
             if (r.tipo === 'persona') setPersona(r.id);
-            else if (r.expedienteId) setVista({ n: 'expediente', id: r.expedienteId });
-            else setVista({ n: 'expedientes' });
+            else if (r.expedienteId) void navegar({ n: 'expediente', id: r.expedienteId });
+            else void navegar({ n: 'expedientes' });
           }}
         />
       )}

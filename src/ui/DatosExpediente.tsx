@@ -185,7 +185,31 @@ function CampoP({ k, f, poner }: { k: string; f: FilaParte; poner: (k: string, v
         </Campo>
     );
 }
+const etiquetaPersona = (p: PersonaResumen): string =>
+    `${p.nombre}${p.ci ? ` · C.I. ${p.ci}` : p.nit ? ` · NIT ${p.nit}` : ''}`;
 
+/** Busca entre las personas registradas: al elegir una se autocompleta toda su ficha. */
+function BuscarPersona({ personas, elegir }: { personas: PersonaResumen[]; elegir: (personaId: string) => void }) {
+    const [texto, setTexto] = useState('');
+    const porEtiqueta = useMemo(() => new Map(personas.map((p) => [etiquetaPersona(p), p.id] as const)), [personas]);
+    return (
+        <input
+            className="buscar-persona"
+            list="personas-datos"
+            aria-label="Persona registrada"
+            placeholder="Buscar persona registrada…"
+            value={texto}
+            onChange={(ev) => {
+                const v = ev.target.value;
+                const id = porEtiqueta.get(v);
+                if (id) {
+                    setTexto('');
+                    elegir(id);
+                } else setTexto(v);
+            }}
+        />
+    );
+}
 function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, puedeQuitarCliente, acc }: {
     f: FilaParte; n: number; total: number; sec: SeccionModelo; ficha: FichaModelo; identidad: boolean;
     personas: PersonaResumen[]; clienteId: string; puedeQuitarCliente: boolean; acc: Acciones;
@@ -204,12 +228,14 @@ function FilaForm({ f, n, total, sec, ficha, identidad, personas, clienteId, pue
                 <Insignia tono="violeta">{etiquetaRol(f.rol)}{total > 1 ? ` ${n + 1}` : ''}</Insignia>
                 {esCliente && <Insignia tono="verde">Cliente</Insignia>}
                 <span className="espacio" />
-                {identidad && !f.parteId && personas.length > 0 && (
-                    <select aria-label="Persona registrada" value={f.personaId ?? ''} onChange={(ev) => acc.elegir(f.id, ev.target.value)}>
-                        <option value="">Nueva persona…</option>
-                        {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}{p.id === clienteId ? ' (cliente)' : ''}</option>)}
-                    </select>
-                )}
+                {identidad && !f.parteId && (f.personaId ? (
+                    <>
+                        <Insignia tono="azul">Persona registrada</Insignia>
+                        <button type="button" className="btn btn-fan btn-sm" onClick={() => acc.elegir(f.id, '')}>Cambiar persona</button>
+                    </>
+                ) : personas.length > 0 && (
+                    <BuscarPersona personas={personas} elegir={(pid) => acc.elegir(f.id, pid)} />
+                ))}
                 {identidad && f.parteId && (
                     <>
                         <button type="button" className="btn btn-sec btn-sm" disabled={esCliente && !puedeQuitarCliente}
@@ -493,8 +519,13 @@ function LlenadoDocumento({ bloques, config, campos, propios, roles, valores, ca
     );
 }
 
-/* ================= Pestaña «Datos» ================= */
-export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, recargar, recargarPersonas, irModelo, irDocumento }: {
+/* ================= Pestañas «Partes» y «Datos» (comparten estado) ================= */
+export function DatosExpediente({
+    pestana, e, modelo, visible, ficha, partes, personas,
+    recargar, recargarPersonas, irModelo, irPartes, irDatos, irDocumento, onSucio,
+}: {
+    /** Qué se muestra: la pestaña «Partes» o «Datos». Las dos comparten lo escrito y se guardan juntas. */
+    pestana: 'partes' | 'datos';
     e: ExpedienteResumen;
     modelo: ModeloResumen | null;
     visible: ModeloVisible | null;
@@ -504,7 +535,11 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
     recargar: () => void;
     recargarPersonas: () => void;
     irModelo: () => void;
+    irPartes: () => void;
+    irDatos: () => void;
     irDocumento: () => void;
+    /** Avisa si hay cambios sin guardar (para no perderlos al salir). */
+    onSucio: (sucio: boolean) => void;
 }) {
     const s = useServicios();
     const [modo, setModo] = useState<Modo>('formulario');
@@ -517,6 +552,11 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
     const [fichaDe, setFichaDe] = useState<string | null>(null);
 
     const alInicio = clienteAlInicio(obtenerTipo(e.tipo));
+
+    useEffect(() => {
+        onSucio(sucio);
+    }, [sucio, onSucio]);
+    useEffect(() => () => onSucio(false), [onSucio]);
 
     // Los datos del caso se vuelven a leer cuando cambian en la base.
     const firmaDatos = JSON.stringify(e.datos);
@@ -622,6 +662,18 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
         }
     }
 
+    /** Autollena una parte con la persona que ya es cliente del expediente. */
+    async function usarCliente(rol: string) {
+        if (!e.clienteId) return;
+        let id = (filas ?? []).find((f) => mismoRol(f.rol, rol) && vacia(f))?.id;
+        if (!id) {
+            const nueva = filaNueva(rol);
+            id = nueva.id;
+            setFilas((l) => [...(l ?? []), nueva]);
+        }
+        await elegirPersona(id, e.clienteId);
+    }
+
     async function quitar(f: FilaParte) {
         if (f.parteId && !(await confirmar(`¿Quitar a ${nombreDe(f) || 'esta parte'} como ${etiquetaRol(f.rol).toLowerCase()} de este expediente?`))) return;
         if (f.parteId) setEliminadas((l) => [...l, f.parteId as string]);
@@ -649,11 +701,13 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
         setFilas((l) => (l ?? []).map((x) => (x.personaId === personaId ? { ...x, p, nombreLibre: undefined, orig: JSON.stringify(p) } : x)));
     }
 
-    async function guardar() {
+    /** Guarda partes y datos del caso juntos. `despues` se ejecuta solo si todo se guardó bien. */
+    async function guardar(despues?: () => void) {
         const lista = filas ?? [];
         const errores = validar(lista);
         if (errores.length > 0) {
             setErr(errores.join('\n'));
+            if (pestana === 'datos') irPartes(); // los errores son de las partes: se lleva a donde se corrigen
             return;
         }
         setGuardando(true);
@@ -690,6 +744,7 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
             recargar();
             recargarPersonas();
             avisar('Datos guardados');
+            despues?.();
         } catch (error) {
             setErr(mensajeError(error));
         } finally {
@@ -708,17 +763,22 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
     }
     if (!ficha || !visible || !filas) return <p className="suave">Cargando el modelo…</p>;
 
-    let faltanCaso = ficha.caso.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
-    let faltanPartes = 0;
-    for (const rol of ficha.roles) {
+    const seccionesPartes = vista.secciones
+        .map((sec, idx) => ({ sec, identidad: idx === vista.identidad }))
+        .filter(({ sec, identidad }) => identidad || sec.ficha.length + sec.propios.length > 0);
+    const seccionesCaso = vista.secciones.filter((sec) => sec.caso.length > 0);
+    const hayCaso = seccionesCaso.length > 0;
+
+    const resumen = ficha.roles.map((rol) => {
         const lista = filas.filter((f) => mismoRol(f.rol, rol));
-        if (lista.length === 0) faltanPartes += 1;
-        lista.forEach((f, i) => {
-            if (i === 0 || !vacia(f)) faltanPartes += faltantesDe(f, ficha);
-        });
-    }
-    faltanCaso = Math.max(0, faltanCaso);
-    const completo = faltanCaso + faltanPartes === 0;
+        const registradas = lista.filter((f) => !vacia(f)).length;
+        const falta = lista.length === 0
+            ? 1
+            : lista.reduce((a, f, i) => a + (i === 0 || !vacia(f) ? faltantesDe(f, ficha) : 0), 0);
+        return { rol, registradas, falta };
+    });
+    const faltanCaso = ficha.caso.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
+    const clienteSinParte = !!e.clienteId && ficha.roles.length > 0 && !filas.some((f) => f.personaId === e.clienteId);
 
     const acc: Acciones = {
         elegir: (id, personaId) => void elegirPersona(id, personaId),
@@ -729,75 +789,153 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
         ponerD,
     };
 
+    const selector = (
+        <Segmentado<Modo>
+            valor={modo}
+            cambiar={setModo}
+            opciones={[{ id: 'formulario', etiqueta: 'Formulario' }, { id: 'documento', etiqueta: 'Sobre el documento' }]}
+        />
+    );
+
+    const documento = (
+        <div className="tarjeta">
+            <p className="suave">
+                Escribe en los huecos (amarillos = vacíos). Al escribir el nombre de una parte, elige también su <b>género</b>: es obligatorio.
+                Si hay varios vendedores o compradores, agrégalos en la vista «Formulario» de la pestaña Partes.
+            </p>
+            <LlenadoDocumento
+                bloques={visible.bloques} config={visible.config} campos={ficha.caso} propios={mapaPropios}
+                roles={ficha.roles} valores={valores} cambiar={poner} fila={filaDe} editar={editarPrimera}
+            />
+        </div>
+    );
+
+    const haciaDatos = pestana === 'partes' && hayCaso;
+    const siguiente = () => {
+        if (haciaDatos) irDatos();
+        else if (sucio) void guardar(irDocumento);
+        else irDocumento();
+    };
+
     return (
         <>
-            {!e.clienteId && !alInicio && (
-                <Alerta tipo="info">
-                    Este expediente aún no tiene cliente. Cuando registres a las partes, marca con «Es mi cliente» a quien te contrata.
-                </Alerta>
-            )}
-
-            <div className="tarjeta">
-                <div className="tarjeta-cab">
-                    <div>
-                        <h3>Datos del expediente</h3>
-                        <p className="suave">
-                            Armado según el modelo «{modelo.nombre}»: las partes y los datos que pide, por categoría. Llénalos en un formulario o escribe directo sobre el documento.
-                        </p>
-                    </div>
-                    <Segmentado<Modo>
-                        valor={modo}
-                        cambiar={setModo}
-                        opciones={[{ id: 'formulario', etiqueta: 'Formulario' }, { id: 'documento', etiqueta: 'Sobre el documento' }]}
-                    />
-                </div>
-                <div className="acciones">
-                    {completo ? <Insignia tono="verde">Datos completos</Insignia> : (
-                        <>
-                            {faltanPartes > 0 && <Insignia tono="ambar">Faltan {faltanPartes} dato(s) de las partes</Insignia>}
-                            {faltanCaso > 0 && <Insignia tono="ambar">Faltan {faltanCaso} dato(s) del caso</Insignia>}
-                        </>
-                    )}
-                    {sucio && <Insignia tono="rojo">Sin guardar</Insignia>}
-                </div>
-            </div>
-
-            {modo === 'formulario' && vista.secciones.map((sec, idx) => {
-                const identidad = idx === vista.identidad;
-                const rolesSec = roles.filter((r) => identidad
-                    || ficha.fichaParte.some((u) => mismoRol(u.rol, r) && sec.ficha.some((d) => d.clave === u.clave))
-                    || ficha.datosParte.some((d) => mismoRol(d.rol, r) && sec.propios.some((x) => x.clave === d.clave)));
-                const total = sec.caso.length + sec.ficha.length + sec.propios.length;
-                return (
-                    <div key={sec.id} className="tarjeta">
+            {pestana === 'partes' ? (
+                <>
+                    <div className="tarjeta">
                         <div className="tarjeta-cab">
                             <div>
-                                <h3>{sec.nombre}</h3>
-                                {total > 0 && <p className="suave">{total} dato(s)</p>}
+                                <h3>Partes del expediente</h3>
+                                <p className="suave">
+                                    Según «{modelo.nombre}» hay un formulario listo por cada parte. Elige una persona registrada y se autocompleta,
+                                    o escribe sus datos: quedan en el registro para la próxima vez.
+                                </p>
                             </div>
+                            {selector}
                         </div>
+                        <div className="acciones">
+                            {e.clienteId && <Insignia tono="verde">Cliente: {e.clienteNombre}</Insignia>}
+                            {resumen.map((r) => (
+                                <Insignia key={r.rol} tono={r.falta === 0 ? 'verde' : 'ambar'}>
+                                    {etiquetaRol(r.rol)}{r.registradas > 1 ? ` ×${r.registradas}` : ''} · {r.falta === 0 ? 'completo' : `faltan ${r.falta}`}
+                                </Insignia>
+                            ))}
+                            {sucio && <Insignia tono="rojo">Sin guardar</Insignia>}
+                        </div>
+                    </div>
 
-                        {rolesSec.map((rol) => {
-                            const lista = filas.filter((f) => mismoRol(f.rol, rol));
-                            return (
-                                <div key={rol} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                    {lista.map((f, n) => (
-                                        <FilaForm key={f.id} f={f} n={n} total={lista.length} sec={sec} ficha={ficha} identidad={identidad}
-                                            personas={personas} clienteId={e.clienteId} puedeQuitarCliente={!alInicio} acc={acc} />
+                    {ficha.roles.length === 0 && (
+                        <Alerta tipo="info">Este modelo no usa partes: todo sale de los datos del caso.</Alerta>
+                    )}
+                    {!e.clienteId && !alInicio && ficha.roles.length > 0 && (
+                        <Alerta tipo="info">
+                            Este expediente aún no tiene cliente. Cuando registres a las partes, marca con «Es mi cliente» a quien te contrata.
+                        </Alerta>
+                    )}
+                    {clienteSinParte && (
+                        <Alerta tipo="info">
+                            <div>
+                                El cliente <b>{e.clienteNombre}</b> aún no figura entre las partes. Regístralo como:
+                                <div className="chips" style={{ marginTop: 6 }}>
+                                    {ficha.roles.map((r) => (
+                                        <button key={r} type="button" className="chip" onClick={() => void usarCliente(r)}>
+                                            + {etiquetaRol(r)}
+                                        </button>
                                     ))}
-                                    {identidad && (
-                                        <div>
-                                            <button type="button" className="btn btn-fan btn-sm"
-                                                onClick={() => { setFilas((l) => [...(l ?? []), filaNueva(rol)]); tocar(); }}>
-                                                + Agregar otro {etiquetaRol(rol).toLowerCase()}
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
-                            );
-                        })}
+                            </div>
+                        </Alerta>
+                    )}
 
-                        {sec.caso.length > 0 && (
+                    {modo === 'formulario' && seccionesPartes.map(({ sec, identidad }) => {
+                        const rolesSec = roles.filter((r) => identidad
+                            || ficha.fichaParte.some((u) => mismoRol(u.rol, r) && sec.ficha.some((d) => d.clave === u.clave))
+                            || ficha.datosParte.some((d) => mismoRol(d.rol, r) && sec.propios.some((x) => x.clave === d.clave)));
+                        const total = sec.ficha.length + sec.propios.length;
+                        return (
+                            <div key={sec.id} className="tarjeta">
+                                <div className="tarjeta-cab">
+                                    <div>
+                                        <h3>{sec.nombre}</h3>
+                                        {total > 0 && <p className="suave">{total} dato(s) de cada parte</p>}
+                                    </div>
+                                </div>
+                                {rolesSec.map((rol) => {
+                                    const lista = filas.filter((f) => mismoRol(f.rol, rol));
+                                    return (
+                                        <div key={rol} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                            {lista.map((f, n) => (
+                                                <FilaForm key={f.id} f={f} n={n} total={lista.length} sec={sec} ficha={ficha} identidad={identidad}
+                                                    personas={personas} clienteId={e.clienteId} puedeQuitarCliente={!alInicio} acc={acc} />
+                                            ))}
+                                            {identidad && (
+                                                <div>
+                                                    <button type="button" className="btn btn-fan btn-sm"
+                                                        onClick={() => { setFilas((l) => [...(l ?? []), filaNueva(rol)]); tocar(); }}>
+                                                        + Agregar otro {etiquetaRol(rol).toLowerCase()}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+
+                    {modo === 'documento' && documento}
+                </>
+            ) : (
+                <>
+                    <div className="tarjeta">
+                        <div className="tarjeta-cab">
+                            <div>
+                                <h3>Datos del caso</h3>
+                                <p className="suave">
+                                    Los que pide «{modelo.nombre}», ordenados por categoría. Llénalos en un formulario o escribe directo sobre el documento.
+                                </p>
+                            </div>
+                            {selector}
+                        </div>
+                        <div className="acciones">
+                            {faltanCaso === 0
+                                ? <Insignia tono="verde">Datos completos</Insignia>
+                                : <Insignia tono="ambar">Faltan {faltanCaso} dato(s) del caso</Insignia>}
+                            {sucio && <Insignia tono="rojo">Sin guardar</Insignia>}
+                        </div>
+                    </div>
+
+                    {modo === 'formulario' && !hayCaso && (
+                        <Alerta tipo="info">Este modelo no pide datos del caso: todo sale de las partes.</Alerta>
+                    )}
+
+                    {modo === 'formulario' && seccionesCaso.map((sec) => (
+                        <div key={sec.id} className="tarjeta">
+                            <div className="tarjeta-cab">
+                                <div>
+                                    <h3>{sec.nombre}</h3>
+                                    <p className="suave">{sec.caso.length} dato(s)</p>
+                                </div>
+                            </div>
                             <div className="form-grid">
                                 {sec.caso.map((c) => (
                                     <Campo key={c.clave} etiqueta={`${c.etiqueta}${c.requerido ? ' *' : ''}`} ancho={c.tipo === 'texto_largo'}>
@@ -805,40 +943,32 @@ export function DatosExpediente({ e, modelo, visible, ficha, partes, personas, r
                                     </Campo>
                                 ))}
                             </div>
-                        )}
-                    </div>
-                );
-            })}
+                        </div>
+                    ))}
 
-            {modo === 'documento' && (
-                <div className="tarjeta">
-                    <p className="suave">
-                        Escribe en los huecos (amarillos = vacíos). Al escribir el nombre de una parte, elige también su <b>género</b>: es obligatorio.
-                        Si hay varios vendedores o compradores, agrégalos en la vista «Formulario».
-                    </p>
-                    <LlenadoDocumento
-                        bloques={visible.bloques} config={visible.config} campos={ficha.caso} propios={mapaPropios}
-                        roles={ficha.roles} valores={valores} cambiar={poner} fila={filaDe} editar={editarPrimera}
-                    />
-                </div>
+                    {modo === 'documento' && documento}
+
+                    <OtrosDatos conocidos={ficha.caso.map((c) => c.clave)} valores={valores} cambiar={poner} />
+                </>
             )}
-
-            <OtrosDatos conocidos={ficha.caso.map((c) => c.clave)} valores={valores} cambiar={poner} />
 
             <Aviso error={err} />
 
             <div className="barra-datos">
                 <button type="button" className="btn btn-pri" disabled={!sucio || guardando} onClick={() => void guardar()}>
-                    {guardando ? 'Guardando…' : 'Guardar datos'}
+                    {guardando ? 'Guardando…' : 'Guardar cambios'}
                 </button>
                 <span className="espacio" />
-                <button type="button" className="btn btn-sec" disabled={sucio || guardando} onClick={irDocumento}
-                    title={sucio ? 'Guarda primero los datos' : undefined}>
-                    Siguiente: generar documento
+                {pestana === 'datos' && (
+                    <button type="button" className="btn btn-fan" onClick={irPartes}>← Partes</button>
+                )}
+                <button type="button" className="btn btn-sec" disabled={guardando} onClick={siguiente}>
+                    {haciaDatos ? 'Siguiente: datos del caso' : sucio ? 'Guardar y ver vista previa' : 'Siguiente: vista previa y edición'}
                 </button>
             </div>
 
             <datalist id="expedidos-datos">{EXPEDIDOS.map((x) => <option key={x} value={x} />)}</datalist>
+            <datalist id="personas-datos">{personas.map((p) => <option key={p.id} value={etiquetaPersona(p)} />)}</datalist>
 
             {fichaDe && (
                 <FormularioPersona

@@ -9,12 +9,13 @@ import { AsistenteDocumento } from '../AsistenteDocumento';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta, fechaHora,
+    hayCambiosPendientes, marcarCambiosPendientes, permitirSalir,
 } from '../comunes';
 import { DatosExpediente } from '../DatosExpediente';
 import { Hoja } from '../Hoja';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 
-type PestanaExp = 'modelo' | 'datos' | 'documentos';
+type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos';
 
 const sinValor = (v: string | undefined) => !v || v.trim() === '';
 
@@ -49,7 +50,22 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
 
     const t = obtenerTipo(e.tipo);
     const alInicio = clienteAlInicio(t);
-    const activa: PestanaExp = pestana ?? (modelo ? 'datos' : 'modelo');
+    const activa: PestanaExp = pestana ?? (modelo ? 'partes' : 'modelo');
+    const enTrabajo = (p: PestanaExp) => p === 'partes' || p === 'datos';
+
+    /** Cambiar de pestaña: entre Partes y Datos no se pierde nada; al salir de ellas avisa si hay cambios sin guardar. */
+    async function irA(p: PestanaExp) {
+        if (enTrabajo(activa) && !enTrabajo(p) && !(await permitirSalir())) return;
+        setPestana(p);
+    }
+
+    async function nuevoDocumento() {
+        if (
+            hayCambiosPendientes()
+            && !(await confirmar('Tienes datos sin guardar: el documento se armará solo con lo ya guardado. ¿Continuar de todos modos?', 'Datos sin guardar'))
+        ) return;
+        setAsistente(true);
+    }
 
     async function cambiarEstado(estado: string) {
         try {
@@ -81,6 +97,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
         if (!ok) return;
         try {
             await s.eliminarExpediente.ejecutar(id);
+            marcarCambiosPendientes(false);
             avisar('Expediente eliminado');
             volver();
         } catch (err) {
@@ -111,7 +128,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                         {ESTADOS.map((x) => <option key={x} value={x}>{ETIQUETA_ESTADO[x]}</option>)}
                     </select>
                     <button type="button" className="btn btn-sec" onClick={() => setEditando(true)}><Icono n="editar" tam={16} /> Editar</button>
-                    <button type="button" className="btn btn-pri" onClick={() => setAsistente(true)}><Icono n="mas" tam={16} /> Nuevo documento</button>
+                    <button type="button" className="btn btn-pri" onClick={() => void nuevoDocumento()}><Icono n="mas" tam={16} /> Nuevo documento</button>
                     <button type="button" className="btn btn-peligro" onClick={() => void eliminar()}><Icono n="papelera" tam={16} /> Eliminar</button>
                 </div>
             </div>
@@ -120,22 +137,24 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
 
             <Pestanas<PestanaExp>
                 activa={activa}
-                cambiar={setPestana}
+                cambiar={(p) => void irA(p)}
                 items={[
                     { id: 'modelo', etiqueta: '1 · Modelo' },
-                    { id: 'datos', etiqueta: '2 · Datos' },
-                    { id: 'documentos', etiqueta: '3 · Documentos', contador: docs.datos?.length },
+                    { id: 'partes', etiqueta: '2 · Partes', contador: partes.datos?.length },
+                    { id: 'datos', etiqueta: '3 · Datos' },
+                    { id: 'documentos', etiqueta: '4 · Documentos', contador: docs.datos?.length },
                 ]}
             />
 
             {activa === 'modelo' && (
                 <TabModelo e={e} modelos={modelos.datos ?? []} actual={modelo} visible={visible} ficha={ficha}
-                    elegir={(m) => void elegirModelo(m.id)} siguiente={() => setPestana('datos')} />
+                    elegir={(m) => void elegirModelo(m.id)} siguiente={() => void irA('partes')} />
             )}
 
-            {activa === 'datos' && (
+            {(activa === 'partes' || activa === 'datos') && (
                 <DatosExpediente
                     key={e.id}
+                    pestana={activa}
                     e={e}
                     modelo={modelo}
                     visible={visible}
@@ -144,11 +163,13 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                     personas={personas.datos ?? []}
                     recargar={() => { partes.recargar(); exp.recargar(); }}
                     recargarPersonas={personas.recargar}
-                    irModelo={() => setPestana('modelo')}
+                    irModelo={() => void irA('modelo')}
+                    irPartes={() => setPestana('partes')}
+                    irDatos={() => setPestana('datos')}
                     irDocumento={() => setAsistente(true)}
+                    onSucio={marcarCambiosPendientes}
                 />
             )}
-
             {activa === 'documentos' && (
                 <TabDocumentos docs={docs.datos ?? []} nuevo={() => setAsistente(true)} recargar={docs.recargar} setError={setError} />
             )}
@@ -162,7 +183,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                 <AsistenteDocumento
                     expediente={e}
                     modeloInicial={modelo?.versionId}
-                    irADatos={() => { setAsistente(false); setPestana('datos'); }}
+                    irADatos={(destino) => { setAsistente(false); exp.recargar(); setPestana(destino); }}
                     cerrar={(generado) => {
                         setAsistente(false);
                         docs.recargar();
@@ -272,7 +293,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
                                 ))}
                             </>
                         )}
-                        <div><button type="button" className="btn btn-pri" onClick={siguiente}>Siguiente: llenar los datos</button></div>
+                        <div><button type="button" className="btn btn-pri" onClick={siguiente}>Siguiente: registrar las partes</button></div>
                     </div>
                 </div>
             )}

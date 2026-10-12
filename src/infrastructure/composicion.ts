@@ -22,6 +22,7 @@ import { ArchivosTauri } from './archivos/adaptadorTauri';
 import { DbTauri } from './db/adaptadorTauri';
 import { ConstructorContextoDb } from './db/constructorContexto';
 import { RepositorioModelosDb } from './db/repositorioModelos';
+import { DbObservable } from './db/dbObservable';
 import { GeneradorDocxFflate } from './docx/generarDocx';
 import { IncrustadorFuentesDocx } from './docx/incrustarFuentes';
 import { LectorDocxFflate } from './docx/leerModelo';
@@ -33,7 +34,7 @@ import { Plantillas } from '../application/casosDeUso/plantillas';
 
 export interface Servicios {
     raiz: string;
-    db: DbTauri;
+    db: DbObservable;
     archivos: ArchivosTauri;
     config: Configuracion;
     consultas: Consultas;
@@ -65,7 +66,7 @@ export interface Servicios {
 }
 
 export async function crearServicios(): Promise<Servicios> {
-    const db = new DbTauri();
+    const db = new DbObservable(new DbTauri());
     const config = new Configuracion(db);
     const cfg = await config.cargar();
     const raiz = cfg.carpetaRaiz ?? (await join(await documentDir(), 'Legal-Hub'));

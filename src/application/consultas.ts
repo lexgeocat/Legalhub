@@ -43,7 +43,11 @@ export interface ModeloResumen {
 }
 
 export interface VersionModeloResumen { id: string; version: number; editable: boolean; notas: string; creadoEn: string }
-
+export interface ClienteExpediente { id: string; codigo: string; materia: string; estado: string; tipo: string }
+export interface ClienteResumen {
+    id: string; tipo: string; nombre: string; documento: string;
+    expedientes: ClienteExpediente[]; activos: number;
+}
 const SQL_EXPEDIENTE = `
     SELECT e.id, e.codigo, e.tipo, e.materia, e.referencia, e.estado, e.juzgado, e.nro_causa, e.cliente_id,
          e.modelo_id, e.datos_json, e.created_at,
@@ -113,6 +117,41 @@ export class Consultas {
             id: t(f.id), tipo: t(f.tipo), nombre: nombrePersona(f), nit: t(f.nit), telefono: t(f.telefono),
             ci: [t(f.ci_numero) && `${t(f.ci_numero)}${t(f.ci_complemento) ? `-${t(f.ci_complemento)}` : ''}`, t(f.ci_expedido)].filter(Boolean).join(' '),
         }));
+    }
+
+    /** Personas asignadas como cliente de algún expediente vigente, con sus expedientes. */
+    async listarClientes(): Promise<ClienteResumen[]> {
+        const filas = await this.db.consultar<Fila>(
+            `SELECT p.id AS persona_id, p.tipo AS p_tipo, p.nombres, p.apellido_paterno, p.apellido_materno,
+                    p.apellido_casada, p.razon_social, p.ci_numero, p.ci_complemento, p.ci_expedido, p.nit,
+                    e.id AS exp_id, e.codigo, e.materia, e.estado, e.tipo AS exp_tipo
+             FROM expediente e JOIN persona p ON p.id = e.cliente_id
+             WHERE e.deleted_at IS NULL AND p.deleted_at IS NULL
+             ORDER BY e.created_at DESC`,
+        );
+        const mapa = new Map<string, ClienteResumen>();
+        for (const f of filas) {
+            const id = t(f.persona_id);
+            let c = mapa.get(id);
+            if (!c) {
+                const ci = [
+                    t(f.ci_numero) && `${t(f.ci_numero)}${t(f.ci_complemento) ? `-${t(f.ci_complemento)}` : ''}`,
+                    t(f.ci_expedido),
+                ].filter(Boolean).join(' ');
+                const juridica = t(f.p_tipo) === 'juridica';
+                c = {
+                    id, tipo: t(f.p_tipo), nombre: nombrePersona({ ...f, tipo: f.p_tipo }),
+                    documento: juridica ? (t(f.nit) ? `NIT ${t(f.nit)}` : '') : (ci ? `C.I. ${ci}` : ''),
+                    expedientes: [], activos: 0,
+                };
+                mapa.set(id, c);
+            }
+            c.expedientes.push({
+                id: t(f.exp_id), codigo: t(f.codigo), materia: t(f.materia), estado: t(f.estado), tipo: t(f.exp_tipo),
+            });
+            if (t(f.estado) === 'abierto' || t(f.estado) === 'en_tramite') c.activos += 1;
+        }
+        return [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     }
 
     /** Datos completos de una persona, con la forma que espera el formulario y ActualizarPersona. */

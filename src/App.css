@@ -1502,3 +1502,328 @@ textarea {
   border-bottom: 1px solid var(--borde);
   font-size: 13px;
 }
+
+/* ===== Modal ancho (editar documento) ===== */
+.m-completa {
+  max-width: min(1280px, 96vw);
+}
+
+/* ===== Datos del expediente ===== */
+.parte-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie-2);
+}
+
+.parte-cab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.parte-cab select {
+  width: auto;
+  max-width: 260px;
+}
+
+.barra-datos {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(243, 244, 247, .95);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio);
+}
+
+/* Listas desplegables escritas directo sobre el documento (género, expedido, estado civil…) */
+.papel select.en-linea {
+  display: inline-block;
+  width: auto;
+  min-width: 8ch;
+  padding: 0 4px 1px;
+  font: inherit;
+  line-height: inherit;
+  color: #1f3fae;
+  background: #eef2ff;
+  border: 0;
+  border-bottom: 1.5px solid #8b9bd9;
+  border-radius: 3px;
+}
+
+.papel select.en-linea.sin-valor {
+  background: #fff4d6;
+  border-bottom-color: #d99a1f;
+}
+
+.papel select.en-linea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(53, 86, 216, .16);
+}
+
+/* Datos insertados, agrupados por categoría (vista previa) */
+.verif-grupo {
+  padding: 10px 14px 6px;
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borde);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* ===== Barra lateral más ancha + panel de clientes ===== */
+.app {
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
+.nav {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nav-clientes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+.nav-clientes-cab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #8f9bc7;
+}
+
+.nav-contador {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  color: #c9d2ee;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.nav-clientes-buscar {
+  padding: 6px 9px;
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .1);
+  color: #e5e9f7;
+  border-radius: 7px;
+}
+
+.nav-clientes-buscar::placeholder {
+  color: #7f8bb3;
+}
+
+.nav-clientes-buscar:focus {
+  border-color: #6f8cff;
+  box-shadow: 0 0 0 3px rgba(111, 140, 255, .2);
+}
+
+.nav-clientes-lista {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -6px;
+  padding: 0 6px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .18) transparent;
+}
+
+.nav-clientes-vacio {
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #7f8bb3;
+}
+
+.nav-cliente-fila {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+
+.nav-cliente-fila:hover {
+  background: var(--nav-2);
+}
+
+.nav-cliente-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #c9d2ee;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-cliente-btn[aria-expanded="true"] {
+  color: #fff;
+}
+
+.nav-avatar {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(111, 140, 255, .22);
+  color: #b9c8ff;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.nav-cliente-nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-cliente-ficha {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #7f8bb3;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.nav-cliente-fila:hover .nav-cliente-ficha,
+.nav-cliente-ficha:focus-visible {
+  opacity: 1;
+}
+
+.nav-cliente-ficha:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, .12);
+}
+
+.nav-cliente-btn:focus-visible,
+.nav-exp:focus-visible,
+.nav-cliente-ficha:focus-visible {
+  outline: 2px solid #6f8cff;
+  outline-offset: -2px;
+}
+
+.nav-cliente-exps {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 6px 20px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, .12);
+}
+
+.nav-exp {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #aab4d6;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-exp:hover {
+  background: var(--nav-2);
+  color: #fff;
+}
+
+.nav-exp.activo {
+  background: var(--primario);
+  color: #fff;
+}
+
+.nav-exp-cod {
+  flex: none;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  opacity: .85;
+}
+
+.nav-exp-txt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-punto {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7f8bb3;
+}
+
+.nav-punto.e-abierto {
+  background: #6ea0ff;
+}
+
+.nav-punto.e-en_tramite {
+  background: #a68bff;
+}
+
+.nav-punto.e-suspendido {
+  background: #f5b942;
+}
+
+/* Buscador de personas registradas (pestaña Partes) */
+.parte-cab input.buscar-persona {
+  width: 250px;
+  padding: 5px 9px;
+  font-size: 13px;
+}

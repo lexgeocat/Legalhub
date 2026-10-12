@@ -469,8 +469,8 @@
 }
 
 .asist-hoja {
-    height: min(58vh, 640px);
-    min-height: 360px;
+    height: min(68vh, 760px);
+    min-height: 380px;
 }
 
 /* ===== Lista de cambios al actualizar un modelo ===== */
