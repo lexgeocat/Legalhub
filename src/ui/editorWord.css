@@ -136,12 +136,6 @@
     text-rendering: geometricPrecision;
 }
 
-/*
- * Línea vacía (la marca JS `limpiarBloque`). Sin contenido mide 0 de ancho y el navegador no la baja de las
- * franjas de página: un testigo de 1 px lo arregla. Es una pseudo-caja en línea: NO usar flex, padding ni borde
- * aquí, para que el cursor y la alineación se comporten como en Word.
- * (Antes se llamaba `.vacio`, que es el estado vacío de las listas y le ponía caja, borde y centrado.)
- */
 .hoja-ed .linea-vacia::before {
     content: "";
     display: inline-block;
@@ -152,8 +146,6 @@
 .hoja-ed p,
 .hoja-ed h1,
 .hoja-ed h2 {
-    /* Word suma "después" del párrafo anterior + "antes" del siguiente (no colapsa como el margin de CSS):
-       por eso el "antes" va como padding-top. */
     margin: 0 0 var(--despues, calc(6pt * var(--esc, 1)));
     padding-top: var(--antes, 0pt);
     min-height: 1em;
@@ -1025,4 +1017,33 @@
     width: 100%;
     min-height: 5em;
     resize: vertical;
+}
+
+/* Ejemplo (placeholder) dentro del tooltip de un campo */
+.mk-tip .mk-ej {
+    margin-top: 2px;
+    padding: 3px 6px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .1);
+    color: #c9d4ff;
+    font-size: 11.5px;
+    font-style: italic;
+    overflow-wrap: anywhere;
+}
+
+/* «Asignar a» dentro del diálogo de edición de un campo */
+.cb-asignar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: var(--superficie-2);
+}
+
+.chip .cb-punto {
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
 }

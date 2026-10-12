@@ -152,7 +152,7 @@ export function camposDesdeEsquema(esquema: CampoEsquema[]): CampoPropio[] {
     return [...salida.values()];
 }
 /* ---------------- Ficha de un modelo: qué pide, para mostrarlo en el expediente ---------------- */
-export interface DatoCasoFicha { clave: string; etiqueta: string; tipo: string; requerido: boolean }
+export interface DatoCasoFicha { clave: string; etiqueta: string; tipo: string; requerido: boolean; ejemplo?: string }
 export interface DatoParteFicha extends DatoCasoFicha { rol: string }
 /** Dato de la ficha de la persona que usa el modelo: «vendedor.nombre», «comprador.ci»… */
 export interface UsoFichaParte { rol: string; clave: string; requerido: boolean }
@@ -237,7 +237,7 @@ export function fichaDeModelo(esquema: CampoEsquema[], rolesDeclarados: readonly
 }
 
 /* ---------------- Categorías (grupos) del modelo ---------------- */
-export interface DatoSeccion { clave: string; etiqueta: string; tipo: string; requerido: boolean }
+export interface DatoSeccion { clave: string; etiqueta: string; tipo: string; requerido: boolean; ejemplo?: string }
 export interface SeccionModelo {
     id: string;
     nombre: string;
@@ -281,7 +281,11 @@ export function seccionesDeModelo(
     }
     for (const d of propios.values()) {
         const g = grupos.find((x) => x.datos.some((y) => !y.ficha && claveCampo(y.clave) === d.clave));
-        (porId(g?.id) ?? partes).propios.push({ clave: d.clave, etiqueta: d.etiqueta, tipo: d.tipo, requerido: d.requerido });
+        const def = g?.datos.find((y) => !y.ficha && claveCampo(y.clave) === d.clave);
+        (porId(g?.id) ?? partes).propios.push({
+            clave: d.clave, etiqueta: d.etiqueta, tipo: d.tipo, requerido: d.requerido,
+            ...(def?.ejemplo ? { ejemplo: def.ejemplo } : {}),
+        });
     }
 
     return [partes, ...secs, otros].filter((s) => s.caso.length + s.ficha.length + s.propios.length > 0);

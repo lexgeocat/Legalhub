@@ -79,6 +79,7 @@ export function MenuCampo({ info, partes, contexto, cerrar }: {
             <div className="mk-menu-cab">
                 <b>{lote ? `${info.seleccion.length} campos seleccionados` : desc.titulo}</b>
                 {!lote && desc.detalle && <span>{desc.detalle}</span>}
+                {!lote && desc.ejemplo && <span>Ej.: {desc.ejemplo}</span>}
             </div>
 
             {puede ? (

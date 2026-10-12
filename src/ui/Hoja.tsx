@@ -5,19 +5,19 @@ import {
 } from '../domain/fuenteModelo';
 import { usePaginacion } from './Paginacion';
 import { pilaCss } from '../domain/fuentes';
-import { describirMarcador } from '../domain/marcadores';
+import { describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
 import { lineaCss, useRazonLinea } from './metricasFuente';
 const PX_POR_CM = 37.7953;
 
-function Tramos({ tramos, estilo, resaltar, escala }: {
-    tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean; escala: number;
+function Tramos({ tramos, estilo, resaltar, escala, contexto }: {
+    tramos: Tramo[]; estilo: BloqueParrafo['estilo']; resaltar: boolean; escala: number; contexto?: ContextoMarcadores;
 }) {
     if (tramos.length === 0) return <>{'\u00A0'}</>;
     return (
         <>
             {tramos.map((t, i) => {
                 if (resaltar && t.marcador) {
-                    const m = describirMarcador(t.texto);
+                    const m = describirMarcador(t.texto, contexto);
                     return (
                         <span key={i} className="mk" data-k={m.tipo}
                             style={{
@@ -28,7 +28,7 @@ function Tramos({ tramos, estilo, resaltar, escala }: {
                                 fontFamily: t.fuente ? pilaCss(t.fuente) : undefined,
                                 fontSize: t.tamanoPt ? `${(t.tamanoPt * escala * 0.82).toFixed(2)}pt` : undefined,
                             } as CSSProperties}
-                            title={`${m.titulo}${m.detalle ? ` — ${m.detalle}` : ''}`}>
+                            title={`${m.titulo}${m.detalle ? ` — ${m.detalle}` : ''}${m.ejemplo ? `\nEj.: ${m.ejemplo}` : ''}`}>
                             <span className="mk-e">{m.corto}</span>
                         </span>
                     );
@@ -52,7 +52,7 @@ function Tramos({ tramos, estilo, resaltar, escala }: {
     );
 }
 
-function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: ConfigPagina; escala: number; resaltar: boolean }) {
+function ParrafoHoja({ b, cfg, escala, resaltar, contexto }: { b: BloqueParrafo; cfg: ConfigPagina; escala: number; resaltar: boolean; contexto?: ContextoMarcadores }) {
     const titulo = b.estilo === 'titulo';
     const sub = b.estilo === 'subtitulo';
     const esBloque = resaltar && b.tramos.length === 1 && b.tramos[0].marcador && /^\{\{\s*[#/]/.test(b.tramos[0].texto);
@@ -73,14 +73,14 @@ function ParrafoHoja({ b, cfg, escala, resaltar }: { b: BloqueParrafo; cfg: Conf
     };
     return (
         <p className={esBloque ? 'mk-bloque' : undefined} style={estilo}>
-            <Tramos tramos={b.tramos} estilo={b.estilo} resaltar={resaltar} escala={escala} />
+            <Tramos tramos={b.tramos} estilo={b.estilo} resaltar={resaltar} escala={escala} contexto={contexto} />
         </p>
     );
 }
 
 /** Vista previa paginada: hojas separadas, márgenes respetados en todas las páginas. */
-export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: {
-    bloques: Bloque[]; config?: ConfigPagina; resaltar?: boolean;
+export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true, contexto }: {
+    bloques: Bloque[]; config?: ConfigPagina; resaltar?: boolean; contexto?: ContextoMarcadores;
 }) {
     const cont = useRef<HTMLDivElement>(null);
     const raiz = useRef<HTMLDivElement>(null);
@@ -120,7 +120,7 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
             continue;
         }
         if ((b.columnas ?? 1) < 2) {
-            piezas.push(<ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} />);
+            piezas.push(<ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} />);
             i += 1;
             continue;
         }
@@ -129,7 +129,7 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true }: 
         while (j < bloques.length) {
             const x = bloques[j];
             if (x.tipo !== 'parrafo' || (x.columnas ?? 1) < 2) break;
-            grupo.push(<ParrafoHoja key={j} b={x} cfg={config} escala={escala} resaltar={resaltar} />);
+            grupo.push(<ParrafoHoja key={j} b={x} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} />);
             j += 1;
         }
         piezas.push(<div key={`c${i}`} className="sec-cols">{grupo}</div>);

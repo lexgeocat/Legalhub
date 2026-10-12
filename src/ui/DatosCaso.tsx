@@ -2,7 +2,7 @@ import { esTextoLargo } from '../application/camposModelo';
 import { etiquetaRol } from '../domain/texto';
 import { Campo } from './comunes';
 
-export interface CampoForm { clave: string; etiqueta: string; tipo: string; requerido?: boolean }
+export interface CampoForm { clave: string; etiqueta: string; tipo: string; requerido?: boolean; ejemplo?: string }
 
 const NUMERICOS = new Set(['moneda', 'dolares', 'superficie', 'numero']);
 const ES_ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -15,6 +15,7 @@ export function EntradaDato({ c, valor, cambiar, enLinea = false }: {
 }) {
     const largo = esLargo(c);
     const clase = enLinea ? `en-linea${largo ? ' largo' : ''}${valor.trim() ? '' : ' sin-valor'}` : undefined;
+    const ej = c.ejemplo?.trim() ? `Ej.: ${c.ejemplo.trim()}` : '';
 
     // Una fecha guardada a mano que no sea AAAA-MM-DD se muestra como texto para no perderla.
     if (c.tipo === 'fecha' && (valor === '' || ES_ISO.test(valor))) {
@@ -26,15 +27,17 @@ export function EntradaDato({ c, valor, cambiar, enLinea = false }: {
     if (largo) {
         return (
             <textarea className={clase} aria-label={c.etiqueta} rows={enLinea ? 3 : undefined}
-                placeholder={enLinea ? c.etiqueta : undefined} value={valor} onChange={(ev) => cambiar(ev.target.value)} />
+                placeholder={ej || (enLinea ? c.etiqueta : undefined)} value={valor} onChange={(ev) => cambiar(ev.target.value)} />
         );
     }
     const numerico = NUMERICOS.has(c.tipo);
+    const ph = ej || (numerico ? '1234,56' : enLinea ? c.etiqueta : undefined);
+    const base = valor.length > 0 ? valor.length : (ph?.length ?? 0);
     return (
         <input className={clase} aria-label={c.etiqueta} value={valor}
             inputMode={numerico ? 'decimal' : undefined}
-            placeholder={numerico ? '1234,56' : enLinea ? c.etiqueta : undefined}
-            style={enLinea ? { width: `${Math.min(48, Math.max(10, valor.length + 2))}ch` } : undefined}
+            placeholder={ph}
+            style={enLinea ? { width: `${Math.min(48, Math.max(10, base + 2))}ch` } : undefined}
             onChange={(ev) => cambiar(ev.target.value)} />
     );
 }

@@ -17,7 +17,7 @@ export interface CampoPropio {
     etiqueta: string;
     tipo: TipoCampo;
     requerido: boolean;
-    /** Id del grupo del panel (GrupoDatos) al que pertenece. Sin valor = «Sin grupo». */
+    ejemplo?: string;
     grupo?: string;
 }
 /** Un dato que se pide de las partes (nombre, C.I., lugar de nacimiento…). Sirve para cualquier parte: se elige de quién al insertarlo. */
@@ -26,9 +26,9 @@ export interface DatoParte {
     etiqueta: string;
     tipo: TipoCampo;
     requerido: boolean;
-    /** true: sale de la ficha de la persona (nombre, C.I., domicilio…). Si no, es un dato propio que se llena en el expediente. */
     ficha?: boolean;
     mayus?: boolean;
+    ejemplo?: string;
 }
 
 /** Categoría de datos de las partes: «Generales de ley», «Datos del vehículo»… */
@@ -229,10 +229,12 @@ function leerDato(x: unknown): DatoParte | null {
     const etiqueta = textoLimpio(d.etiqueta);
     if (!clave || !etiqueta) return null;
     const tipo = TIPOS_CAMPO.some((t) => t.valor === d.tipo) ? (d.tipo as TipoCampo) : 'texto';
+    const ejemplo = textoLimpio(d.ejemplo);
     return {
         clave, etiqueta, tipo, requerido: d.requerido !== false,
         ...(d.ficha === true ? { ficha: true } : {}),
         ...(d.mayus === true ? { mayus: true } : {}),
+        ...(ejemplo ? { ejemplo } : {}),
     };
 }
 

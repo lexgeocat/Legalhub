@@ -144,6 +144,7 @@ function FormDatos({ grupoId, campos, datosParte, onAgregar, onCancelar }: {
     const [requerido, setRequerido] = useState(true);
     const [mayus, setMayus] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [ejemplo, setEjemplo] = useState('');
 
     const etiquetasCaso = new Set(campos.map((c) => claveCampo(c.etiqueta || c.clave)));
     const etiquetasParte = datosParte.map((d) => claveCampo(d.etiqueta));
@@ -192,7 +193,9 @@ function FormDatos({ grupoId, campos, datosParte, onAgregar, onCancelar }: {
             setError('Escribe al menos un dato nuevo. Separa con comas para crear varios.');
             return;
         }
-        onAgregar(nuevosParte, nuevosCaso);
+        const ej = ejemplo.trim();
+        const con = <T extends object>(l: T[]): T[] => (ej && editaTipo ? l.map((x) => ({ ...x, ejemplo: ej })) : l);
+        onAgregar(con(nuevosParte), con(nuevosCaso));
     }
 
     return (
@@ -214,8 +217,13 @@ function FormDatos({ grupoId, campos, datosParte, onAgregar, onCancelar }: {
                 onChange={(e) => { setTexto(e.target.value); setError(null); }} />
             <PlanVista plan={lineas} />
             {editaTipo && (
-                <SelectTipo valor={manual ? tipo : (sugerido?.tipo ?? 'texto')}
-                    onCambio={(t) => { setTipo(t); setManual(true); }} />
+                <>
+                    <SelectTipo valor={manual ? tipo : (sugerido?.tipo ?? 'texto')}
+                        onCambio={(t) => { setTipo(t); setManual(true); }} />
+                    <input aria-label="Ejemplo" value={ejemplo} placeholder="Ejemplo de lo que se escribe (opcional)"
+                        onChange={(e) => setEjemplo(e.target.value)} />
+                    <p className="pc-nota">Se ve en el tooltip del campo y como sugerencia al llenarlo.</p>
+                </>
             )}
             <div className="pc-acciones">
                 <label className="casilla">
@@ -250,6 +258,7 @@ function EditarCaso({ c, grupos, ocupadas, onGuardar, onCancelar }: {
     const [requerido, setRequerido] = useState(c.requerido);
     const [grupo, setGrupo] = useState(c.grupo ?? '');
     const [error, setError] = useState<string | null>(null);
+    const [ejemplo, setEjemplo] = useState(c.ejemplo ?? '');
 
     function guardar() {
         const nombre = etiqueta.trim() || etiquetaRol(claveCampo(c.clave));
@@ -257,13 +266,16 @@ function EditarCaso({ c, grupos, ocupadas, onGuardar, onCancelar }: {
             setError('Ya hay otro dato con ese nombre.');
             return;
         }
-        onGuardar({ ...c, etiqueta: nombre, tipo, requerido, grupo: grupo || undefined });
+        onGuardar({ ...c, etiqueta: nombre, tipo, requerido, grupo: grupo || undefined, ejemplo: ejemplo.trim() || undefined });
     }
 
     return (
         <div className="cb-edicion">
-            <input aria-label="Nombre del dato" value={etiqueta} onChange={(e) => { setEtiqueta(e.target.value); setError(null); }} />
+            <input aria-label="Etiqueta" value={etiqueta} placeholder="Nombre del campo"
+                onChange={(e) => setEtiqueta(e.target.value)} />
             <SelectTipo valor={tipo} onCambio={setTipo} />
+            <input aria-label="Ejemplo" value={ejemplo} placeholder="Ejemplo de lo que se escribe (opcional)"
+                onChange={(e) => setEjemplo(e.target.value)} />
             <select aria-label="Grupo" value={grupo} onChange={(e) => setGrupo(e.target.value)}>
                 <option value="">(sin grupo)</option>
                 {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
@@ -291,6 +303,7 @@ function EditarDatoParte({ d, ocupadas, onGuardar, onCancelar }: {
     const [mayus, setMayus] = useState(!!d.mayus);
     const [error, setError] = useState<string | null>(null);
     const texto = esTexto(tipo);
+    const [ejemplo, setEjemplo] = useState(d.ejemplo ?? '');
 
     function guardar() {
         const nombre = etiqueta.trim() || d.etiqueta;
@@ -298,13 +311,21 @@ function EditarDatoParte({ d, ocupadas, onGuardar, onCancelar }: {
             setError('Ya hay otro dato con ese nombre.');
             return;
         }
-        onGuardar({ ...d, etiqueta: nombre, tipo, requerido, mayus: texto && mayus ? true : undefined });
+        onGuardar({
+            ...d, etiqueta: nombre, tipo, requerido,
+            mayus: texto && mayus ? true : undefined,
+            ejemplo: d.ficha ? undefined : (ejemplo.trim() || undefined),
+        });
     }
 
     return (
         <div className="cb-edicion">
             <input aria-label="Nombre del dato" value={etiqueta} onChange={(e) => { setEtiqueta(e.target.value); setError(null); }} />
             {!d.ficha && <SelectTipo valor={tipo} onCambio={setTipo} />}
+            {!d.ficha && (
+                <input aria-label="Ejemplo" value={ejemplo} placeholder="Ejemplo de lo que se escribe (opcional)"
+                    onChange={(e) => setEjemplo(e.target.value)} />
+            )}
             <div className="pc-acciones">
                 <label className="casilla">
                     <input type="checkbox" checked={requerido} onChange={(e) => setRequerido(e.target.checked)} />

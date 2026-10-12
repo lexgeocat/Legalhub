@@ -9,7 +9,7 @@ import {
 } from '../domain/fuenteModelo';
 import { precargarFuentes } from '../domain/fuentes';
 import { nuevoId } from '../domain/id';
-import { describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
+import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
 import { claveCampo, etiquetaRol } from '../domain/texto';
 import { SelectFuente, SelectInterlineado, SelectTamano, Tb } from './BarraFormato';
 import {
@@ -29,7 +29,7 @@ export interface Inicial { nombre: string; materia: string; categoria: string; d
 type Dialogo =
     | { n: 'datos' }
     | { n: 'verificacion' }
-    | { n: 'marcador'; actual: string; aplicar: (nuevo: string) => void };
+    | { n: 'marcador'; actual: string; aplicar: (nuevo: string) => void; ambito: string[] };
 
 type VistaEditor = 'llenar' | 'modelo';
 
@@ -157,33 +157,36 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     const [pendientes, setPendientes] = useState(0);
     const [menu, setMenu] = useState<MenuCampoInfo | null>(null);
     const [popover, setPopover] = useState<{ m: string; amb: string[]; x: number; y: number } | null>(null);
+    const [verEjemplos, setVerEjemplos] = useState(false);
 
     const cerrarMenu = useCallback(() => setMenu(null), []);
     const cerrarPopover = useCallback(() => setPopover(null), []);
 
-    const contextoMarcadores = useMemo<ContextoMarcadores>(() => ({
-        campos: Object.fromEntries(
-            campos.map((c) => [claveCampo(c.clave), c.etiqueta.trim() || etiquetaRol(claveCampo(c.clave))]),
-        ),
-        camposPartes: Object.fromEntries(
-            grupos.flatMap((g) => g.datos).filter((d) => !d.ficha)
-                .map((d) => [claveCampo(d.clave), d.etiqueta.trim() || etiquetaRol(claveCampo(d.clave))]),
-        ),
-        partes,
-    }), [campos, grupos, partes]);
+    const contextoMarcadores = useMemo<ContextoMarcadores>(
+        () => contextoDeFuente({ campos, grupos, partes }),
+        [campos, grupos, partes],
+    );
 
-    /** En «Llenar datos» los campos muestran el valor real y al hacer clic se editan. */
-    const llenadoHoja = useMemo<LlenadoHoja | undefined>(() => (
-        llenado && vista === 'llenar'
-            ? {
+    /** «Llenar datos»: el dato real y clic para editar. «Ejemplos» (en el modelo): solo se ve el ejemplo de cada campo. */
+    const llenadoHoja = useMemo<LlenadoHoja | undefined>(() => {
+        if (llenado && vista === 'llenar') {
+            return {
                 valor: llenado.valor,
                 editar: (m, amb, chip) => {
                     const r = chip.getBoundingClientRect();
                     setPopover({ m, amb, x: r.left, y: r.bottom + 6 });
                 },
-            }
-            : undefined
-    ), [llenado, vista]);
+            };
+        }
+        if (verEjemplos && vista === 'modelo') {
+            return {
+                soloVista: true,
+                valor: (m) => describirMarcador(m, contextoMarcadores).ejemplo || undefined,
+                editar: () => undefined,
+            };
+        }
+        return undefined;
+    }, [llenado, vista, verEjemplos, contextoMarcadores]);
 
     const tocar = () => {
         setModificado(true);
@@ -422,11 +425,13 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                 llenado={llenadoHoja}
                 onAmbito={setAmbito}
                 onMenuCampo={modoModelo ? setMenu : undefined}
-                onEditarCampo={modoModelo ? (actual, aplicar) => setDialogo({ n: 'marcador', actual, aplicar }) : undefined}
+                onEditarCampo={modoModelo ? (actual, aplicar, amb) => setDialogo({ n: 'marcador', actual, aplicar, ambito: amb }) : undefined}
                 barra={modoModelo ? (
                     <>
+                        <Tb titulo="Ver el documento con los datos de ejemplo de cada campo" activo={verEjemplos}
+                            onClick={() => { setVerEjemplos((v) => !v); setVerCodigos(false); }}>Ejemplos</Tb>
                         <Tb titulo="Mostrar el código {{…}} de cada campo en vez de su etiqueta corta" activo={verCodigos}
-                            onClick={() => setVerCodigos((v) => !v)}>{'{ }'} Códigos</Tb>
+                            onClick={() => { setVerCodigos((v) => !v); setVerEjemplos(false); }}>{'{ }'} Códigos</Tb>
                         <Tb titulo="Mostrar u ocultar el constructor de campos (datos, partes y género)" activo={panelAbierto}
                             onClick={() => setPanelAbierto((v) => !v)}>Campos</Tb>
                     </>
@@ -455,6 +460,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
             {dialogo?.n === 'marcador' && (
                 <ModalMarcador
                     actual={dialogo.actual}
+                    ambito={dialogo.ambito}
                     contexto={contextoMarcadores}
                     campos={campos}
                     cerrar={cerrarDialogo}

@@ -15,6 +15,7 @@ import { DatosExpediente } from '../DatosExpediente';
 import { Hoja } from '../Hoja';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 import { esMateriaRecomendada } from '../../domain/fuenteModelo';
+import { contextoDeFuente } from '../../domain/marcadores';
 
 type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos';
 
@@ -222,6 +223,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
         () => (ficha ? seccionesDeModelo(ficha, visible?.fuente?.grupos ?? [], visible?.fuente?.campos ?? []) : []),
         [ficha, visible],
     );
+    const ctxMarcadores = useMemo(() => (visible?.fuente ? contextoDeFuente(visible.fuente) : undefined), [visible]);
 
     if (modelos.length === 0) {
         return <Alerta tipo="info">Aún no hay modelos activos. Crea o instala uno en la sección Modelos y vuelve aquí.</Alerta>;
@@ -262,7 +264,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
                 <div className="visor-grid">
                     <div className="vista-hoja" style={{ height: 'min(62vh, 640px)', minHeight: 360 }}>
                         {visible
-                            ? <Hoja bloques={visible.bloques} config={visible.config} />
+                            ? <Hoja bloques={visible.bloques} config={visible.config} contexto={ctxMarcadores} />
                             : <p className="suave" style={{ padding: 16 }}>Cargando el modelo…</p>}
                     </div>
 

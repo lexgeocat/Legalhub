@@ -13,6 +13,7 @@ import { pilaCss } from '../domain/fuentes';
 import { htmlABloques } from './pegadoHtml';
 import { SIN_CONTEXTO, describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
 import { lineaCss, useRazonLinea } from './metricasFuente';
+import { datoAsignable } from '../domain/camposParte';
 
 const PX_POR_CM = 37.7953;
 const MARGEN_LIENZO = 48;
@@ -84,6 +85,8 @@ export interface LlenadoHoja {
     /** Texto del dato: '' = falta, undefined = este campo no se llena aquí (queda como etiqueta). */
     valor(marcador: string, ambito: string[]): string | undefined;
     editar(marcador: string, ambito: string[], chip: HTMLElement): void;
+    /** Solo muestra valores de ejemplo: no abre cuadros de llenado y los campos se siguen pudiendo editar. */
+    soloVista?: boolean;
 }
 
 export interface ControlHoja {
@@ -151,7 +154,7 @@ function extraerDeSeccion(b: HTMLElement): void {
     }
     sec.after(b);
 }
-interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo: string; detalle: string; codigo: string; ayuda: string }
+interface Tip { izq: number; arriba: number | null; abajo: number | null; titulo: string; detalle: string; ejemplo: string; ayuda: string }
 
 /** Etiquetas y colores del modelo que se está editando (lo fija el componente al montarse). */
 let CONTEXTO: ContextoMarcadores = SIN_CONTEXTO;
@@ -1286,7 +1289,7 @@ export function HojaEditable({
     config: ConfigPagina;
     onCambio: () => void;
     onFormato: (f: FormatoActivo) => void;
-    onEditarCampo: (actual: string, aplicar: (nuevo: string) => void) => void;
+    onEditarCampo: (actual: string, aplicar: (nuevo: string) => void, ambito: string[]) => void;
     onMargenes: (lado: keyof Margenes, cm: number) => void;
     onConfigurarPagina: () => void;
     onPaginas: (n: number) => void;
@@ -1330,15 +1333,21 @@ export function HojaEditable({
         const m = chip.dataset.mk ?? '';
         const i = describirMarcador(m, CONTEXTO);
         const el = raizRef.current;
-        const llena = !!LLENADO && !!el && LLENADO.valor(m, ambitoDeChip(el, chip)) !== undefined;
+        const amb = el ? ambitoDeChip(el, chip) : [];
+        const ll = LLENADO;
+        const llenando = !!ll && !ll.soloVista;
+        const llena = !!ll && !ll.soloVista && ll.valor(m, amb) !== undefined;
+        const asignable = !llenando && datoAsignable(m, CONTEXTO.partes ?? [], amb) !== null;
         const r = chip.getBoundingClientRect();
         const debajo = r.top < 120;
         setTip({
             izq: Math.max(8, Math.min(r.left, window.innerWidth - 350)),
             arriba: debajo ? r.bottom + 8 : null,
             abajo: debajo ? null : window.innerHeight - r.top + 8,
-            titulo: i.titulo, detalle: i.detalle, codigo: m,
-            ayuda: LLENADO ? (llena ? 'Clic para llenar este dato' : '') : 'Doble clic para editar',
+            titulo: i.titulo, detalle: i.detalle, ejemplo: i.ejemplo ?? '',
+            ayuda: llenando
+                ? (llena ? 'Clic para llenar este dato' : '')
+                : asignable ? 'Doble clic para editar o asignar a una parte' : 'Doble clic para editar',
         });
     }
 
@@ -2069,7 +2078,12 @@ export function HojaEditable({
     }
 
     function editarChip(chip: HTMLElement) {
-        cb.current.onEditarCampo(chip.dataset.mk ?? '', (nuevo) => reemplazarChip(chip, nuevo));
+        const el = raizRef.current;
+        cb.current.onEditarCampo(
+            chip.dataset.mk ?? '',
+            (nuevo) => reemplazarChip(chip, nuevo),
+            el ? ambitoDeChip(el, chip) : [],
+        );
     }
 
     /** Llenar: un clic en un dato abre su cuadro de edición. */
@@ -2077,7 +2091,7 @@ export function HojaEditable({
         const ll = LLENADO;
         const el = raizRef.current;
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
-        if (!ll || !el || !chip) return;
+        if (!ll || ll.soloVista || !el || !chip) return;
         const m = chip.dataset.mk ?? '';
         const amb = ambitoDeChip(el, chip);
         if (ll.valor(m, amb) === undefined) return;
@@ -2088,7 +2102,7 @@ export function HojaEditable({
 
     /** Doble clic en un campo del texto: pide al padre que lo edite (no aplica al llenar). */
     function alDobleClic(e: MouseEvent<HTMLDivElement>) {
-        if (LLENADO) return;
+        if (LLENADO && !LLENADO.soloVista) return;
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
         if (!chip) return;
         e.preventDefault();
@@ -2190,7 +2204,7 @@ export function HojaEditable({
                     style={{ left: tip.izq, top: tip.arriba ?? undefined, bottom: tip.abajo ?? undefined }}>
                     <b>{tip.titulo}</b>
                     {tip.detalle && <span>{tip.detalle}</span>}
-                    <code>{tip.codigo}</code>
+                    {tip.ejemplo && <span className="mk-ej">Ej.: {tip.ejemplo}</span>}
                     {tip.ayuda && <em>{tip.ayuda}</em>}
                 </div>
             )}

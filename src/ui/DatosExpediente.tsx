@@ -363,7 +363,10 @@ function EntradaParteDoc({ r, f, editar, conGenero, propio }: {
         editar((x) => ({ ...x, nombreLibre: NOMBRES.has(k) ? undefined : x.nombreLibre, p: { ...x.p, [k]: v } }));
 
     if (r.propio) {
-        const c: CampoForm = { clave: r.clave, etiqueta: propio?.etiqueta ?? etiquetaRol(r.clave), tipo: propio?.tipo ?? 'texto', requerido: propio?.requerido };
+        const c: CampoForm = {
+            clave: r.clave, etiqueta: propio?.etiqueta ?? etiquetaRol(r.clave), tipo: propio?.tipo ?? 'texto',
+            requerido: propio?.requerido, ejemplo: propio?.ejemplo,
+        };
         return <EntradaDato enLinea c={c} valor={f.d[r.clave] ?? ''} cambiar={(v) => editar((x) => ({ ...x, d: { ...x.d, [r.clave]: v } }))} />;
     }
 
@@ -769,7 +772,7 @@ export function DatosExpediente({
     };
 
     /* ----- datos reales dentro del editor a pantalla completa ----- */
-    const mapaCaso = new Map(ficha.caso.map((c) => [c.clave, c] as const));
+    const mapaCaso = new Map(secciones.flatMap((x) => x.caso).map((c) => [c.clave, c] as const));
     const resolver = (marcador: string, ambito: readonly string[]): Resuelto | null => {
         const a = analizarMarcador(marcador);
         if (a?.tipo !== 'valor') return null;

@@ -1,11 +1,13 @@
 import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { datoAsignable, reasignarDato } from '../domain/camposParte';
+import { mismoRol } from '../domain/catalogo';
 import { formasConcordancia, type FormasConcordancia } from '../domain/concordancia';
 import type { CampoPropio, TipoCampo } from '../domain/fuenteModelo';
 import {
-    TRANSFORMACIONES, armarDato, armarGenero, describirMarcador, editarMarcador, formatosPara, resolverRol,
+    TRANSFORMACIONES, armarDato, armarGenero, describirMarcador, editarMarcador, formatosPara, matizDePersona, resolverRol,
     type ContextoMarcadores, type EdicionMarcador, type Formato, type Transformacion,
 } from '../domain/marcadores';
-import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../domain/texto';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../domain/texto';
 import { Alerta, Aviso, Campo, Modal } from './comunes';
 
 /** Cambio que el editor pide en el campo declarado («Datos» del constructor). */
@@ -26,16 +28,19 @@ function Vista({ marcador, contexto }: { marcador: string; contexto: ContextoMar
                 <span className="suave"> {i.titulo}</span>
             </div>
             {i.detalle && <span className="suave">{i.detalle}</span>}
+            {i.ejemplo && <span className="suave">Ej.: {i.ejemplo}</span>}
         </div>
     );
 }
 
 /* ---------------- Dato (persona, caso, expediente…) ---------------- */
-function FormDato({ e, contexto, campos, aplicar }: {
+function FormDato({ e, contexto, campos, aplicar, proyectar }: {
     e: Extract<EdicionMarcador, { n: 'dato' }>;
     contexto: ContextoMarcadores;
     campos: CampoPropio[];
     aplicar: Aplicar;
+    /** Marcador tal como quedará si se cambia la parte asignada. */
+    proyectar: (m: string) => string;
 }) {
     const [opcional, setOpcional] = useState(e.opcional);
     const [transformacion, setTransformacion] = useState<Transformacion>(e.transformacion);
@@ -59,7 +64,7 @@ function FormDato({ e, contexto, campos, aplicar }: {
 
     return (
         <form id="form-marcador" className="form-grid" onSubmit={enviar}>
-            <Vista marcador={marcador} contexto={contexto} />
+            <Vista marcador={proyectar(marcador)} contexto={contexto} />
             <Campo etiqueta="Mostrar como" ancho={formatos.length <= 1}>
                 <select value={transformacion} onChange={(ev) => setTransformacion(ev.target.value as Transformacion)}>
                     {TRANSFORMACIONES.map((t) => <option key={t.valor} value={t.valor}>{t.etiqueta}</option>)}
@@ -154,8 +159,10 @@ function FormLibre({ actual, avanzado, aplicar }: { actual: string; avanzado: bo
 }
 
 /* ---------------- Ventana ---------------- */
-export function ModalMarcador({ actual, contexto, campos, aplicar, cerrar }: {
+export function ModalMarcador({ actual, ambito = [], contexto, campos, aplicar, cerrar }: {
     actual: string;
+    /** Bloques «{{#…}}» abiertos donde está el campo (para saber a qué parte pertenece). */
+    ambito?: readonly string[];
     contexto: ContextoMarcadores;
     campos: CampoPropio[];
     /** Marcador vacío = quitar el campo. */
@@ -164,8 +171,13 @@ export function ModalMarcador({ actual, contexto, campos, aplicar, cerrar }: {
 }) {
     const inicial = useMemo(() => editarMarcador(actual), [actual]);
     const [crudo, setCrudo] = useState(inicial.n === 'libre');
+    const partes = contexto.partes ?? [];
+    const asign = datoAsignable(actual, partes, ambito);
+    const [rol, setRol] = useState<string | null>(asign?.rol ?? null);
+    const cambioRol = !!asign && rol !== asign.rol;
+    const proyectar = (m: string): string => (cambioRol && m ? (reasignarDato(m, rol, ambito, partes) ?? m) : m);
     const hecho: Aplicar = (m, cambio) => {
-        aplicar(m, cambio);
+        aplicar(proyectar(m), cambio);
         cerrar();
     };
     const titulo = inicial.n === 'genero' ? 'Editar género' : inicial.n === 'bloque' ? 'Bloque' : 'Editar campo';
@@ -183,12 +195,37 @@ export function ModalMarcador({ actual, contexto, campos, aplicar, cerrar }: {
                     )}
                 </>
             }>
+            {asign && (
+                <div className="cb-asignar">
+                    <span className="cb-sub">Asignar a</span>
+                    {partes.length === 0 ? (
+                        <p className="pc-nota">Aún no hay partes. Créalas en la pestaña «Partes» del panel.</p>
+                    ) : (
+                        <div className="chips">
+                            {partes.map((p) => {
+                                const id = normalizarRol(p);
+                                return (
+                                    <button key={id} type="button" className={`chip${rol !== null && mismoRol(rol, id) ? ' sel' : ''}`}
+                                        onClick={() => setRol(id)}>
+                                        <i className="cb-punto" style={{ '--h': matizDePersona(id, partes) } as CSSProperties} />
+                                        {etiquetaRol(id)}
+                                    </button>
+                                );
+                            })}
+                            <button type="button" className={`chip${rol === null ? ' sel' : ''}`} onClick={() => setRol(null)}>
+                                Sin asignar
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {crudo || inicial.n === 'libre' ? (
                 <FormLibre actual={actual} avanzado={guiado} aplicar={hecho} />
             ) : inicial.n === 'genero' ? (
                 <FormGenero e={inicial} contexto={contexto} aplicar={hecho} />
             ) : inicial.n === 'dato' ? (
-                <FormDato e={inicial} contexto={contexto} campos={campos} aplicar={hecho} />
+                <FormDato e={inicial} contexto={contexto} campos={campos} aplicar={hecho} proyectar={proyectar} />
             ) : (
                 <>
                     <Vista marcador={actual} contexto={contexto} />

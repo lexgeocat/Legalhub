@@ -30,7 +30,7 @@ export function EditorHoja({
     llenado?: LlenadoHoja;
     onAmbito?: (a: string[]) => void;
     onMenuCampo?: (i: MenuCampoInfo) => void;
-    onEditarCampo?: (actual: string, aplicar: (nuevo: string) => void) => void;
+    onEditarCampo?: (actual: string, aplicar: (nuevo: string) => void, ambito: string[]) => void;
     barra?: ReactNode;
     panel?: ReactNode;
     ayuda?: string;

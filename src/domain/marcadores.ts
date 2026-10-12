@@ -1,5 +1,8 @@
 import { ROL_PENDIENTE, etiquetaCampoCaso } from './catalogo';
 import { formasConcordancia, type FormasConcordancia } from './concordancia';
+import { hoyISO } from './filtros/fecha';
+import { FILTROS } from './filtros/registro';
+import type { FuenteModelo, TipoCampo } from './fuenteModelo';
 import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from './texto';
 import { ROLES_CONOCIDOS } from './tiposExpediente';
 
@@ -55,7 +58,6 @@ export function armarMarcador(a: { ruta: string; opcional?: boolean; filtros?: F
     return `{{${a.ruta}${a.opcional ? '?' : ''}${f}}}`;
 }
 
-/* ---------------- Contexto del modelo (nombres y colores) ---------------- */
 export interface ContextoMarcadores {
     /** clave de «caso.*» → etiqueta que le puso el abogado. */
     campos?: Readonly<Record<string, string>>;
@@ -63,9 +65,68 @@ export interface ContextoMarcadores {
     partes?: readonly string[];
     /** clave de un dato propio de una parte → etiqueta que le puso el abogado. */
     camposPartes?: Readonly<Record<string, string>>;
+    /** clave de «caso.*» → ejemplo (placeholder). */
+    ejemplos?: Readonly<Record<string, string>>;
+    /** clave de un dato propio de una parte → ejemplo (placeholder). */
+    ejemplosPartes?: Readonly<Record<string, string>>;
 }
 export const SIN_CONTEXTO: ContextoMarcadores = {};
 
+/* ---------------- Ejemplos (placeholders) ---------------- */
+const EJEMPLO_TIPO: Partial<Record<TipoCampo, string>> = {
+    fecha: '2026-03-15', fechalarga: '2026-03-15', moneda: '1500', dolares: '1500', superficie: '250', numero: '12',
+};
+/** Ejemplo por defecto de un tipo de campo (vacío si no hay uno razonable). */
+export const ejemploPorTipo = (t: TipoCampo): string => EJEMPLO_TIPO[t] ?? '';
+
+const EJEMPLO_PERSONA: Readonly<Record<string, string>> = {
+    nombre: 'Juan Carlos Pérez Gómez', nombre_completo: 'Juan Carlos Pérez Gómez', nombres: 'Juan Carlos',
+    apellido_paterno: 'Pérez', apellido_materno: 'Gómez', apellido_casada: 'López',
+    ci: '1234567 LP', ci_datos: '1234567 LP', ci_numero: '1234567', ci_complemento: '1A', ci_expedido: 'LP',
+    genero: 'Masculino', estado_civil: 'casado', nacionalidad: 'boliviano', profesion: 'abogado',
+    fecha_nacimiento: '1985-03-15', domicilio: 'Calle Sucre N° 123, zona Central, La Paz',
+    telefono: '70123456', correo: 'juan.perez@correo.com', razon_social: 'Comercial Andina S.R.L.', nit: '1023456789',
+    poder_ref: 'Poder N° 123/2025', domicilio_procesal: 'Calle Mercado N° 45, Of. 3, La Paz', porcentaje: '50 %',
+    representante: 'Ana María Rojas Quispe', matricula_profesional: '12345',
+};
+const EJEMPLO_EXPEDIENTE: Readonly<Record<string, string>> = {
+    materia: 'Cumplimiento de contrato', juzgado: 'Juzgado Público Civil y Comercial N° 3 de La Paz',
+    nro_causa: '1234/2026', referencia: 'Proceso ordinario', codigo: 'LH-2026-0001', tipo: 'civil', estado: 'abierto',
+};
+
+const ej = (t: Readonly<Record<string, string>> | undefined, k: string): string =>
+    t && Object.hasOwn(t, k) ? t[k] : '';
+
+/** Aplica al ejemplo los mismos filtros del marcador (mayús, fecha, moneda…) para mostrar cómo saldrá. */
+function ejemploConFiltros(base: string, filtros: readonly FiltroMarcador[]): string {
+    let v = base;
+    for (const f of filtros) {
+        if (!Object.hasOwn(FILTROS, f.nombre) || ['concordar', 'lista', 'ci'].includes(f.nombre)) continue;
+        try {
+            v = FILTROS[f.nombre](v, ...f.args);
+        } catch {
+            return base;
+        }
+    }
+    return v;
+}
+
+/** Nombres, colores y ejemplos de los campos de un modelo (para tooltips, etiquetas y menús). */
+export function contextoDeFuente(
+    f: Pick<FuenteModelo, 'campos' | 'partes' | 'grupos'>,
+): ContextoMarcadores {
+    const campos = f.campos ?? [];
+    const propios = (f.grupos ?? []).flatMap((g) => g.datos).filter((d) => !d.ficha);
+    const etiqueta = (e: string, clave: string) => e.trim() || etiquetaRol(claveCampo(clave));
+    const sinVacios = (l: [string, string][]) => Object.fromEntries(l.filter(([, v]) => v !== ''));
+    return {
+        campos: Object.fromEntries(campos.map((c) => [claveCampo(c.clave), etiqueta(c.etiqueta, c.clave)])),
+        camposPartes: Object.fromEntries(propios.map((d) => [claveCampo(d.clave), etiqueta(d.etiqueta, d.clave)])),
+        ejemplos: sinVacios(campos.map((c): [string, string] => [claveCampo(c.clave), c.ejemplo?.trim() || ejemploPorTipo(c.tipo)])),
+        ejemplosPartes: sinVacios(propios.map((d): [string, string] => [claveCampo(d.clave), d.ejemplo?.trim() || ejemploPorTipo(d.tipo)])),
+        partes: f.partes ?? [],
+    };
+}
 const MATIZ_CASO = 215;
 const MATIZ_SISTEMA = 165;
 export const MATIZ_CLIENTE = 28;
@@ -146,12 +207,11 @@ export function compactarGenero(f: FormasConcordancia, varias: boolean): string 
 /* ---------------- Descripción para el documento y el tooltip ---------------- */
 export interface InfoMarcador {
     tipo: 'dato' | 'persona' | 'genero' | 'bloque' | 'cierre' | 'sistema' | 'pendiente' | 'otro';
-    /** Lo que se ve dentro del texto. */
     corto: string;
-    /** Primera línea del tooltip. */
     titulo: string;
     detalle: string;
     matiz: number;
+    ejemplo?: string;
 }
 
 const PERSONA_CAMPO: Record<string, [string, string]> = {
@@ -244,17 +304,22 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
     const raiz = claveNormalizada(segs[0] ?? '');
     const trans = a.filtros.find((f) => esTrans(f.nombre))?.nombre;
     const conc = a.filtros.find((f) => f.nombre === 'concordar');
-    const notas = [
-        ...a.filtros.filter((f) => f.nombre !== 'concordar').map((f) => FILTRO_TXT[f.nombre]).filter(Boolean),
-        a.opcional ? 'opcional (queda en blanco si falta)' : '',
-    ].filter(Boolean);
+    const notasFiltro = a.filtros
+        .filter((f) => f.nombre !== 'concordar')
+        .map((f) => FILTRO_TXT[f.nombre])
+        .filter(Boolean);
+    const notaOpcional = a.opcional ? 'opcional (queda en blanco si falta)' : '';
     const sufijo = a.opcional ? '?' : '';
-    const hecho = (tipo: InfoMarcador['tipo'], corto: string, titulo: string, matiz: number, extra = ''): InfoMarcador => ({
+    /** `base`: ejemplo sin filtros; con él se muestra cómo saldrá y se omiten las notas de filtros. */
+    const hecho = (tipo: InfoMarcador['tipo'], corto: string, titulo: string, matiz: number, base = ''): InfoMarcador => ({
         tipo, corto: recortar(conTrans(corto, trans) + sufijo), titulo,
-        detalle: [extra, ...notas].filter(Boolean).join(' · '), matiz,
+        detalle: [...(base ? [] : notasFiltro), notaOpcional].filter(Boolean).join(' · '),
+        matiz,
+        ejemplo: base ? ejemploConFiltros(base, a.filtros) : '',
     });
     const matizFijo = (r: RolResuelto) =>
         r.fijo ? (r.rol === 'cliente' ? MATIZ_CLIENTE : MATIZ_ABOGADO) : matizDeRol(r.rol, ctx);
+
     // Dato de parte sin asignar: {{sin_parte.nombre}} o {{sin_parte.datos.lugar}}
     if (raiz === ROL_PENDIENTE && segs.length >= 2 && segs.length <= 3) {
         const propio = segs.length === 3 && claveNormalizada(segs[1]) === 'datos';
@@ -267,23 +332,22 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
         } else {
             [corto, largo] = PERSONA_CAMPO[clave] ?? [humano(clave), etiquetaRol(clave)];
         }
-        return hecho('pendiente', corto, `Sin asignar · ${largo}`, MATIZ_PENDIENTE, 'Clic derecho para asignarlo a una parte');
+        const base = propio ? ej(ctx.ejemplosPartes, clave) : ej(EJEMPLO_PERSONA, clave);
+        return hecho('pendiente', corto, `Sin asignar · ${largo}`, MATIZ_PENDIENTE, base);
     }
     // Dato propio de una parte: {{vendedor.datos.lugar}} o, dentro de un bloque, {{datos.lugar}}
     if (segs.length >= 2 && claveNormalizada(segs[segs.length - 2]) === 'datos') {
         const clave = claveCampo(segs[segs.length - 1]);
         const etiqueta = ctx.camposPartes?.[clave] ?? humano(clave);
         const corto = etiqueta.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        const base = ej(ctx.ejemplosPartes, clave);
         if (segs.length === 3) {
             const r = resolverRol(segs[0], ctx);
             const rol = r?.rol ?? normalizarRol(segs[0]);
-            return hecho(
-                'persona', corto, `${etiquetaRol(rol)} · ${etiqueta}`,
-                r ? matizFijo(r) : matizDeRol(rol, ctx), 'dato propio de la parte: se llena en el expediente',
-            );
+            return hecho('persona', corto, `${etiquetaRol(rol)} · ${etiqueta}`, r ? matizFijo(r) : matizDeRol(rol, ctx), base);
         }
         if (segs.length === 2) {
-            return hecho('persona', corto, `${etiqueta} · de cada persona del bloque`, MATIZ_NEUTRO, 'dato propio de cada parte: se llena en el expediente');
+            return hecho('persona', corto, `${etiqueta} · de cada persona del bloque`, MATIZ_NEUTRO, base);
         }
     }
 
@@ -308,7 +372,10 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
     if (a.filtros.some((f) => f.nombre === 'lista') && segs.length === 1) {
         const r = resolverRol(raiz, ctx);
         const palabra = r ? (r.plural ? pluralRol(r.rol) : r.rol) : raiz;
-        return hecho('persona', palabra.replace(/_/g, ' '), `${etiquetaRol(palabra)} · nombres`, r ? matizFijo(r) : MATIZ_NEUTRO);
+        return hecho(
+            'persona', palabra.replace(/_/g, ' '), `${etiquetaRol(palabra)} · nombres`, r ? matizFijo(r) : MATIZ_NEUTRO,
+            'Juan Carlos Pérez Gómez y María López Rojas',
+        );
     }
 
     // Dato de una persona: {{vendedor.nombre}}
@@ -320,7 +387,7 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
         return hecho(
             'persona', rep ? `rep. ${corto}` : corto,
             `${etiquetaRol(r.rol)} · ${largo}${rep ? ' del representante' : ''}`, matizFijo(r),
-            r.fijo || r.plural ? '' : 'primera persona con este rol',
+            ej(EJEMPLO_PERSONA, ult),
         );
     }
 
@@ -328,19 +395,20 @@ export function describirMarcador(crudo: string, ctx: ContextoMarcadores = SIN_C
     if (raiz === 'caso' && segs.length >= 2) {
         const clave = claveCampo(segs[1]);
         const etiqueta = ctx.campos?.[clave] ?? etiquetaCampoCaso(clave);
-        return hecho('dato', etiqueta.replace(/\s*\(.*?\)\s*/g, ' ').trim(), `Dato del caso · ${etiqueta}`, MATIZ_CASO);
+        return hecho('dato', etiqueta.replace(/\s*\(.*?\)\s*/g, ' ').trim(), `Dato del caso · ${etiqueta}`, MATIZ_CASO, ej(ctx.ejemplos, clave));
     }
 
-    if (raiz === 'hoy') return hecho('sistema', 'hoy', 'Fecha de hoy', MATIZ_SISTEMA);
+    if (raiz === 'hoy') return hecho('sistema', 'hoy', 'Fecha de hoy', MATIZ_SISTEMA, hoyISO());
     if (raiz === 'expediente' && segs.length === 2) {
-        const [corto, largo] = EXPEDIENTE_CAMPO[claveNormalizada(segs[1])] ?? [humano(segs[1]), etiquetaRol(segs[1])];
-        return hecho('sistema', corto, `Expediente · ${largo}`, MATIZ_SISTEMA);
+        const k = claveNormalizada(segs[1]);
+        const [corto, largo] = EXPEDIENTE_CAMPO[k] ?? [humano(segs[1]), etiquetaRol(segs[1])];
+        return hecho('sistema', corto, `Expediente · ${largo}`, MATIZ_SISTEMA, ej(EJEMPLO_EXPEDIENTE, k));
     }
 
     // Dentro de un bloque: {{nombre}}, {{ci}}…
     if (segs.length === 1 && PERSONA_CAMPO[raiz]) {
         const [corto, largo] = PERSONA_CAMPO[raiz];
-        return hecho('persona', corto, `${largo} · de cada persona del bloque`, MATIZ_NEUTRO);
+        return hecho('persona', corto, `${largo} · de cada persona del bloque`, MATIZ_NEUTRO, ej(EJEMPLO_PERSONA, raiz));
     }
 
     const ult = segs[segs.length - 1] ?? a.ruta;

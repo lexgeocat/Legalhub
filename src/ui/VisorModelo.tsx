@@ -1,4 +1,5 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { contextoDeFuente } from '../domain/marcadores';
 import { Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectCategoria, SelectMateria, TablaEsquema, avisar, confirmar, etiquetaMateria, fechaHora } from './comunes';
 import { Hoja } from './Hoja';
 import { mensajeError, useCargar, useServicios } from './servicios';
@@ -26,6 +27,7 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
 
     const m = modelo.datos;
     const c = contenido.datos;
+    const ctxMarcadores = useMemo(() => (c?.fuente ? contextoDeFuente(c.fuente) : undefined), [c]);
     const ultima = versiones.datos?.[0]?.id ?? null;
     const esUltima = !!activa && activa === ultima;
 
@@ -205,7 +207,7 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
 
             <div className="visor-grid">
                 <div className="vista-hoja" style={{ height: 'calc(100vh - 290px)', minHeight: 420 }}>
-                    {c ? <Hoja bloques={c.bloques} config={c.config} /> : <p className="suave" style={{ padding: 16 }}>Cargando…</p>}
+                    {c ? <Hoja bloques={c.bloques} config={c.config} contexto={ctxMarcadores} /> : <p className="suave" style={{ padding: 16 }}>Cargando…</p>}
                 </div>
 
                 <div className="tarjeta">
