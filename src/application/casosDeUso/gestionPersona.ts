@@ -41,3 +41,43 @@ export class EliminarPersona {
         );
     }
 }
+
+/** Personas vigentes que no figuran en ningún expediente, inmueble ni como representante. ?1 = persona a conservar. */
+const SIN_VINCULOS = `
+    p.deleted_at IS NULL
+    AND p.id <> ?1
+    AND NOT EXISTS (SELECT 1 FROM expediente_parte ep JOIN expediente e ON e.id = ep.expediente_id
+                    WHERE ep.persona_id = p.id AND e.deleted_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM expediente e WHERE e.cliente_id = p.id AND e.deleted_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM inmueble_titular it JOIN inmueble i ON i.id = it.inmueble_id
+                    WHERE it.persona_id = p.id AND i.deleted_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM persona r WHERE r.representante_id = p.id AND r.deleted_at IS NULL)`;
+
+/** Borrado lógico masivo de personas huérfanas (p. ej. tras eliminar expedientes). */
+export class LimpiarPersonasSinVinculos {
+    constructor(private readonly db: DbPuerto) { }
+
+    /** `conservar`: persona que no se toca (la ficha del abogado). */
+    async contar(conservar: string | null): Promise<number> {
+        const [f] = await this.db.consultar<{ n: number }>(
+            `SELECT COUNT(*) AS n FROM persona p WHERE ${SIN_VINCULOS}`,
+            [conservar ?? ''],
+        );
+        return Number(f?.n ?? 0);
+    }
+
+    async ejecutar(conservar: string | null): Promise<number> {
+        const n = await this.contar(conservar);
+        if (n === 0) return 0;
+        const ahora = new Date().toISOString();
+        await this.db.transaccion(
+            [{
+                sql: `UPDATE persona SET deleted_at = ?2, updated_at = ?2
+                      WHERE id IN (SELECT p.id FROM persona p WHERE ${SIN_VINCULOS})`,
+                params: [conservar ?? '', ahora],
+            }],
+            [{ accion: 'persona.limpiar', detalle: { personas: n } }],
+        );
+        return n;
+    }
+}

@@ -1,9 +1,10 @@
-import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type { DatosPersona } from '../application/casosDeUso/crearPersona';
 import type { PersonaResumen } from '../application/consultas';
 import { escribirGeneralesDeLey, leerGeneralesDeLey } from '../domain/generalesDeLey';
 import { claveNormalizada, etiquetaRol } from '../domain/texto';
-import { Aviso, Campo, Modal, Segmentado, avisar, copiarTexto, datosDeForm } from './comunes';
+import { Alerta, Aviso, Campo, Modal, Segmentado, avisar, copiarTexto, datosDeForm, fechaHora } from './comunes';
+import { borrarBorrador, guardarBorrador, leerBorrador } from './borradores';
 import { mensajeError, useCargar, useServicios } from './servicios';
 
 type TipoPersona = 'natural' | 'juridica';
@@ -13,9 +14,9 @@ const BASE_ESTADO: Record<string, string> = { soltera: 'soltero', casada: 'casad
 const EXPEDIDOS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD', 'QR'];
 const SIN_CAJA: CSSProperties = { display: 'contents', border: 0, padding: 0, margin: 0 };
 
-/** Crea (sin `id`) o edita una persona. `guardado` recibe el id de la persona. */
-export function FormularioPersona({ id, personas, cerrar, guardado }: {
-    id?: string; personas: PersonaResumen[]; cerrar: () => void; guardado: (id: string) => void;
+/** Crea (sin `id`) o edita una persona. `guardado` recibe el id de la persona. `usoBorrador` separa los borradores por contexto. */
+export function FormularioPersona({ id, usoBorrador = 'nueva', personas, cerrar, guardado }: {
+    id?: string; usoBorrador?: string; personas: PersonaResumen[]; cerrar: () => void; guardado: (id: string) => void;
 }) {
     const s = useServicios();
     const carga = useCargar(async () => ({ datos: id ? await s.consultas.obtenerPersona(id) : null }), [id]);
@@ -29,11 +30,13 @@ export function FormularioPersona({ id, personas, cerrar, guardado }: {
     if (id && !carga.datos.datos) {
         return <Modal titulo={titulo} cerrar={cerrar} pie={pieCerrar}><Aviso error="La persona ya no existe o fue eliminada." /></Modal>;
     }
-    return <FormPersona id={id} inicial={carga.datos.datos} personas={personas} cerrar={cerrar} guardado={guardado} />;
+    return <FormPersona id={id} uso={usoBorrador} inicial={carga.datos.datos} personas={personas} cerrar={cerrar} guardado={guardado} />;
 }
 
-function FormPersona({ id, inicial, personas, cerrar, guardado }: {
-    id?: string; inicial: DatosPersona | null; personas: PersonaResumen[]; cerrar: () => void; guardado: (id: string) => void;
+interface BorradorPersona { tipo: TipoPersona; campos: Record<string, string> }
+
+function FormPersona({ id, uso, inicial, personas, cerrar, guardado }: {
+    id?: string; uso: string; inicial: DatosPersona | null; personas: PersonaResumen[]; cerrar: () => void; guardado: (id: string) => void;
 }) {
     const s = useServicios();
     const formRef = useRef<HTMLFormElement>(null);
@@ -42,6 +45,39 @@ function FormPersona({ id, inicial, personas, cerrar, guardado }: {
     const [trabajando, setTrabajando] = useState(false);
     const [pegado, setPegado] = useState('');
     const [nota, setNota] = useState<string | null>(null);
+    // Borrador de la ficha nueva (al editar una existente no se usa).
+    const claveBorrador = id ? null : `persona:${uso}`;
+    const [pendiente, setPendiente] = useState(() => (claveBorrador ? leerBorrador<BorradorPersona>(claveBorrador) : null));
+    const timer = useRef(0);
+    useEffect(() => () => window.clearTimeout(timer.current), []);
+
+    function recordar(tipoActual: TipoPersona = tipo) {
+        // Mientras haya un borrador sin resolver no se pisa.
+        if (!claveBorrador || pendiente) return;
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => {
+            const form = formRef.current;
+            if (!form) return;
+            const campos = datosDeForm(form);
+            if (Object.keys(campos).length > 0) guardarBorrador<BorradorPersona>(claveBorrador, { tipo: tipoActual, campos });
+        }, 400);
+    }
+
+    function restaurarBorrador() {
+        const form = formRef.current;
+        if (!pendiente || !form) return;
+        setTipo(pendiente.datos.tipo);
+        for (const [k, x] of Object.entries(pendiente.datos.campos)) {
+            const el = form.elements.namedItem(k);
+            if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) el.value = x;
+        }
+        setPendiente(null);
+    }
+
+    function descartarBorrador() {
+        if (claveBorrador) borrarBorrador(claveBorrador);
+        setPendiente(null);
+    }
 
     const v = (k: keyof DatosPersona): string => {
         const x = inicial?.[k];
@@ -84,6 +120,7 @@ function FormPersona({ id, inicial, personas, cerrar, guardado }: {
 
     async function enviar(ev: FormEvent<HTMLFormElement>) {
         ev.preventDefault();
+        window.clearTimeout(timer.current);
         const f = datosDeForm(ev.currentTarget);
         setTrabajando(true);
         try {
@@ -95,6 +132,7 @@ function FormPersona({ id, inicial, personas, cerrar, guardado }: {
             } else {
                 personaId = await s.crearPersona.ejecutar(datos);
             }
+            if (claveBorrador) borrarBorrador(claveBorrador);
             guardado(personaId);
         } catch (err) {
             setError(mensajeError(err));
@@ -123,11 +161,22 @@ function FormPersona({ id, inicial, personas, cerrar, guardado }: {
             }
         >
             <Aviso error={error} />
-            <form id="form-persona" ref={formRef} className="form-grid" onSubmit={(ev) => void enviar(ev)}>
+            {pendiente && (
+                <Alerta tipo="info">
+                    <div>
+                        Quedó una ficha sin guardar ({fechaHora(new Date(pendiente.ts).toISOString())}).
+                        <div className="acciones" style={{ marginTop: 6 }}>
+                            <button type="button" className="btn btn-sec btn-sm" onClick={restaurarBorrador}>Restaurar</button>
+                            <button type="button" className="btn btn-fan btn-sm" onClick={descartarBorrador}>Descartar</button>
+                        </div>
+                    </div>
+                </Alerta>
+            )}
+            <form id="form-persona" ref={formRef} className="form-grid" onInput={() => recordar()} onSubmit={(ev) => void enviar(ev)}>
                 <div className="ancho">
                     <Segmentado<TipoPersona>
                         valor={tipo}
-                        cambiar={setTipo}
+                        cambiar={(t) => { setTipo(t); recordar(t); }}
                         opciones={[{ id: 'natural', etiqueta: 'Persona natural' }, { id: 'juridica', etiqueta: 'Persona jurídica' }]}
                     />
                 </div>

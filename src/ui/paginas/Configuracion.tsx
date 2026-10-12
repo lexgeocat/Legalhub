@@ -4,11 +4,11 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { useState, type FormEvent } from 'react';
 import { hoyISO } from '../../domain/filtros/fecha';
 import { VERSION_APP } from '../../domain/version';
-import { Alerta, Aviso, Campo, Modal, avisar, confirmar } from '../comunes';
+import { Alerta, Aviso, Campo, Insignia, Modal, avisar, confirmar } from '../comunes';
 import { FormularioPersona } from '../FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../servicios';
 
-type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | null;
+type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | 'limpieza' | null;
 
 export function Configuracion() {
     const s = useServicios();
@@ -24,6 +24,15 @@ export function Configuracion() {
     const [restaurado, setRestaurado] = useState<string | null>(null);
     const [fichaAbogado, setFichaAbogado] = useState<{ id?: string } | null>(null);
     const [abogadoSel, setAbogadoSel] = useState<string | null>(null);
+
+    const c = cfg.datos;
+    const abogadoId = abogadoSel ?? c?.abogadoPersonaId ?? '';
+    // Solo se consulta la ficha del abogado: ya no se lista a todas las personas.
+    const abogado = useCargar(
+        async () => ({ nombre: abogadoId ? await s.consultas.obtenerNombrePersona(abogadoId) : null }),
+        [abogadoId],
+    );
+    const nombreAbogado = abogadoId ? (abogado.datos?.nombre ?? null) : null;
 
     async function guardar(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -121,8 +130,32 @@ export function Configuracion() {
         }
     }
 
-    const c = cfg.datos;
-    const naturales = (personas.datos ?? []).filter((p) => p.tipo === 'natural');
+    /** Archiva a las personas que ya no figuran en ningún expediente, inmueble ni como representante. */
+    async function limpiarPersonas() {
+        setOcupado('limpieza');
+        try {
+            const conservar = abogadoId || null;
+            const n = await s.limpiarPersonas.contar(conservar);
+            if (n === 0) {
+                avisar('No hay personas sin vínculos', 'info');
+                return;
+            }
+            const ok = await confirmar(
+                `Hay ${n} persona(s) que no figuran en ningún expediente, inmueble ni como representante. ` +
+                '¿Quitarlas de las listas? No se borran documentos ni archivos.',
+                'Limpiar personas',
+            );
+            if (!ok) return;
+            await s.limpiarPersonas.ejecutar(conservar);
+            setError(null);
+            personas.recargar();
+            avisar(`${n} persona(s) quitadas de las listas`);
+        } catch (err) {
+            setError(mensajeError(err));
+        } finally {
+            setOcupado(null);
+        }
+    }
 
     return (
         <div className="pagina">
@@ -133,7 +166,7 @@ export function Configuracion() {
                 </div>
             </div>
 
-            <Aviso error={error ?? cfg.error ?? personas.error} />
+            <Aviso error={error ?? cfg.error ?? personas.error ?? abogado.error} />
 
             {c && (
                 <form key={JSON.stringify(c)} className="tarjeta" onSubmit={(e) => void guardar(e)}>
@@ -165,19 +198,29 @@ export function Configuracion() {
                             </div>
                         )}
 
-                        <Campo etiqueta="Abogado (persona)" ayuda={naturales.length === 0 ? 'Aún no registraste tus datos: usa «Registrar mis datos».' : undefined}>
-                            <select name="abogadoPersonaId" value={abogadoSel ?? c.abogadoPersonaId ?? ''} onChange={(e) => setAbogadoSel(e.target.value)}>
-                                <option value="">—</option>
-                                {naturales.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                            </select>
-                        </Campo>
+                        <div className="campo">
+                            <span className="campo-etiq">Abogado</span>
+                            <input type="hidden" name="abogadoPersonaId" value={abogadoId} />
+                            <div className="acciones">
+                                {nombreAbogado ? (
+                                    <Insignia tono="verde">{nombreAbogado}</Insignia>
+                                ) : (
+                                    <span className="suave">
+                                        {abogadoId && abogado.datos ? 'La ficha guardada ya no existe.' : 'Sin registrar.'}
+                                    </span>
+                                )}
+                            </div>
+                            <span className="campo-ayuda">Solo se usa tu ficha: aquí no se listan clientes ni contrapartes.</span>
+                        </div>
                         <div className="campo">
                             <span className="campo-etiq">Mis datos</span>
                             <div className="acciones">
-                                <button type="button" className="btn btn-sec btn-sm" onClick={() => setFichaAbogado({})}>Registrar mis datos…</button>
-                                {(abogadoSel ?? c.abogadoPersonaId) && (
-                                    <button type="button" className="btn btn-fan btn-sm"
-                                        onClick={() => setFichaAbogado({ id: (abogadoSel ?? c.abogadoPersonaId) as string })}>Editar mis datos…</button>
+                                <button type="button" className="btn btn-sec btn-sm"
+                                    onClick={() => setFichaAbogado(nombreAbogado ? { id: abogadoId } : {})}>
+                                    {nombreAbogado ? 'Editar mis datos…' : 'Registrar mis datos…'}
+                                </button>
+                                {abogadoId && (
+                                    <button type="button" className="btn btn-fan btn-sm" onClick={() => setAbogadoSel('')}>Quitar</button>
                                 )}
                             </div>
                         </div>
@@ -196,6 +239,23 @@ export function Configuracion() {
                     </div>
                 </form>
             )}
+
+            <section className="tarjeta">
+                <div className="tarjeta-cab">
+                    <div>
+                        <h3>Personas</h3>
+                        <p className="suave">
+                            Quita de las listas a quienes ya no figuran en ningún expediente (por ejemplo, tras eliminar expedientes).
+                            Tu ficha de abogado nunca se toca.
+                        </p>
+                    </div>
+                </div>
+                <div>
+                    <button type="button" className="btn btn-sec" disabled={ocupado !== null} onClick={() => void limpiarPersonas()}>
+                        {ocupado === 'limpieza' ? 'Revisando…' : 'Limpiar personas sin vínculos'}
+                    </button>
+                </div>
+            </section>
 
             <section className="tarjeta">
                 <div className="tarjeta-cab">
@@ -262,12 +322,14 @@ export function Configuracion() {
             {fichaAbogado && (
                 <FormularioPersona
                     id={fichaAbogado.id}
+                    usoBorrador="abogado"
                     personas={personas.datos ?? []}
                     cerrar={() => setFichaAbogado(null)}
                     guardado={(id) => {
                         setFichaAbogado(null);
                         setAbogadoSel(id);
                         personas.recargar();
+                        abogado.recargar();
                         avisar('Datos guardados. Pulsa «Guardar configuración» para fijarte como abogado.');
                     }}
                 />

@@ -5,7 +5,7 @@ import { PLANTILLAS_INICIALES } from '../../domain/plantillasIniciales';
 import { claveNormalizada } from '../../domain/texto';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Pestanas, SelectCategoria, SelectMateria, Vacio,
-    avisar, confirmar, etiquetaTipo, fechaCorta,
+    avisar, confirmar, etiquetaMateria, fechaCorta,
 } from '../comunes';
 import { EditorModelo } from '../EditorModelo';
 import { mensajeError, useCargar, useServicios } from '../servicios';
@@ -74,7 +74,7 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
     const filtrados = useMemo(() => {
         const k = claveNormalizada(q.trim());
         return (lista.datos ?? []).filter(
-            (m) => (!cat || m.categoria === cat) && (!k || claveNormalizada(`${m.nombre} ${m.descripcion} ${m.categoria} ${etiquetaTipo(m.materia)}`).includes(k)),
+            (m) => (!cat || m.categoria === cat) && (!k || claveNormalizada(`${m.nombre} ${m.descripcion} ${m.categoria} ${etiquetaMateria(m.materia)}`).includes(k)),
         );
     }, [lista.datos, q, cat]);
 
@@ -145,7 +145,8 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
                         onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) ver(m.id); }}>
                         <div className="mc-cab">
                             <Insignia tono="azul">{m.categoria || 'Sin categoría'}</Insignia>
-                            {m.materia && <Insignia tono="violeta">{etiquetaTipo(m.materia)}</Insignia>}
+                            {m.materia && <Insignia tono="violeta">{etiquetaMateria(m.materia)}</Insignia>}
+
                             {!m.activo && <Insignia tono="ambar">Archivado</Insignia>}
                         </div>
                         <h3>{m.nombre}</h3>
@@ -340,7 +341,7 @@ function Plantillas({ cerrar, hecho }: { cerrar: () => void; hecho: (modeloId: s
                                 <div style={{ flex: 1 }}>
                                     <div className="fila-chica">
                                         {p.categoria && <Insignia tono="azul">{p.categoria}</Insignia>}
-                                        {p.materia && <Insignia tono="violeta">{etiquetaTipo(p.materia)}</Insignia>}
+                                        {p.materia && <Insignia tono="violeta">{etiquetaMateria(p.materia)}</Insignia>}
                                         <Insignia tono={p.editable ? 'verde' : 'gris'}>{p.editable ? 'Editable' : 'Word'}</Insignia>
                                     </div>
                                     <b>{p.nombre}</b>

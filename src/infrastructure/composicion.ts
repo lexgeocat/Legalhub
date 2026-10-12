@@ -12,7 +12,7 @@ import { CrearPersona } from '../application/casosDeUso/crearPersona';
 import { EliminarDocumento, EliminarExpediente, EliminarModelo } from '../application/casosDeUso/eliminar';
 import { GenerarDocumento } from '../application/casosDeUso/generarDocumento';
 import { ActualizarDatosParte, ActualizarExpediente, QuitarParte } from '../application/casosDeUso/gestionExpediente';
-import { ActualizarPersona, EliminarPersona } from '../application/casosDeUso/gestionPersona';
+import { ActualizarPersona, EliminarPersona, LimpiarPersonasSinVinculos } from '../application/casosDeUso/gestionPersona';
 import { ImportarModelo } from '../application/casosDeUso/importarModelo';
 import { Configuracion } from '../application/configuracion';
 import { Consultas } from '../application/consultas';
@@ -45,6 +45,7 @@ export interface Servicios {
     crearPersona: CrearPersona;
     actualizarPersona: ActualizarPersona;
     eliminarPersona: EliminarPersona;
+    limpiarPersonas: LimpiarPersonasSinVinculos;
     agregarParte: AgregarParte;
     quitarParte: QuitarParte;
     actualizarDatosParte: ActualizarDatosParte;
@@ -89,6 +90,7 @@ export async function crearServicios(): Promise<Servicios> {
         crearPersona: new CrearPersona(db),
         actualizarPersona: new ActualizarPersona(db),
         eliminarPersona: new EliminarPersona(db),
+        limpiarPersonas: new LimpiarPersonasSinVinculos(db),
         agregarParte: new AgregarParte(db),
         quitarParte: new QuitarParte(db),
         actualizarDatosParte: new ActualizarDatosParte(db),

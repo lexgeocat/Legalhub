@@ -57,7 +57,81 @@ export interface FuenteModelo {
 }
 
 export const FUENTES_PAGINA: string[] = NOMBRES_FUENTES;
-export const CATEGORIAS_MODELO = ['Escrito judicial', 'Contrato', 'Minuta', 'Documento privado', 'Poder', 'Carta o notificación', 'Otro'];
+export const CATEGORIAS_MODELO = [
+    'Escrito judicial',
+    'Contrato (Minuta)',
+    'Contrato (Documento privado)',
+    'Instructiva de poder',
+    'Carta de solicitud o notificación',
+    'Demanda',
+    'Querella',
+    'Denuncia',
+    'Apersonamiento',
+    'Contestación',
+    'Recurso',
+    'Incidente o excepción',
+    'Acción constitucional',
+    'Declaración jurada',
+    'Acta',
+    'Convenio o transacción',
+    'Informe o dictamen legal',
+    'Otro',
+];
+
+/** Materias del derecho para clasificar modelos. */
+export const MATERIAS_MODELO: readonly { clave: string; etiqueta: string }[] = [
+    { clave: 'penal', etiqueta: 'Penal' },
+    { clave: 'civil', etiqueta: 'Civil' },
+    { clave: 'notarial', etiqueta: 'Notarial' },
+    { clave: 'laboral', etiqueta: 'Laboral' },
+    { clave: 'administrativo', etiqueta: 'Administrativo' },
+    { clave: 'familiar', etiqueta: 'Familiar' },
+    { clave: 'minero', etiqueta: 'Minero' },
+    { clave: 'corporativo', etiqueta: 'Corporativo' },
+    { clave: 'municipal', etiqueta: 'Municipal' },
+    { clave: 'constitucional', etiqueta: 'Constitucional' },
+    { clave: 'agroambiental', etiqueta: 'Agroambiental' },
+    { clave: 'comercial', etiqueta: 'Comercial' },
+    { clave: 'tributario', etiqueta: 'Tributario' },
+    { clave: 'aduanero', etiqueta: 'Aduanero' },
+    { clave: 'registral', etiqueta: 'Registral' },
+];
+
+/** Tipos de expediente que no coinciden uno a uno con una materia. */
+const MATERIAS_POR_TIPO: Record<string, readonly string[]> = {
+    contrato: ['civil', 'comercial', 'notarial', 'corporativo'],
+    documento_privado: ['civil', 'comercial'],
+    poder: ['notarial'],
+    tramite: ['administrativo', 'municipal', 'registral', 'tributario', 'aduanero'],
+};
+
+/** ¿La materia del modelo conviene a este tipo de expediente? (para el distintivo «Recomendado») */
+export const esMateriaRecomendada = (materia: string, tipoExpediente: string): boolean =>
+    materia !== '' && (materia === tipoExpediente || (MATERIAS_POR_TIPO[tipoExpediente] ?? []).includes(materia));
+
+const CATEGORIAS_ANTIGUAS: Record<string, string> = {
+    contrato: 'Contrato (Minuta)',
+    minuta: 'Contrato (Minuta)',
+    'documento privado': 'Contrato (Documento privado)',
+    poder: 'Instructiva de poder',
+};
+const MATERIAS_ANTIGUAS: Record<string, string> = {
+    contrato: 'civil', documento_privado: 'civil', poder: 'notarial', tramite: 'administrativo', asesoria: '', otro: '',
+};
+
+/** Convierte valores de la lista anterior (p. ej. «Minuta», «Poder») a la nueva. */
+export function normalizarCategoria(v?: string): string | undefined {
+    const t = (v ?? '').trim();
+    if (!t) return undefined;
+    return CATEGORIAS_ANTIGUAS[t.toLowerCase()] ?? t;
+}
+
+export function normalizarMateria(v?: string): string | undefined {
+    const t = (v ?? '').trim();
+    if (!t) return undefined;
+    const k = t.toLowerCase();
+    return Object.hasOwn(MATERIAS_ANTIGUAS, k) ? (MATERIAS_ANTIGUAS[k] || undefined) : t;
+}
 
 export const PAGINA_CM: Record<TamanoPagina, { w: number; h: number }> = {
     carta: { w: 21.59, h: 27.94 },

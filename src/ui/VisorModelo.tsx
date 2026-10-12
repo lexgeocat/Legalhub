@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectCategoria, SelectMateria, TablaEsquema, avisar, confirmar, etiquetaTipo, fechaHora } from './comunes';
+import { Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectCategoria, SelectMateria, TablaEsquema, avisar, confirmar, etiquetaMateria, fechaHora } from './comunes';
 import { Hoja } from './Hoja';
 import { mensajeError, useCargar, useServicios } from './servicios';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -163,7 +163,7 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
                 <div>
                     <div className="fila-chica">
                         {m.categoria && <Insignia tono="azul">{m.categoria}</Insignia>}
-                        {m.materia && <Insignia tono="violeta">{etiquetaTipo(m.materia)}</Insignia>}
+                        {m.materia && <Insignia tono="violeta">{etiquetaMateria(m.materia)}</Insignia>}
                         <Insignia tono={c?.editable ? 'verde' : 'gris'}>{c?.editable ? 'Editable' : 'Importado de Word'}</Insignia>
                         {!m.activo && <Insignia tono="ambar">Archivado</Insignia>}
                     </div>

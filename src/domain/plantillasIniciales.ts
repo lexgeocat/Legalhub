@@ -66,7 +66,7 @@ const MEMORIAL = [
 
 export const PLANTILLAS_INICIALES: PlantillaInicial[] = [
     {
-        nombre: 'Minuta de compraventa de inmueble', categoria: 'Minuta', materia: 'civil',
+        nombre: 'Minuta de compraventa de inmueble', categoria: 'Contrato (Minuta)', materia: 'civil',
         descripcion: 'Borrador de ejemplo. Requiere roles vendedor/comprador y los datos del inmueble, precio, forma de pago y lugar.',
         texto: COMPRAVENTA,
         campos: [

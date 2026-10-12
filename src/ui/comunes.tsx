@@ -1,8 +1,8 @@
 import { ask } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import type { CampoEsquema } from '../application/puertos/motorPlantillas';
-import { CATEGORIAS_MODELO } from '../domain/fuenteModelo';
-import { GRUPOS_TIPO, TIPOS_EXPEDIENTE } from '../domain/tiposExpediente';
+import { CATEGORIAS_MODELO, MATERIAS_MODELO } from '../domain/fuenteModelo';
+import { TIPOS_EXPEDIENTE } from '../domain/tiposExpediente';
 
 /* ---------------- Iconos ---------------- */
 const ICONOS = {
@@ -52,6 +52,8 @@ export function EstadoInsignia({ estado }: { estado: string }) {
 }
 
 export const etiquetaTipo = (clave: string): string => TIPOS_EXPEDIENTE.find((t) => t.clave === clave)?.etiqueta ?? clave;
+export const etiquetaMateria = (clave: string): string =>
+    MATERIAS_MODELO.find((m) => m.clave === clave)?.etiqueta ?? etiquetaTipo(clave);
 
 /* ---------------- Avisos ---------------- */
 export function Aviso({ error }: { error: string | null }) {
@@ -136,14 +138,8 @@ export function SelectMateria(props: SelectHTMLAttributes<HTMLSelectElement>) {
     return (
         <select {...props}>
             <option value="">(cualquiera)</option>
-            {GRUPOS_TIPO.map((g) => (
-                <optgroup key={g} label={g}>
-                    {TIPOS_EXPEDIENTE.filter((t) => t.grupo === g).map((t) => (
-                        <option key={t.clave} value={t.clave}>{t.etiqueta}</option>
-                    ))}
-                </optgroup>
-            ))}
-            {actual && !TIPOS_EXPEDIENTE.some((t) => t.clave === actual) && <option value={actual}>{actual}</option>}
+            {MATERIAS_MODELO.map((m) => <option key={m.clave} value={m.clave}>{m.etiqueta}</option>)}
+            {actual && !MATERIAS_MODELO.some((m) => m.clave === actual) && <option value={actual}>{etiquetaMateria(actual)}</option>}
         </select>
     );
 }
@@ -294,7 +290,7 @@ export const marcarCambiosPendientes = (v: boolean): void => {
 /** true si se puede salir: no hay cambios pendientes o la persona aceptó descartarlos. */
 export async function permitirSalir(): Promise<boolean> {
     if (!cambiosPendientes) return true;
-    return confirmar('Hay cambios sin guardar en las partes o datos del expediente. ¿Salir sin guardarlos?', 'Cambios sin guardar');
+    return confirmar('Hay cambios sin guardar en las partes o datos del expediente. Quedará un borrador para restaurarlos al volver. ¿Salir?', 'Cambios sin guardar');
 }
 
 export function fechaHora(iso: string): string {

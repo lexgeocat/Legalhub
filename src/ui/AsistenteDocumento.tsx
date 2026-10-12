@@ -11,7 +11,7 @@ import type { CampoEsquema, EntradaVerificacion } from '../application/puertos/m
 import { mismoRol } from '../domain/catalogo';
 import { mismoTexto, type AnalisisModelo } from '../domain/edicionModelo';
 import {
-    bloquesATexto, margenesIguales, parsearTexto,
+    bloquesATexto, esMateriaRecomendada, margenesIguales, parsearTexto,
     type Bloque, type ConfigPagina, type FuenteModelo,
 } from '../domain/fuenteModelo';
 import { revisarTexto, type HallazgoTexto } from '../domain/revisionTexto';
@@ -375,7 +375,7 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
 
     const ordenados = useMemo(() => {
         const k = claveNormalizada(q.trim());
-        const mismo = (m: ModeloResumen) => Number(m.materia === expediente.tipo);
+        const mismo = (m: ModeloResumen) => Number(esMateriaRecomendada(m.materia, expediente.tipo));
         return (modelos.datos ?? [])
             .filter((m) => !k || claveNormalizada(`${m.nombre} ${m.descripcion} ${m.categoria}`).includes(k))
             .sort((a, b) => mismo(b) - mismo(a) || a.nombre.localeCompare(b.nombre, 'es'));
@@ -687,7 +687,7 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
                                                 <div style={{ flex: 1 }}>
                                                     <div className="fila-chica">
                                                         {m.categoria && <Insignia tono="azul">{m.categoria}</Insignia>}
-                                                        {m.materia === expediente.tipo && <Insignia tono="verde">Recomendado</Insignia>}
+                                                        {esMateriaRecomendada(m.materia, expediente.tipo) && <Insignia tono="verde">Recomendado</Insignia>}
                                                     </div>
                                                     <b>{m.nombre}</b>
                                                     <span className="suave">{m.descripcion || `v${m.version} · ${m.numCampos} campos`}</span>

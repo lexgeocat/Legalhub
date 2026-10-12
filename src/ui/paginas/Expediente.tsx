@@ -14,6 +14,7 @@ import {
 import { DatosExpediente } from '../DatosExpediente';
 import { Hoja } from '../Hoja';
 import { mensajeError, useCargar, useServicios } from '../servicios';
+import { esMateriaRecomendada } from '../../domain/fuenteModelo';
 
 type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos';
 
@@ -215,7 +216,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
         const k = claveNormalizada(q.trim());
         return modelos
             .filter((m) => !k || claveNormalizada(`${m.nombre} ${m.descripcion} ${m.categoria}`).includes(k))
-            .sort((a, b) => Number(b.materia === e.tipo) - Number(a.materia === e.tipo) || a.nombre.localeCompare(b.nombre, 'es'));
+            .sort((a, b) => Number(esMateriaRecomendada(b.materia, e.tipo)) - Number(esMateriaRecomendada(a.materia, e.tipo)) || a.nombre.localeCompare(b.nombre, 'es'));
     }, [modelos, q, e.tipo]);
     const secciones = useMemo(
         () => (ficha ? seccionesDeModelo(ficha, visible?.fuente?.grupos ?? [], visible?.fuente?.campos ?? []) : []),
@@ -245,7 +246,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
                             <div style={{ flex: 1 }}>
                                 <div className="fila-chica">
                                     {m.categoria && <Insignia tono="azul">{m.categoria}</Insignia>}
-                                    {m.materia === e.tipo && <Insignia tono="verde">Recomendado</Insignia>}
+                                    {esMateriaRecomendada(m.materia, e.tipo) && <Insignia tono="verde">Recomendado</Insignia>}
                                     {actual?.id === m.id && <Insignia tono="violeta">Elegido</Insignia>}
                                 </div>
                                 <b>{m.nombre}</b>

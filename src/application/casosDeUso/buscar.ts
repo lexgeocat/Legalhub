@@ -62,8 +62,10 @@ export class Buscar {
             agregar({ tipo: 'documento', id: t(d.id), titulo: t(d.titulo), detalle: t(d.codigo), expedienteId: t(d.expediente_id) }),
         );
         (await this.db.consultar<Fila>(
-            `SELECT * FROM expediente WHERE deleted_at IS NULL AND (codigo LIKE ?1 ESCAPE '\\' OR nro_causa LIKE ?1 ESCAPE '\\') LIMIT ?2`,
-            [like, limite],
+            `SELECT e.* FROM fts_expediente JOIN expediente e ON e.id = fts_expediente.expediente_id
+       WHERE fts_expediente MATCH ?1 AND e.deleted_at IS NULL
+       ORDER BY bm25(fts_expediente) LIMIT ?2`,
+            [prefijo, limite],
         )).forEach(expediente);
 
         return [...salida.values()].slice(0, limite);

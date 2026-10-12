@@ -170,6 +170,15 @@ export class Consultas {
             telefono: t(f.telefono), correo: t(f.correo),
         };
     }
+    /** Nombre de una persona vigente (null si no existe o fue archivada). */
+    async obtenerNombrePersona(id: string): Promise<string | null> {
+        const [f] = await this.db.consultar<Fila>(
+            `SELECT tipo, nombres, apellido_paterno, apellido_materno, apellido_casada, razon_social
+             FROM persona WHERE id = ?1 AND deleted_at IS NULL`,
+            [id],
+        );
+        return f ? nombrePersona(f) || 'Sin nombre' : null;
+    }
 
     async listarPartes(expedienteId: string): Promise<ParteResumen[]> {
         const filas = await this.db.consultar<Fila>(

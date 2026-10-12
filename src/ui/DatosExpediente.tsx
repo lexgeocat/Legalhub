@@ -13,7 +13,8 @@ import { analizarMarcador, type FiltroMarcador } from '../domain/marcadores';
 import { atributoConcordado, estadoCivilConcordado } from '../domain/personas';
 import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../domain/texto';
 import { clienteAlInicio, obtenerTipo } from '../domain/tiposExpediente';
-import { Alerta, Aviso, Campo, Icono, Insignia, Segmentado, avisar, confirmar } from './comunes';
+import { Alerta, Aviso, Campo, Icono, Insignia, Segmentado, avisar, confirmar, fechaHora } from './comunes';
+import { borrarBorrador, guardarBorrador, leerBorrador } from './borradores';
 import { EntradaDato, OtrosDatos, type CampoForm } from './DatosCaso';
 import { EditorModeloVentana, type LlenadoVentana } from './EditorModelo';
 import { FormularioPersona } from './FormularioPersona';
@@ -39,6 +40,8 @@ interface FilaParte {
 }
 
 interface RefParte { rol: string; propio: boolean; clave: string }
+/** Lo que se guarda como borrador mientras hay cambios sin guardar. */
+interface BorradorDatos { firma: string; valores: Campos; filas: FilaParte[]; eliminadas: string[] }
 
 const NOMBRES = new Set(['nombres', 'apellidoPaterno', 'apellidoMaterno', 'razonSocial']);
 const EXPEDIDOS = ['LP', 'CB', 'SC', 'OR', 'PT', 'CH', 'TJ', 'BN', 'PD', 'QR'];
@@ -534,6 +537,19 @@ export function DatosExpediente({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [firmaPartes, ficha]);
 
+    // Borrador: se guarda solo mientras haya cambios sin guardar y se ofrece al volver.
+    const claveBorrador = `datos:${e.id}`;
+    const [borrador, setBorrador] = useState(() => leerBorrador<BorradorDatos>(claveBorrador));
+
+    useEffect(() => {
+        if (!sucio || !filas) return;
+        const t = window.setTimeout(
+            () => guardarBorrador<BorradorDatos>(claveBorrador, { firma: firmaPartes, valores, filas, eliminadas }),
+            700,
+        );
+        return () => window.clearTimeout(t);
+    }, [sucio, filas, valores, eliminadas, firmaPartes, claveBorrador]);
+
     const secciones = useMemo(
         () => (ficha ? seccionesDeModelo(ficha, visible?.fuente?.grupos ?? [], visible?.fuente?.campos ?? []) : []),
         [ficha, visible],
@@ -669,6 +685,8 @@ export function DatosExpediente({
             await s.actualizarExpediente.ejecutar(e.id, { datos: valores });
             setErr(null);
             setSucio(false);
+            borrarBorrador(claveBorrador);
+            setBorrador(null);
             recargar();
             recargarPersonas();
             avisar('Datos guardados');
@@ -681,6 +699,30 @@ export function DatosExpediente({
         } finally {
             setGuardando(false);
         }
+    }
+
+    function restaurarBorrador() {
+        if (!borrador) return;
+        const b = borrador.datos;
+        const mismasPartes = b.firma === firmaPartes;
+        setValores(b.valores);
+        if (mismasPartes) {
+            setFilas(b.filas);
+            setEliminadas(b.eliminadas);
+        }
+        setSucio(true);
+        setBorrador(null);
+        avisar(
+            mismasPartes
+                ? 'Borrador restaurado'
+                : 'Se restauraron los datos del caso; las partes cambiaron desde que se guardó el borrador',
+            'info',
+        );
+    }
+
+    function descartarBorrador() {
+        borrarBorrador(claveBorrador);
+        setBorrador(null);
     }
 
     /* ----- estados de pantalla ----- */
@@ -776,6 +818,17 @@ export function DatosExpediente({
 
     return (
         <>
+            {borrador && !sucio && (
+                <Alerta tipo="info">
+                    <div>
+                        Hay un borrador sin guardar del {fechaHora(new Date(borrador.ts).toISOString())}.
+                        <div className="acciones" style={{ marginTop: 6 }}>
+                            <button type="button" className="btn btn-sec btn-sm" onClick={restaurarBorrador}>Restaurar borrador</button>
+                            <button type="button" className="btn btn-fan btn-sm" onClick={descartarBorrador}>Descartar</button>
+                        </div>
+                    </div>
+                </Alerta>
+            )}
             {pestana === 'partes' ? (
                 <>
                     <div className="tarjeta">

@@ -1,5 +1,5 @@
 import { ErrorDeDatos } from '../../domain/errores';
-import type { FuenteModelo } from '../../domain/fuenteModelo';
+import { normalizarCategoria, normalizarMateria, type FuenteModelo } from '../../domain/fuenteModelo'
 import { nuevoId } from '../../domain/id';
 import { nombreSeguro } from '../../domain/nombreArchivo';
 import { claveCampo, pluralRol } from '../../domain/texto';
@@ -145,7 +145,10 @@ export class ImportarModelo {
 
         const modeloVersionId = nuevoId();
         const datosModelo = {
-            nombre, materia: nulo(p.datos.materia), categoria: nulo(p.datos.categoria), descripcion: nulo(p.datos.descripcion),
+            nombre,
+            materia: nulo(normalizarMateria(p.datos.materia)),
+            categoria: nulo(normalizarCategoria(p.datos.categoria)),
+            descripcion: nulo(p.datos.descripcion),
         };
         const sentencias: Sentencia[] = [];
         if (!p.modeloId) {
