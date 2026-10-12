@@ -27,11 +27,11 @@ export function EntradaDato({ c, valor, cambiar, enLinea = false }: {
     if (largo) {
         return (
             <textarea className={clase} aria-label={c.etiqueta} rows={enLinea ? 3 : undefined}
-                placeholder={ej || (enLinea ? c.etiqueta : undefined)} value={valor} onChange={(ev) => cambiar(ev.target.value)} />
+                placeholder={ej || c.etiqueta} value={valor} onChange={(ev) => cambiar(ev.target.value)} />
         );
     }
     const numerico = NUMERICOS.has(c.tipo);
-    const ph = ej || (numerico ? '1234,56' : enLinea ? c.etiqueta : undefined);
+    const ph = ej || (numerico ? '1234,56' : c.etiqueta);
     const base = valor.length > 0 ? valor.length : (ph?.length ?? 0);
     return (
         <input className={clase} aria-label={c.etiqueta} value={valor}

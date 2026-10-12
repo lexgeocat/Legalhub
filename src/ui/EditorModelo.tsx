@@ -21,7 +21,6 @@ import { ModalMarcador } from './EditorMarcador';
 import type { ControlHoja, LlenadoHoja, MenuCampoInfo } from './HojaEditable';
 import { MenuCampo } from './MenuCampo';
 import { PanelCampos } from './PanelCampos';
-import { PopoverDato } from './PopoverDato';
 import { mensajeError, useCargar, useServicios } from './servicios';
 
 export interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
@@ -37,8 +36,8 @@ type VistaEditor = 'llenar' | 'modelo';
 export interface LlenadoVentana {
     /** Texto del dato en el documento: '' = falta, undefined = no se llena aquí (queda como etiqueta). */
     valor: (marcador: string, ambito: string[]) => string | undefined;
-    /** Contenido del cuadro que se abre al hacer clic en un dato. */
-    editor: (marcador: string, ambito: string[]) => ReactNode;
+    /** Guarda directamente el nuevo valor (edición inline sin popup). */
+    guardar: (marcador: string, ambito: readonly string[], valor: string) => void;
     sucio: boolean;
     guardando: boolean;
     /** true si se guardó bien. */
@@ -155,34 +154,25 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     const [ultima, setUltima] = useState<number | null>(null);
     const [verCodigos, setVerCodigos] = useState(false);
     const [pendientes, setPendientes] = useState(0);
-    const [menu, setMenu] = useState<MenuCampoInfo | null>(null);
-    const [popover, setPopover] = useState<{ m: string; amb: string[]; x: number; y: number } | null>(null);
-    const [verEjemplos, setVerEjemplos] = useState(false);
-
     const cerrarMenu = useCallback(() => setMenu(null), []);
-    const cerrarPopover = useCallback(() => setPopover(null), []);
 
     const contextoMarcadores = useMemo<ContextoMarcadores>(
         () => contextoDeFuente({ campos, grupos, partes }),
         [campos, grupos, partes],
     );
 
-    /** «Llenar datos»: el dato real y clic para editar. «Ejemplos» (en el modelo): solo se ve el ejemplo de cada campo. */
+    /** «Llenar datos»: el dato real, clic → edición inline directa. «Ejemplos»: solo vista. */
     const llenadoHoja = useMemo<LlenadoHoja | undefined>(() => {
         if (llenado && vista === 'llenar') {
             return {
                 valor: llenado.valor,
-                editar: (m, amb, chip) => {
-                    const r = chip.getBoundingClientRect();
-                    setPopover({ m, amb, x: r.left, y: r.bottom + 6 });
-                },
+                guardar: llenado.guardar,
             };
         }
         if (verEjemplos && vista === 'modelo') {
             return {
                 soloVista: true,
                 valor: (m) => describirMarcador(m, contextoMarcadores).ejemplo || undefined,
-                editar: () => undefined,
             };
         }
         return undefined;
@@ -196,7 +186,6 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     const cerrarDialogo = () => setDialogo(null);
 
     function cambiarVista(v: VistaEditor) {
-        setPopover(null);
         setMenu(null);
         setVista(v);
     }
@@ -521,9 +510,14 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
             {menu && <MenuCampo info={menu} partes={partes} contexto={contextoMarcadores} cerrar={cerrarMenu} />}
 
             {popover && llenado && (
-                <PopoverDato x={popover.x} y={popover.y} titulo={describirMarcador(popover.m, contextoMarcadores).titulo} cerrar={cerrarPopover}>
+                <EditorInline
+                    x={popover.x}
+                    y={popover.y}
+                    chip={popover.chip}
+                    cerrar={cerrarPopover}
+                >
                     {llenado.editor(popover.m, popover.amb) ?? <p className="suave">Este dato no se llena aquí.</p>}
-                </PopoverDato>
+                </EditorInline>
             )}
         </div>
     );

@@ -84,7 +84,10 @@ export interface MenuCampoInfo {
 export interface LlenadoHoja {
     /** Texto del dato: '' = falta, undefined = este campo no se llena aquí (queda como etiqueta). */
     valor(marcador: string, ambito: string[]): string | undefined;
-    editar(marcador: string, ambito: string[], chip: HTMLElement): void;
+    /** Guarda directamente el nuevo valor sin abrir nada (edición inline en el texto). */
+    guardar?(marcador: string, ambito: readonly string[], valor: string): void;
+    /** Abre un cuadro de edición (fallback si guardar no está definido). */
+    editar?(marcador: string, ambito: string[], chip: HTMLElement): void;
     /** Solo muestra valores de ejemplo: no abre cuadros de llenado y los campos se siguen pudiendo editar. */
     soloVista?: boolean;
 }
@@ -2086,7 +2089,67 @@ export function HojaEditable({
         );
     }
 
-    /** Llenar: un clic en un dato abre su cuadro de edición. */
+    /** Edición directa sobre el chip: lo convierte en un input inline transparente, sin cuadros ni popups. */
+    function activarEdicionInline(
+        chip: HTMLElement,
+        marcador: string,
+        ambito: readonly string[],
+        valorInicial: string,
+        guardar: (m: string, amb: readonly string[], v: string) => void,
+    ): void {
+        const etiqueta = chip.querySelector<HTMLElement>('.mk-e');
+        if (!etiqueta) return;
+
+        chip.classList.add('mk-editando');
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = valorInicial;
+        // Se ve exactamente como texto del documento: sin fondo, sin borde visible salvo subrayado
+        input.setAttribute('style', [
+            'font:inherit', 'color:inherit', 'background:transparent',
+            'border:none', 'border-bottom:2px solid currentColor', 'outline:none',
+            'padding:0 1px', 'margin:0', 'vertical-align:baseline', 'border-radius:0',
+            `width:${Math.max(6, valorInicial.length + 2)}ch`, 'max-width:70ch',
+        ].join(';'));
+
+        let cerrado = false;
+        const cerrar = (confirmar: boolean) => {
+            if (cerrado) return;
+            cerrado = true;
+            chip.classList.remove('mk-editando');
+            chip.contentEditable = 'false';
+            if (confirmar && input.value !== valorInicial) {
+                guardar(marcador, ambito, input.value);
+            }
+            // Restaurar el chip visualmente de inmediato (React actualizará luego)
+            const et2 = document.createElement('span');
+            et2.className = 'mk-e';
+            et2.textContent = confirmar ? (input.value || valorInicial) : valorInicial;
+            const co2 = document.createElement('span');
+            co2.className = 'mk-c';
+            co2.textContent = marcador;
+            chip.replaceChildren(et2, co2);
+        };
+
+        input.addEventListener('blur', () => cerrar(true), { once: true });
+        input.addEventListener('keydown', (ev) => {
+            ev.stopPropagation(); // no interferir con atajos del editor
+            if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+            if (ev.key === 'Escape') { ev.preventDefault(); input.value = valorInicial; input.blur(); }
+        });
+        input.addEventListener('input', (ev) => {
+            ev.stopPropagation();
+            input.style.width = `${Math.max(6, input.value.length + 2)}ch`;
+        });
+
+        etiqueta.replaceChildren(input);
+        // El chip es contentEditable=false; temporalmente lo habilitamos para que el input sea interactivo
+        chip.contentEditable = 'true';
+        requestAnimationFrame(() => { input.focus(); input.select(); });
+    }
+
+    /** Llenar: un clic en un dato lo convierte en texto editable directamente. */
     function alClic(e: MouseEvent<HTMLDivElement>) {
         const ll = LLENADO;
         const el = raizRef.current;
@@ -2094,10 +2157,16 @@ export function HojaEditable({
         if (!ll || ll.soloVista || !el || !chip) return;
         const m = chip.dataset.mk ?? '';
         const amb = ambitoDeChip(el, chip);
-        if (ll.valor(m, amb) === undefined) return;
+        const valorActual = ll.valor(m, amb);
+        if (valorActual === undefined) return;
         e.preventDefault();
         ocultarTip();
-        ll.editar(m, amb, chip);
+        // Edición inline directa (sin popup)
+        if (ll.guardar) {
+            activarEdicionInline(chip, m, amb, valorActual, ll.guardar);
+            return;
+        }
+        ll.editar?.(m, amb, chip);
     }
 
     /** Doble clic en un campo del texto: pide al padre que lo edite (no aplica al llenar). */
