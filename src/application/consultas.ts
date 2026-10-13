@@ -48,6 +48,17 @@ export interface ClienteResumen {
     id: string; tipo: string; nombre: string; documento: string;
     expedientes: ClienteExpediente[]; activos: number;
 }
+export interface PersonaDetalle extends PersonaResumen {
+    correo: string;
+    /** «C.I. 1234567-1A LP» / «NIT 123…» ('' si no tiene). */
+    documento: string;
+    /** Clave para detectar fichas repetidas ('' si no tiene documento). */
+    claveDoc: string;
+    /** En cuántos expedientes vigentes es el cliente / una parte. */
+    nCliente: number;
+    nPartes: number;
+}
+export interface VinculoPersona { expedienteId: string; codigo: string; materia: string; estado: string; tipo: string; rol: string }
 const SQL_EXPEDIENTE = `
     SELECT e.id, e.codigo, e.tipo, e.materia, e.referencia, e.estado, e.juzgado, e.nro_causa, e.cliente_id,
          e.modelo_id, e.datos_json, e.created_at,
@@ -240,5 +251,70 @@ export class Consultas {
             id: t(f.id), version: Number(f.version), editable: Number(f.editable) === 1,
             notas: t(f.notas), creadoEn: t(f.created_at),
         }));
+    }
+    /** Directorio de personas con sus vínculos (módulo Personas). */
+    async listarPersonasDetalle(): Promise<PersonaDetalle[]> {
+        const filas = await this.db.consultar<Fila>(
+            `SELECT p.id, p.tipo, p.nombres, p.apellido_paterno, p.apellido_materno, p.apellido_casada, p.razon_social,
+                    p.ci_numero, p.ci_complemento, p.ci_expedido, p.nit, p.telefono, p.correo,
+                    (SELECT COUNT(*) FROM expediente e WHERE e.cliente_id = p.id AND e.deleted_at IS NULL) AS n_cliente,
+                    (SELECT COUNT(DISTINCT ep.expediente_id) FROM expediente_parte ep
+                       JOIN expediente e ON e.id = ep.expediente_id
+                      WHERE ep.persona_id = p.id AND e.deleted_at IS NULL) AS n_partes
+             FROM persona p
+             WHERE p.deleted_at IS NULL
+             ORDER BY COALESCE(NULLIF(p.razon_social, ''), NULLIF(p.apellido_paterno, ''), p.nombres) COLLATE NOCASE`,
+        );
+        return filas.map((f) => {
+            const juridica = t(f.tipo) === 'juridica';
+            const num = t(f.ci_numero);
+            const comp = t(f.ci_complemento);
+            const ci = [num && `${num}${comp ? `-${comp}` : ''}`, t(f.ci_expedido)].filter(Boolean).join(' ');
+            const nit = t(f.nit);
+            return {
+                id: t(f.id), tipo: t(f.tipo), nombre: nombrePersona(f), ci, nit, telefono: t(f.telefono), correo: t(f.correo),
+                documento: juridica ? (nit ? `NIT ${nit}` : '') : (ci ? `C.I. ${ci}` : ''),
+                claveDoc: juridica ? (nit ? `nit:${nit.toLowerCase()}` : '') : (num ? `ci:${num.toLowerCase()}|${comp.toLowerCase()}` : ''),
+                nCliente: Number(f.n_cliente), nPartes: Number(f.n_partes),
+            };
+        });
+    }
+
+    /** Expedientes vigentes donde figura la persona (como cliente y/o como parte). */
+    async listarVinculosPersona(personaId: string): Promise<VinculoPersona[]> {
+        const filas = await this.db.consultar<Fila>(
+            `SELECT e.id AS expediente_id, e.codigo, e.materia, e.estado, e.tipo, 'cliente' AS rol
+             FROM expediente e WHERE e.cliente_id = ?1 AND e.deleted_at IS NULL
+             UNION ALL
+             SELECT e.id, e.codigo, e.materia, e.estado, e.tipo, ep.rol
+             FROM expediente_parte ep JOIN expediente e ON e.id = ep.expediente_id
+             WHERE ep.persona_id = ?1 AND e.deleted_at IS NULL
+             ORDER BY codigo DESC, rol`,
+            [personaId],
+        );
+        return filas.map((f) => ({
+            expedienteId: t(f.expediente_id), codigo: t(f.codigo), materia: t(f.materia),
+            estado: t(f.estado), tipo: t(f.tipo), rol: t(f.rol),
+        }));
+    }
+
+    /** ¿Ya hay otra persona vigente con el mismo C.I. (+ complemento) o NIT? */
+    async buscarPorDocumento(
+        d: { ciNumero?: string; ciComplemento?: string; nit?: string },
+        excluirId = '',
+    ): Promise<{ id: string; nombre: string } | null> {
+        const ci = (d.ciNumero ?? '').trim();
+        const nit = (d.nit ?? '').trim();
+        if (!ci && !nit) return null;
+        const [f] = await this.db.consultar<Fila>(
+            `SELECT id, tipo, nombres, apellido_paterno, apellido_materno, apellido_casada, razon_social
+             FROM persona
+             WHERE deleted_at IS NULL AND id <> ?1
+               AND ((?2 <> '' AND ci_numero = ?2 AND UPPER(COALESCE(ci_complemento, '')) = UPPER(?3))
+                 OR (?4 <> '' AND nit = ?4))
+             LIMIT 1`,
+            [excluirId, ci, (d.ciComplemento ?? '').trim(), nit],
+        );
+        return f ? { id: t(f.id), nombre: nombrePersona(f) || 'Sin nombre' } : null;
     }
 }

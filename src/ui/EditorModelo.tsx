@@ -18,7 +18,7 @@ import {
 } from './comunes';
 import { EditorHoja } from './EditorHoja';
 import { ModalMarcador } from './EditorMarcador';
-import type { ControlHoja, EdicionDirecta, LlenadoHoja, MenuCampoInfo } from './HojaEditable';
+import type { ControlHoja, EdicionDirecta, LlenadoHoja, MenuCampoInfo, SelectorEdicion } from './HojaEditable';
 import { MenuCampo } from './MenuCampo';
 import { PanelCampos } from './PanelCampos';
 import { mensajeError, useCargar, useServicios } from './servicios';
@@ -45,6 +45,8 @@ export interface LlenadoVentana {
     /** true si se guardó bien. */
     guardarDatos: () => Promise<boolean>;
     /** Modelo de Word: solo se llenan datos. */
+    /** Selector junto al dato mientras se edita (género al escribir el nombre de una parte). */
+    selector?: (marcador: string, ambito: string[]) => SelectorEdicion | undefined;
     soloLectura?: boolean;
 }
 
@@ -168,7 +170,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     /** «Llenar datos»: se escribe directamente sobre el dato del documento. «Ejemplos»: solo vista. */
     const llenadoHoja = useMemo<LlenadoHoja | undefined>(() => {
         if (llenado && vista === 'llenar') {
-            return { valor: llenado.valor, crudo: llenado.crudo, guardar: llenado.guardar };
+            return { valor: llenado.valor, crudo: llenado.crudo, guardar: llenado.guardar, selector: llenado.selector };
         }
         if (verEjemplos && vista === 'modelo') {
             return {

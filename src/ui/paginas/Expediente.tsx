@@ -55,7 +55,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
 
     const t = obtenerTipo(e.tipo);
     const alInicio = clienteAlInicio(t);
-    const activa: PestanaExp = pestana ?? (modelo ? 'partes' : 'modelo');
+    const activa: PestanaExp = pestana ?? 'partes';
     const enTrabajo = (p: PestanaExp) => p === 'partes' || p === 'datos';
 
     /** Cambiar de pestaña: entre Partes y Datos no se pierde nada; al salir de ellas avisa si hay cambios sin guardar. */
@@ -144,8 +144,8 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                 activa={activa}
                 cambiar={(p) => void irA(p)}
                 items={[
-                    { id: 'modelo', etiqueta: '1 · Modelo' },
-                    { id: 'partes', etiqueta: '2 · Partes', contador: partes.datos?.length },
+                    { id: 'partes', etiqueta: '1 · Partes', contador: partes.datos?.length },
+                    { id: 'modelo', etiqueta: '2 · Modelo' },
                     { id: 'datos', etiqueta: '3 · Datos' },
                     { id: 'documentos', etiqueta: '4 · Documentos', contador: docs.datos?.length },
                 ]}
@@ -153,7 +153,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
 
             {activa === 'modelo' && (
                 <TabModelo e={e} modelos={modelos.datos ?? []} actual={modelo} visible={visible} ficha={ficha}
-                    elegir={(m) => void elegirModelo(m.id)} siguiente={() => void irA('partes')} />
+                    elegir={(m) => void elegirModelo(m.id)} siguiente={() => void irA('datos')} />
             )}
 
             {(activa === 'partes' || activa === 'datos') && (
@@ -236,7 +236,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
                     <div>
                         <h3>¿Con qué modelo vas a trabajar?</h3>
                         <p className="suave">
-                            Según el modelo se arma el formulario de partes y datos. Puedes cambiarlo cuando quieras: lo ya escrito no se pierde.
+                            Según el modelo se arma el formulario de datos. Las partes ya registradas no se pierden al cambiarlo.
                         </p>
                     </div>
                 </div>
@@ -300,7 +300,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
                                 ))}
                             </>
                         )}
-                        <div><button type="button" className="btn btn-pri" onClick={siguiente}>Siguiente: registrar las partes</button></div>
+                        <div><button type="button" className="btn btn-pri" onClick={siguiente}>Siguiente: llenar los datos</button></div>
                     </div>
                 </div>
             )}

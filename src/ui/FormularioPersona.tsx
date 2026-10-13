@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type { DatosPersona } from '../application/casosDeUso/crearPersona';
 import type { PersonaResumen } from '../application/consultas';
-import { escribirGeneralesDeLey, leerGeneralesDeLey } from '../domain/generalesDeLey';
 import { claveNormalizada, etiquetaRol } from '../domain/texto';
-import { Alerta, Aviso, Campo, Modal, Segmentado, avisar, copiarTexto, datosDeForm, fechaHora } from './comunes';
+import { Alerta, Aviso, Campo, Modal, Segmentado, confirmar, datosDeForm, fechaHora } from './comunes';
 import { borrarBorrador, guardarBorrador, leerBorrador } from './borradores';
 import { mensajeError, useCargar, useServicios } from './servicios';
 
@@ -43,8 +42,6 @@ function FormPersona({ id, uso, inicial, personas, cerrar, guardado }: {
     const [tipo, setTipo] = useState<TipoPersona>(inicial?.tipo ?? 'natural');
     const [error, setError] = useState<string | null>(null);
     const [trabajando, setTrabajando] = useState(false);
-    const [pegado, setPegado] = useState('');
-    const [nota, setNota] = useState<string | null>(null);
     // Borrador de la ficha nueva (al editar una existente no se usa).
     const claveBorrador = id ? null : `persona:${uso}`;
     const [pendiente, setPendiente] = useState(() => (claveBorrador ? leerBorrador<BorradorPersona>(claveBorrador) : null));
@@ -89,41 +86,22 @@ function FormPersona({ id, uso, inicial, personas, cerrar, guardado }: {
     const estados = estadoBase && !ESTADOS_CIVILES.includes(estadoBase) ? [...ESTADOS_CIVILES, estadoBase] : ESTADOS_CIVILES;
     const naturales = personas.filter((p) => p.tipo === 'natural' && p.id !== id);
 
-    /** Las generales de ley que el abogado ya tiene en Word → se rellena la ficha (se revisa antes de guardar). */
-    function rellenar() {
-        const form = formRef.current;
-        if (!form) return;
-        const hallados = Object.entries(leerGeneralesDeLey(pegado)).filter(([, x]) => typeof x === 'string' && x !== '');
-        if (hallados.length === 0) {
-            setNota('No reconocí datos en ese texto. Prueba con: nombre, C.I. y expedido, estado civil, profesión y domicilio.');
-            return;
-        }
-        for (const [k, x] of hallados) {
-            const el = form.elements.namedItem(k);
-            if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) el.value = x as string;
-        }
-        setNota(`Se rellenaron ${hallados.length} campos. Revisa nombres y apellidos antes de guardar.`);
-    }
-
-    /** La ficha → una línea de generales de ley lista para pegar en Word. */
-    async function copiarGenerales() {
-        const form = formRef.current;
-        if (!form) return;
-        const texto = escribirGeneralesDeLey({ ...datosDeForm(form), tipo });
-        if (!texto) {
-            avisar('Escribe al menos el nombre para armar las generales de ley', 'info');
-            return;
-        }
-        const ok = await copiarTexto(texto);
-        avisar(ok ? 'Generales de ley copiadas: pégalas en Word' : 'No se pudo copiar', ok ? 'ok' : 'error');
-    }
-
     async function enviar(ev: FormEvent<HTMLFormElement>) {
         ev.preventDefault();
         window.clearTimeout(timer.current);
         const f = datosDeForm(ev.currentTarget);
         setTrabajando(true);
         try {
+            // Mismo C.I. / NIT que otra ficha: se avisa antes de crear un duplicado.
+            const dup = await s.consultas.buscarPorDocumento(
+                { ciNumero: f.ciNumero, ciComplemento: f.ciComplemento, nit: f.nit },
+                id ?? '',
+            );
+            if (dup && !(await confirmar(
+                `«${dup.nombre}» ya está registrada con ese documento. ¿Guardar de todos modos?`,
+                'Documento repetido',
+            ))) return;
+
             const datos = { ...f, tipo } as unknown as DatosPersona;
             let personaId: string;
             if (id) {
@@ -148,10 +126,6 @@ function FormPersona({ id, uso, inicial, personas, cerrar, guardado }: {
             cerrar={cerrar}
             pie={
                 <>
-                    <button type="button" className="btn btn-fan" onClick={() => void copiarGenerales()}
-                        title="Copia las generales de ley armadas con estos datos, listas para pegar en Word">
-                        Copiar generales de ley
-                    </button>
                     <span className="espacio" />
                     <button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button>
                     <button type="submit" form="form-persona" className="btn btn-pri" disabled={trabajando}>
@@ -180,27 +154,6 @@ function FormPersona({ id, uso, inicial, personas, cerrar, guardado }: {
                         opciones={[{ id: 'natural', etiqueta: 'Persona natural' }, { id: 'juridica', etiqueta: 'Persona jurídica' }]}
                     />
                 </div>
-
-                {tipo === 'natural' && (
-                    <div className="ancho">
-                        <details>
-                            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>¿Ya tienes las generales de ley en Word? Pégalas aquí</summary>
-                            <div className="cb-edicion">
-                                <textarea
-                                    value={pegado}
-                                    onChange={(e) => setPegado(e.target.value)}
-                                    placeholder="Ej.: Juan Carlos Pérez Gómez, mayor de edad, boliviano, casado, comerciante, con C.I. 1234567 LP, domiciliado en la calle Sucre N° 123, La Paz"
-                                />
-                                <div className="pc-acciones">
-                                    <button type="button" className="btn btn-sec btn-sm" disabled={!pegado.trim()} onClick={rellenar}>
-                                        Rellenar la ficha
-                                    </button>
-                                </div>
-                                {nota && <p className="pc-nota">{nota}</p>}
-                            </div>
-                        </details>
-                    </div>
-                )}
 
                 {/* Los campos del tipo no activo quedan deshabilitados: no se validan ni se envían, pero conservan lo escrito. */}
                 <fieldset disabled={tipo !== 'natural'} hidden={tipo !== 'natural'} style={SIN_CAJA}>

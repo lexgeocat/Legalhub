@@ -4,7 +4,7 @@ import type { ModeloVisible } from '../application/casosDeUso/administrarModelos
 import { validarPersona, type DatosPersona } from '../application/casosDeUso/crearPersona';
 import { limpiarDatos } from '../application/casosDeUso/gestionExpediente';
 import type { ExpedienteResumen, ModeloResumen, ParteResumen, PersonaResumen } from '../application/consultas';
-import { mismoRol } from '../domain/catalogo';
+import { mismoRol, rolDesdeTexto } from '../domain/catalogo';
 import { FILTROS, ci as cedula } from '../domain/filtros';
 import { bloquesATexto, type FuenteModelo } from '../domain/fuenteModelo';
 import { partirNombre } from '../domain/generalesDeLey';
@@ -80,6 +80,11 @@ const FICHA: Record<string, { campos: string[]; principal?: string }> = {
 };
 const ALIAS_DOC: Record<string, string> = { nombre_completo: 'nombre', ci_datos: 'ci' };
 const FICHA_DOC = new Set([...Object.keys(FICHA), ...Object.keys(ALIAS_DOC)]);
+const FICHA_VACIA: FichaModelo = { roles: [], caso: [], datosParte: [], fichaParte: [] };
+/** Datos que identifican a la persona: al escribirlos se ofrece elegir su género. */
+const CLAVES_NOMBRE = new Set(['nombre', 'nombres', 'apellido_paterno', 'apellido_materno', 'razon_social']);
+/** Nombres que el sistema ya usa: no valen como rol de una parte. */
+const RESERVADOS = new Set(['cliente', 'abogado', 'caso', 'expediente', 'hoy', 'partes', 'inmuebles', 'sin_parte']);
 
 /* ================= Utilidades ================= */
 const sinValor = (v: string | undefined) => !v || v.trim() === '';
@@ -457,6 +462,7 @@ export function DatosExpediente({
     const [guardando, setGuardando] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const [fichaDe, setFichaDe] = useState<string | null>(null);
+    const [rolNuevo, setRolNuevo] = useState('');
 
     const alInicio = clienteAlInicio(obtenerTipo(e.tipo));
 
@@ -475,7 +481,7 @@ export function DatosExpediente({
     // Las partes se leen de la base; por cada rol del modelo hay siempre una fila lista para llenar.
     const firmaPartes = JSON.stringify(partes.map((x) => [x.id, x.personaId, x.rol, x.datos]));
     useEffect(() => {
-        if (!ficha) return;
+        if (modelo && !ficha) return;
         let vivo = true;
         (async () => {
             const cargadas: FilaParte[] = [];
@@ -486,9 +492,9 @@ export function DatosExpediente({
                     p, d: { ...x.datos }, orig: JSON.stringify(p),
                 });
             }
-            for (const r of ficha.roles) if (!cargadas.some((f) => mismoRol(f.rol, r))) cargadas.push(filaNueva(r));
+            for (const r of ficha?.roles ?? []) if (!cargadas.some((f) => mismoRol(f.rol, r))) cargadas.push(filaNueva(r));
             const orden = (rol: string) => {
-                const i = ficha.roles.findIndex((r) => mismoRol(r, rol));
+                const i = (ficha?.roles ?? []).findIndex((r) => mismoRol(r, rol));
                 return i < 0 ? 999 : i;
             };
             cargadas.sort((a, b) => orden(a.rol) - orden(b.rol));
@@ -503,7 +509,7 @@ export function DatosExpediente({
         });
         return () => { vivo = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [firmaPartes, ficha]);
+    }, [firmaPartes, ficha, modelo?.id]);
 
     // Borrador: se guarda solo mientras haya cambios sin guardar y se ofrece al volver.
     const claveBorrador = `datos:${e.id}`;
@@ -633,8 +639,21 @@ export function DatosExpediente({
                 const datos = aDatosPersona(f);
                 let personaId = f.personaId;
                 if (!personaId) {
-                    personaId = await s.crearPersona.ejecutar(datos);
-                    fijar(f.id, { personaId, orig: JSON.stringify(f.p) });
+                    // Si el C.I. / NIT ya está registrado se ofrece reutilizar esa ficha (evita duplicados).
+                    const dup = await s.consultas.buscarPorDocumento({
+                        ciNumero: f.p.ciNumero, ciComplemento: f.p.ciComplemento, nit: f.p.nit,
+                    });
+                    if (dup && (await confirmar(
+                        `«${dup.nombre}» ya está registrada con ese documento. ¿Usar esa persona en lugar de crear otra?`,
+                        'Persona ya registrada',
+                    ))) {
+                        personaId = dup.id;
+                        const existente = aCampos(await s.consultas.obtenerPersona(dup.id));
+                        fijar(f.id, { personaId, p: existente, nombreLibre: undefined, orig: JSON.stringify(existente) });
+                    } else {
+                        personaId = await s.crearPersona.ejecutar(datos);
+                        fijar(f.id, { personaId, orig: JSON.stringify(f.p) });
+                    }
                 } else if (JSON.stringify(f.p) !== f.orig) {
                     await s.actualizarPersona.ejecutar(personaId, datos);
                     fijar(f.id, { orig: JSON.stringify(f.p) });
@@ -653,6 +672,7 @@ export function DatosExpediente({
             await s.actualizarExpediente.ejecutar(e.id, { datos: valores });
             setErr(null);
             setSucio(false);
+            onSucio(false);
             borrarBorrador(claveBorrador);
             setBorrador(null);
             recargar();
@@ -694,38 +714,54 @@ export function DatosExpediente({
     }
 
     /* ----- estados de pantalla ----- */
-    if (!modelo) {
+    if (pestana === 'datos' && !modelo) {
         return (
             <Alerta tipo="adv">
-                Primero elige el modelo: según él se arma la lista de partes y el formulario de datos.{' '}
+                Elige primero el modelo: según él se arma el formulario de datos.{' '}
                 <button type="button" className="btn btn-enlace" onClick={irModelo}>Elegir modelo</button>
             </Alerta>
         );
     }
-    if (!ficha || !visible || !filas) return <p className="suave">Cargando el modelo…</p>;
+    // Las partes se registran sin modelo; con modelo elegido se espera a que cargue lo que pide.
+    if (!filas || (modelo && (!ficha || !visible))) return <p className="suave">Cargando…</p>;
+    const fichaEf = ficha ?? FICHA_VACIA;
 
     const registradas = (rol: string) => filas.filter((f) => mismoRol(f.rol, rol) && !vacia(f));
 
     // «Partes»: ¿quién falta registrar?
-    const resumen = ficha.roles.map((rol) => {
+    const resumen = roles.map((rol) => {
         const reg = registradas(rol);
         return { rol, registradas: reg.length, falta: reg.length === 0 ? 1 : reg.filter(faltaIdentidad).length };
     });
     const sinRegistrar = resumen.filter((r) => r.registradas === 0).map((r) => r.rol);
-    const clienteSinParte = !!e.clienteId && ficha.roles.length > 0 && !filas.some((f) => f.personaId === e.clienteId);
+    const clienteSinParte = !!e.clienteId && roles.length > 0 && !filas.some((f) => f.personaId === e.clienteId);
+    const rolesSugeridos = obtenerTipo(e.tipo).roles
+        .map(normalizarRol)
+        .filter((r) => !roles.some((x) => mismoRol(x, r)));
+
+    const agregarRol = (texto: string) => {
+        const rol = rolDesdeTexto(texto);
+        if (!rol) return;
+        if (RESERVADOS.has(rol)) {
+            avisar(`«${etiquetaRol(rol)}» es un nombre reservado del sistema. Usa otro rol.`, 'error');
+            return;
+        }
+        if (!roles.some((r) => mismoRol(r, rol))) setFilas((l) => [...(l ?? []), filaNueva(rol)]);
+        setRolNuevo('');
+    };
 
     // «Datos»: categorías del modelo con lo que pide de cada parte y del caso
     const categorias = secciones
         .map((sec) => ({
             sec,
             partes: roles
-                .map((rol) => ({ rol, ...camposDe(sec, rol, ficha) }))
+                .map((rol) => ({ rol, ...camposDe(sec, rol, fichaEf) }))
                 .filter((x) => x.campos.length + x.propios.length > 0),
         }))
         .filter((c) => c.sec.caso.length > 0 || c.partes.length > 0);
     const hayDatos = categorias.length > 0;
-    const faltanCaso = ficha.caso.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
-    const faltanPartes = filas.filter((f) => !vacia(f)).reduce((a, f) => a + faltantesCampos(f, ficha), 0);
+    const faltanCaso = fichaEf.caso.filter((c) => c.requerido && sinValor(valores[c.clave])).length;
+    const faltanPartes = filas.filter((f) => !vacia(f)).reduce((a, f) => a + faltantesCampos(f, fichaEf), 0);
 
     const acc: Acciones = {
         elegir: (id, personaId) => void elegirPersona(id, personaId),
@@ -754,7 +790,7 @@ export function DatosExpediente({
     const llenado: LlenadoVentana = {
         sucio,
         guardando,
-        soloLectura: !visible.editable,
+        soloLectura: !visible?.editable,
         guardarDatos: () => guardar(),
         valor: (m, amb) => {
             const x = resolver(m, amb);
@@ -786,13 +822,32 @@ export function DatosExpediente({
             if (x.tipo === 'caso') poner(x.c.clave, valor);
             else editarPrimera(x.r.rol, (f) => conValorParte(x.r, f, valor));
         },
+        /** Al escribir el nombre de una parte se elige también su género (Alt+M / Alt+F). */
+        selector: (m, amb) => {
+            const x = resolver(m, amb);
+            if (!x || x.tipo !== 'parte' || x.r.propio || !CLAVES_NOMBRE.has(x.r.clave)) return undefined;
+            const juridica = x.f.p.tipo === 'juridica';
+            const campo = juridica ? 'generoGramatical' : 'genero';
+            return {
+                titulo: juridica ? 'Género gramatical' : 'Género',
+                valor: x.f.p[campo] ?? '',
+                opciones: juridica
+                    ? [{ valor: 'M', etiqueta: 'Masculino (el)', tecla: 'm' }, { valor: 'F', etiqueta: 'Femenino (la)', tecla: 'f' }]
+                    : [{ valor: 'M', etiqueta: 'Masculino', tecla: 'm' }, { valor: 'F', etiqueta: 'Femenino', tecla: 'f' }],
+                cambiar: (v) => editarPrimera(x.r.rol, (f) => ({ ...f, p: { ...f.p, [campo]: v } })),
+            };
+        },
     };
 
-    const haciaDatos = pestana === 'partes' && hayDatos;
+    // Partes → Datos comparten estado (no hace falta guardar). Cualquier otro salto guarda primero.
+    const salta = pestana === 'partes' && !!modelo && hayDatos;
+    const destino = pestana === 'partes' ? (!modelo ? irModelo : hayDatos ? irDatos : irDocumento) : irDocumento;
+    const textoSiguiente = pestana === 'partes'
+        ? (!modelo ? 'Siguiente: elegir el modelo' : hayDatos ? 'Siguiente: llenar los datos' : 'Siguiente: vista previa y edición')
+        : sucio ? 'Guardar y ver vista previa' : 'Siguiente: vista previa y edición';
     const siguiente = () => {
-        if (haciaDatos) irDatos(); // entre Partes y Datos no se pierde nada: comparten estado
-        else if (sucio) void guardar(irDocumento);
-        else irDocumento();
+        if (sucio && !salta) void guardar(destino);
+        else destino();
     };
 
     return (
@@ -815,8 +870,8 @@ export function DatosExpediente({
                             <div>
                                 <h3>Partes del expediente</h3>
                                 <p className="suave">
-                                    Quién interviene según «{modelo.nombre}». Busca una persona ya registrada y se autocompleta, o escribe su nombre y género.
-                                    Los demás datos (C.I., domicilio…) se llenan en «Datos».
+                                    Quién interviene{modelo ? <> según «{modelo.nombre}»</> : ' en este expediente'}. Busca una persona ya registrada
+                                    y se autocompleta, o escribe su nombre y género. Los demás datos (C.I., domicilio…) se llenan en «Datos».
                                 </p>
                             </div>
                         </div>
@@ -832,10 +887,14 @@ export function DatosExpediente({
                         </div>
                     </div>
 
-                    {ficha.roles.length === 0 && (
-                        <Alerta tipo="info">Este modelo no usa partes: todo sale de los datos del caso.</Alerta>
+                    {roles.length === 0 && (
+                        <Alerta tipo="info">
+                            {modelo
+                                ? 'Este modelo no usa partes: todo sale de los datos del caso. Si necesitas una, agrégala abajo.'
+                                : 'Empieza eligiendo quién interviene (abajo). El modelo se elige en el siguiente paso.'}
+                        </Alerta>
                     )}
-                    {!e.clienteId && !alInicio && ficha.roles.length > 0 && (
+                    {!e.clienteId && !alInicio && roles.length > 0 && (
                         <Alerta tipo="info">
                             Este expediente aún no tiene cliente. Cuando registres a las partes, marca con «Es mi cliente» a quien te contrata.
                         </Alerta>
@@ -845,7 +904,7 @@ export function DatosExpediente({
                             <div>
                                 El cliente <b>{e.clienteNombre}</b> aún no figura entre las partes. Regístralo como:
                                 <div className="chips" style={{ marginTop: 6 }}>
-                                    {ficha.roles.map((r) => (
+                                    {roles.map((r) => (
                                         <button key={r} type="button" className="chip" onClick={() => void usarCliente(r)}>
                                             + {etiquetaRol(r)}
                                         </button>
@@ -877,6 +936,31 @@ export function DatosExpediente({
                             </div>
                         );
                     })}
+
+                    <div className="tarjeta">
+                        <div className="tarjeta-cab">
+                            <div>
+                                <h3>Agregar una parte</h3>
+                                <p className="suave">
+                                    {modelo
+                                        ? 'Si el documento necesita otro rol, agrégalo aquí.'
+                                        : 'Aún no hay modelo: elige los roles que intervienen según el tipo de expediente.'}
+                                </p>
+                            </div>
+                        </div>
+                        {rolesSugeridos.length > 0 && (
+                            <div className="chips">
+                                {rolesSugeridos.map((r) => (
+                                    <button key={r} type="button" className="chip" onClick={() => agregarRol(r)}>+ {etiquetaRol(r)}</button>
+                                ))}
+                            </div>
+                        )}
+                        <form className="acciones" onSubmit={(ev) => { ev.preventDefault(); agregarRol(rolNuevo); }}>
+                            <input value={rolNuevo} placeholder="Otro rol: testigo, fiador…" style={{ maxWidth: 260 }}
+                                onChange={(ev) => setRolNuevo(ev.target.value)} />
+                            <button type="submit" className="btn btn-sec btn-sm" disabled={!rolNuevo.trim()}>Agregar</button>
+                        </form>
+                    </div>
                 </>
             ) : (
                 <>
@@ -885,7 +969,7 @@ export function DatosExpediente({
                             <div>
                                 <h3>Datos del expediente</h3>
                                 <p className="suave">
-                                    Los que pide «{modelo.nombre}», ordenados por categoría. Llénalos en un formulario o escribe directo sobre el documento.
+                                    Los que pide «{modelo?.nombre}», ordenados por categoría. Llénalos en un formulario o escribe directo sobre el documento.
                                 </p>
                             </div>
                             <button type="button" className="btn btn-pri" onClick={() => setEditor(true)}>
@@ -950,7 +1034,7 @@ export function DatosExpediente({
                         </div>
                     ))}
 
-                    <OtrosDatos conocidos={ficha.caso.map((c) => c.clave)} valores={valores} cambiar={poner} />
+                    <OtrosDatos conocidos={fichaEf.caso.map((c) => c.clave)} valores={valores} cambiar={poner} />
                 </>
             )}
 
@@ -965,7 +1049,7 @@ export function DatosExpediente({
                     <button type="button" className="btn btn-fan" onClick={irPartes}>← Partes</button>
                 )}
                 <button type="button" className="btn btn-sec" disabled={guardando} onClick={siguiente}>
-                    {haciaDatos ? 'Siguiente: llenar los datos' : sucio ? 'Guardar y ver vista previa' : 'Siguiente: vista previa y edición'}
+                    {textoSiguiente}
                 </button>
             </div>
 
@@ -985,7 +1069,7 @@ export function DatosExpediente({
                     }}
                 />
             )}
-            {editor && (
+            {editor && modelo && visible && (
                 <EditorModeloVentana
                     modeloId={modelo.id}
                     inicial={{

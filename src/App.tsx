@@ -9,12 +9,14 @@ import { Expedientes } from './ui/paginas/Expedientes';
 import { Modelos } from './ui/paginas/Modelos';
 import { PanelClientes } from './ui/PanelClientes';
 import { useCargar, useServicios } from './ui/servicios';
+import { Personas } from './ui/paginas/Personas';
 
-type Item = 'expedientes' | 'modelos' | 'config';
+type Item = 'expedientes' | 'personas' | 'modelos' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
 
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'expedientes', etiqueta: 'Expedientes', icono: 'carpeta' },
+  { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
   { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
 ];
@@ -95,6 +97,7 @@ export default function App() {
         {vista.n === 'expediente' && (
           <Expediente key={vista.id} id={vista.id} volver={() => void navegar({ n: 'expedientes' })} />
         )}
+        {vista.n === 'personas' && <Personas abrirExpediente={(id) => void navegar({ n: 'expediente', id })} />}
         {vista.n === 'modelos' && <Modelos />}
         {vista.n === 'config' && <Configuracion />}
       </main>

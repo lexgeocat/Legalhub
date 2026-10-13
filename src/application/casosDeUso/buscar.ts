@@ -10,7 +10,8 @@ export interface ResultadoBusqueda {
 }
 
 const t = (v: unknown) => (v == null ? '' : String(v));
-const tokens = (q: string) => q.split(/\s+/).map((x) => x.replace(/["']/g, '')).filter(Boolean);
+const tokens = (q: string) =>
+    q.split(/\s+/).map((x) => x.replace(/["']/g, '')).filter((x) => /[\p{L}\p{N}]/u.test(x));
 
 export class Buscar {
     constructor(private readonly db: DbPuerto) { }

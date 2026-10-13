@@ -1024,3 +1024,47 @@
     font-style: italic;
     pointer-events: none;
 }
+
+/* ===== Selector junto al dato que se edita (género al escribir el nombre) ===== */
+.mk-selector {
+    position: fixed;
+    z-index: 75;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: #1b2340;
+    color: #fff;
+    border-radius: 9px;
+    box-shadow: var(--sombra-lg);
+    font: 12px/1.2 "Segoe UI", system-ui, sans-serif;
+}
+
+.mk-selector.falta {
+    outline: 2px solid #f5b942;
+}
+
+.mk-selector>span {
+    color: #c9d4ff;
+    font-weight: 600;
+    margin-right: 2px;
+}
+
+.mk-selector button {
+    border: 1px solid rgba(255, 255, 255, .28);
+    background: transparent;
+    color: #fff;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.mk-selector button:hover {
+    background: rgba(255, 255, 255, .14);
+}
+
+.mk-selector button.on {
+    background: #6f8cff;
+    border-color: #6f8cff;
+}

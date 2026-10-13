@@ -92,6 +92,20 @@ export interface EdicionDirecta {
     pista?: string;
 }
 
+/** Selector que aparece junto al dato mientras se edita (p. ej. el género al escribir el nombre). */
+export interface SelectorEdicion {
+    titulo: string;
+    /** Valor actual ('' = sin elegir). */
+    valor: string;
+    opciones: { valor: string; etiqueta: string; tecla?: string }[];
+    cambiar(valor: string): void;
+}
+interface SelectorVisible extends SelectorEdicion {
+    izq: number;
+    arriba: number;
+    elegir: (valor: string) => void;
+}
+
 /** Modo «llenar»: cada campo muestra el dato real del expediente y al hacer clic su propio texto se vuelve editable. */
 export interface LlenadoHoja {
     /** Texto del dato: '' = falta, undefined = este campo no se llena aquí (queda como etiqueta). */
@@ -100,6 +114,8 @@ export interface LlenadoHoja {
     crudo?(marcador: string, ambito: string[]): EdicionDirecta | undefined;
     /** Recibe el texto escrito al confirmar. */
     guardar?(marcador: string, ambito: readonly string[], valor: string): void;
+    /** Selector que se muestra junto al dato mientras se edita. */
+    selector?(marcador: string, ambito: string[]): SelectorEdicion | undefined;
     /** Solo muestra valores de ejemplo: no se editan y los campos se siguen pudiendo editar como código. */
     soloVista?: boolean;
 }
@@ -1387,6 +1403,7 @@ export function HojaEditable({
     const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo }); const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void } | null>(null);
     const [tip, setTip] = useState<Tip | null>(null);
     const chipTip = useRef<HTMLElement | null>(null);
+    const [selector, setSelector] = useState<SelectorVisible | null>(null);
 
     function ocultarTip() {
         chipTip.current = null;
@@ -2205,6 +2222,20 @@ export function HojaEditable({
             etiqueta.contentEditable = 'true';
         }
 
+        const sel = ll.selector?.(marcador, ambito);
+        const ubicar = () => {
+            const r = chip.getBoundingClientRect();
+            const abajo = r.bottom + 54 < window.innerHeight;
+            return {
+                izq: Math.max(8, Math.min(r.left, window.innerWidth - 340)),
+                arriba: abajo ? r.bottom + 6 : Math.max(8, r.top - 46),
+            };
+        };
+        const reubicar = () => setSelector((p) => (p ? { ...p, ...ubicar() } : p));
+        const elegir = (v: string) => {
+            sel?.cambiar(v);
+            setSelector((p) => (p ? { ...p, valor: v } : p));
+        };
         let cerrado = false;
         let raf = 0;
         const ac = new AbortController();
@@ -2215,6 +2246,7 @@ export function HojaEditable({
             cerrado = true;
             ac.abort();
             cancelAnimationFrame(raf);
+            setSelector(null);
             if (edicion.current?.chip === chip) edicion.current = null;
             if (CHIP_EDITANDO === chip) CHIP_EDITANDO = null;
 
@@ -2267,6 +2299,14 @@ export function HojaEditable({
             if (ev.isComposing || ev.keyCode === 229) return;
             const ctrl = ev.ctrlKey || ev.metaKey;
             const k = ev.key.toLowerCase();
+            if (sel && ev.altKey && !ctrl) {
+                const o = sel.opciones.find((x) => x.tecla === k);
+                if (o) {
+                    ev.preventDefault();
+                    elegir(o.valor);
+                    return;
+                }
+            }
             if (ev.key === 'Escape') {
                 ev.preventDefault();
                 cerrar(false, 'esc');
@@ -2286,13 +2326,13 @@ export function HojaEditable({
             }
         }, op);
 
-        etiqueta.addEventListener('beforeinput', (ev) => {
+        etiqueta.addEventListener('input', (ev) => {
             ev.stopPropagation();
-            const t = (ev as InputEvent).inputType;
-            if (!multilinea && (t === 'insertParagraph' || t === 'insertLineBreak')) {
-                ev.preventDefault();
-                cerrar(true, 'enter');
-            }
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+                pg.remedir(); // el texto crece: se vuelven a calcular las páginas
+                if (sel) reubicar();
+            });
         }, op);
 
         etiqueta.addEventListener('input', (ev) => {
@@ -2310,6 +2350,10 @@ export function HojaEditable({
         }, op);
 
         edicion.current = { chip, cerrar };
+        if (sel) {
+            setSelector({ ...sel, ...ubicar(), elegir });
+            window.addEventListener('scroll', reubicar, { signal: ac.signal, capture: true });
+        }
 
         // Cursor: donde se hizo clic (si el texto no cambió) o todo seleccionado para reemplazar de una vez.
         etiqueta.focus({ preventScroll: true });
@@ -2452,6 +2496,29 @@ export function HojaEditable({
                     {tip.detalle && <span>{tip.detalle}</span>}
                     {tip.ejemplo && <span className="mk-ej">Ej.: {tip.ejemplo}</span>}
                     {tip.ayuda && <em>{tip.ayuda}</em>}
+                </div>
+            )}
+            {selector && (
+                <div
+                    className={`mk-selector${selector.valor === '' ? ' falta' : ''}`}
+                    role="group"
+                    aria-label={selector.titulo}
+                    style={{ left: selector.izq, top: selector.arriba }}
+                    onMouseDown={(e) => e.preventDefault()}
+                >
+                    <span>{selector.titulo}</span>
+                    {selector.opciones.map((o) => (
+                        <button
+                            key={o.valor}
+                            type="button"
+                            className={o.valor === selector.valor ? 'on' : ''}
+                            aria-pressed={o.valor === selector.valor}
+                            title={o.tecla ? `Alt+${o.tecla.toUpperCase()}` : undefined}
+                            onClick={() => selector.elegir(o.valor)}
+                        >
+                            {o.etiqueta}
+                        </button>
+                    ))}
                 </div>
             )}
         </div>
