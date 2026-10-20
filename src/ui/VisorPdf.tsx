@@ -51,13 +51,11 @@ const PaginaPdf = memo(function PaginaPdf({ doc, numero, escala, ancho, alto, iz
             lienzo.height = Math.floor(vp.height * dpr);
             lienzo.style.width = `${vp.width}px`;
             lienzo.style.height = `${vp.height}px`;
-            const ctx = lienzo.getContext('2d');
-            if (!ctx) return;
             const txt = document.createElement('div');
             txt.className = 'textLayer';
 
             est.tarea = pagina.render({
-                canvasContext: ctx,
+                canvas: lienzo,
                 viewport: vp,
                 transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0],
             });
@@ -106,7 +104,7 @@ export function VisorPdf({ ref, datos, paginaInicial = 1, onPagina }: {
     /* ----- carga: abre el PDF y mide todas las hojas (para que el scroll sea exacto) ----- */
     useEffect(() => {
         let vivo = true;
-        const tarea = getDocument({ data: datos.slice(), isEvalSupported: false });
+        const tarea = getDocument({ data: datos.slice() });
         tarea.promise
             .then(async (d) => {
                 const medidas: Tam[] = [];

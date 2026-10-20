@@ -1,8 +1,10 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { bloquesATexto, type Bloque, type ConfigPagina } from '../domain/fuenteModelo';
+import { Tb } from './BarraFormato';
 import { Alerta, Icono, Insignia, confirmar } from './comunes';
 import { EditorHoja } from './EditorHoja';
 import type { ControlHoja } from './HojaEditable';
+import { PanelLeyes } from './PanelLeyes';
 
 /** Edita un documento ya completado con el mismo editor del modelo, a pantalla completa y sin campos. */
 export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar, descartar }: {
@@ -17,6 +19,7 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
     const [textoInicial] = useState(() => bloquesATexto(bloques));
     const [config, setConfig] = useState<ConfigPagina>(configInicial);
     const [modificado, setModificado] = useState(false);
+    const [leyes, setLeyes] = useState(false);
 
     async function salir() {
         if (modificado && !(await confirmar('Hay cambios sin aplicar. ¿Descartarlos?', 'Descartar cambios'))) return;
@@ -45,7 +48,13 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                 config={config}
                 onConfig={(c) => { setConfig(c); setModificado(true); }}
                 onCambio={() => setModificado(true)}
-                ayuda="Ctrl+N negrita · Ctrl+K cursiva · Ctrl+S subrayado · arrastra los márgenes en la regla"
+                barra={
+                    <Tb titulo="Buscar y citar un artículo de una ley en el cursor" activo={leyes} onClick={() => setLeyes((v) => !v)}>
+                        Leyes
+                    </Tb>
+                }
+                panel={leyes ? <PanelLeyes onInsertar={(t, b) => hoja.current?.insertar(t, b)} /> : undefined}
+                ayuda="Ctrl+N negrita · Ctrl+K cursiva · Ctrl+S subrayado · arrastra los márgenes en la regla · «Leyes»: cita un artículo"
             />
         </div>
     );

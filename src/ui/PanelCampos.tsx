@@ -14,8 +14,9 @@ import { matizDePersona } from '../domain/marcadores';
 import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../domain/texto';
 import { Campo, Icono, Segmentado, confirmar } from './comunes';
 import { fecha, fechalarga, hoyISO } from '../domain/filtros/fecha';
+import { BuscadorLeyes } from './PanelLeyes';
 
-type Pestana = 'datos' | 'partes' | 'genero';
+type Pestana = 'datos' | 'partes' | 'genero' | 'leyes';
 type Insertar = (texto: string, bloque: boolean) => void;
 type Alcance = 'parte' | 'caso';
 type Modo = null | 'agregar' | 'nombre' | { t: 'caso' | 'parte'; i: number };
@@ -938,13 +939,14 @@ export function PanelCampos({
         { id: 'datos', etiqueta: `Datos${nDatos ? ` (${nDatos})` : ''}` },
         { id: 'partes', etiqueta: `Partes${partes.length ? ` (${partes.length})` : ''}` },
         { id: 'genero', etiqueta: 'Género' },
+        { id: 'leyes', etiqueta: 'Leyes' },
     ];
 
     return (
         <div className="pc">
             <div className="pc-cab">
                 <h3>Campos del documento</h3>
-                <div className="pc-tabs tres" role="tablist" aria-label="Constructor de campos">
+                <div className="pc-tabs" role="tablist" aria-label="Constructor de campos">
                     {items.map((i) => (
                         <button key={i.id} type="button" role="tab" aria-selected={i.id === pestana}
                             className={`pc-tab${i.id === pestana ? ' activa' : ''}`}
@@ -981,6 +983,7 @@ export function PanelCampos({
                         onAsignarPendientes={(r) => onAsignarPendientes?.(r)} />
                 )}
                 {pestana === 'genero' && <TabGenero lista={lista} quien={quien} onSel={setSel} onInsertar={onInsertar} />}
+                {pestana === 'leyes' && <BuscadorLeyes onInsertar={onInsertar} />}
             </div>
 
             <div className="pc-pie">

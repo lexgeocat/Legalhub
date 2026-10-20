@@ -175,9 +175,9 @@ export class Leyes {
     }
 
     /**
-     * Crea o edita un marcador. Uno nuevo se coloca por su página: las divisiones (libro, título…) al INICIO
-     * de esa página y los artículos al FINAL de ella.
-     */
+ * Crea o edita un marcador. Se coloca por su página: las divisiones (libro, título…) al INICIO
+ * de esa página y los artículos al FINAL de ella. Si al editar cambia la página, se reubica.
+ */
     async guardarNodo(d: DatosNodo): Promise<string> {
         const { db } = this.dep;
         if (!NIVELES_LEY.includes(d.nivel)) throw new ErrorDeDatos('Nivel inválido');
@@ -187,29 +187,52 @@ export class Leyes {
         if (!numero && !titulo) throw new ErrorDeDatos('Indica el número o el título');
         const pagina = Math.max(1, Math.round(Number(d.pagina) || 1));
         const texto = d.texto.trim();
+        const valores = { nivel: d.nivel, numero, titulo, pagina, texto };
+
+        /** Posición que le toca según su página, sin contar el nodo `excluir` (el que se mueve). */
+        const lugar = async (excluir: string): Promise<number> => {
+            const [{ o }] = await db.consultar<{ o: number }>(
+                `SELECT COALESCE(MAX(orden), -1) + 1 AS o FROM ley_nodo
+                 WHERE ley_id = ?1 AND id <> ?2 AND pagina ${d.nivel === 'articulo' ? '<=' : '<'} ?3`,
+                [d.leyId, excluir, pagina],
+            );
+            return Number(o);
+        };
 
         if (d.id) {
-            await db.transaccion(
-                [actualizar('ley_nodo', d.id, { nivel: d.nivel, numero, titulo, pagina, texto })],
-                [{ accion: 'ley.nodo.editar', entidad: 'ley_nodo', entidadId: d.id }],
+            const [previo] = await db.consultar<{ pagina: number; orden: number }>(
+                'SELECT pagina, orden FROM ley_nodo WHERE id = ?1',
+                [d.id],
             );
+            if (!previo) throw new ErrorDeDatos('El marcador ya no existe');
+            const sentencias: Sentencia[] = [];
+            if (Number(previo.pagina) === pagina) {
+                sentencias.push(actualizar('ley_nodo', d.id, valores));
+            } else {
+                const viejo = Number(previo.orden);
+                const o = await lugar(d.id);
+                const nuevo = o > viejo ? o - 1 : o; // al cerrar el hueco, lo posterior baja un lugar
+                sentencias.push(
+                    { sql: 'UPDATE ley_nodo SET orden = orden - 1 WHERE ley_id = ?1 AND orden > ?2', params: [d.leyId, viejo] },
+                    { sql: 'UPDATE ley_nodo SET orden = orden + 1 WHERE ley_id = ?1 AND id <> ?3 AND orden >= ?2', params: [d.leyId, nuevo, d.id] },
+                    actualizar('ley_nodo', d.id, { ...valores, orden: nuevo }),
+                );
+            }
+            await db.transaccion(sentencias, [{ accion: 'ley.nodo.editar', entidad: 'ley_nodo', entidadId: d.id }]);
             return d.id;
         }
-        const [{ o }] = await db.consultar<{ o: number }>(
-            `SELECT COALESCE(MAX(orden), -1) + 1 AS o FROM ley_nodo WHERE ley_id = ?1 AND pagina ${d.nivel === 'articulo' ? '<=' : '<'} ?2`,
-            [d.leyId, pagina],
-        );
+
+        const o = await lugar('');
         const id = nuevoId();
         await db.transaccion(
             [
-                { sql: 'UPDATE ley_nodo SET orden = orden + 1 WHERE ley_id = ?1 AND orden >= ?2', params: [d.leyId, Number(o)] },
-                insertar('ley_nodo', { id, ley_id: d.leyId, nivel: d.nivel, numero, titulo, pagina, orden: Number(o), texto }),
+                { sql: 'UPDATE ley_nodo SET orden = orden + 1 WHERE ley_id = ?1 AND orden >= ?2', params: [d.leyId, o] },
+                insertar('ley_nodo', { id, ley_id: d.leyId, ...valores, orden: o }),
             ],
             [{ accion: 'ley.nodo.crear', entidad: 'ley_nodo', entidadId: id }],
         );
         return id;
     }
-
     async eliminarNodo(id: string): Promise<void> {
         await this.dep.db.transaccion(
             [{ sql: 'DELETE FROM ley_nodo WHERE id = ?1', params: [id] }],

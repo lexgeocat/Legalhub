@@ -34,7 +34,7 @@ export function agruparLineas(trozos: readonly Trozo[]): string[] {
 export class LectorPdfPdfjs implements LectorPdf {
     async extraerLineas(bytes: Uint8Array): Promise<string[][]> {
         // pdf.js se queda con el buffer: se le pasa una copia.
-        const tarea = getDocument({ data: bytes.slice(), isEvalSupported: false });
+        const tarea = getDocument({ data: bytes.slice() });
         let doc: PDFDocumentProxy;
         try {
             doc = await tarea.promise;

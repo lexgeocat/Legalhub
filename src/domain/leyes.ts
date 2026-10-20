@@ -263,3 +263,6 @@ export function aTextoDeModelo(texto: string): string {
         })
         .join('\n');
 }
+
+/** Cita lista para el editor: escapada y en un solo párrafo (los saltos de línea pasan a saltos suaves). */
+export const citaParaEditor = (texto: string): string => aTextoDeModelo(texto).replace(/\n/g, '\u2028');

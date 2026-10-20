@@ -28,6 +28,7 @@ const MIGRACIONES: &[(i64, &str)] = &[
     (8, include_str!("../migrations/008_expediente_modelo.sql")),
     (9, include_str!("../migrations/009_materias_categorias.sql")),
     (10, include_str!("../migrations/010_leyes.sql")),
+    (11, include_str!("../migrations/011_leyes_fts_trigger.sql")),
 ];
 
 pub struct EstadoDb {

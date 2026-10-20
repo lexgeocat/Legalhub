@@ -165,4 +165,8 @@ function ImportarLey({ cerrar, hecho }: { cerrar: () => void; hecho: (leyId: str
                         {TIPOS_LEY.map((x) => <option key={x} value={x}>{x}</option>)}
                     </select>
                 </Campo>
-                <Campo etiqueta="Norma"><input name="norma" placeholder="Ej.: Ley N° 439" />
+                <Campo etiqueta="Norma"><input name="norma" placeholder="Ej.: Ley N° 439" /></Campo>
+            </form>
+        </Modal>
+    );
+}

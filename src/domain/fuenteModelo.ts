@@ -165,8 +165,6 @@ export const margenesIguales = (a: Margenes, b: Margenes) =>
 export const presetDe = (m: Margenes, simetricos?: boolean) =>
     PRESETS_MARGENES.find((p) => margenesIguales(p.margenes, m) && (simetricos === undefined || p.simetricos === simetricos));
 
-export const esMemorial = (m: Margenes) => margenesIguales(m, MARGENES_MEMORIAL);
-
 const redondear = (n: number) => Math.round(n * 100) / 100;
 const bajar = (n: number) => Math.floor(n * 100) / 100;
 
@@ -282,13 +280,6 @@ const FILTRO_POR_TIPO: Partial<Record<TipoCampo, string>> = { moneda: ' | moneda
 
 export function marcadorDeCampo(c: CampoPropio): string {
     return `{{caso.${c.clave}${c.requerido ? '' : '?'}${FILTRO_POR_TIPO[c.tipo] ?? ''}}}`;
-}
-
-export function hacerOpcional(marcador: string): string {
-    return marcador.replace(
-        /^\{\{\s*([^|}#/?]+?)\s*(\||\}\})/,
-        (_m, ruta: string, sep: string) => `{{${ruta}?${sep === '|' ? ' |' : '}}'}`,
-    );
 }
 
 export type Alineacion = 'left' | 'center' | 'right' | 'both';

@@ -2335,12 +2335,6 @@ export function HojaEditable({
             });
         }, op);
 
-        etiqueta.addEventListener('input', (ev) => {
-            ev.stopPropagation();
-            cancelAnimationFrame(raf);
-            raf = requestAnimationFrame(() => pg.remedir()); // el texto crece: se vuelven a calcular las páginas
-        }, op);
-
         etiqueta.addEventListener('paste', (ev) => {
             ev.stopPropagation();
             ev.preventDefault();
