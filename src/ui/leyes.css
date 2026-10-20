@@ -1,0 +1,185 @@
+.ley-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+    gap: 14px;
+    height: calc(100vh - 230px);
+    min-height: 480px;
+}
+
+.ley-panel,
+.ley-centro {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    min-width: 0;
+}
+
+.ley-aqui {
+    min-height: 20px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ley-arbol {
+    flex: 1 1 0;
+    min-height: 140px;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 4px;
+}
+
+.ley-fila {
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    color: var(--texto);
+}
+
+.ley-fila:hover:not(.sel) {
+    background: var(--primario-claro);
+}
+
+.ley-fila.n-parte,
+.ley-fila.n-libro {
+    font-weight: 700;
+}
+
+.ley-fila.n-titulo,
+.ley-fila.n-capitulo {
+    font-weight: 650;
+}
+
+.ley-fila.n-articulo {
+    color: var(--texto-2);
+}
+
+.ley-fila.sel {
+    background: var(--primario);
+    color: #fff;
+}
+
+.ley-plegar {
+    flex: none;
+    width: 18px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.ley-nodo {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ley-txt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ley-pg {
+    flex: none;
+    font-size: 11px;
+    opacity: .65;
+}
+
+.ley-detalle {
+    flex: 0 1 auto;
+    max-height: 45%;
+    overflow: auto;
+}
+
+.ley-texto {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ley-visor-caja {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #dde1ea;
+}
+
+.ley-visor-barra {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--superficie);
+    border-bottom: 1px solid var(--borde);
+}
+
+.ley-pag {
+    width: 64px;
+    padding: 4px 6px;
+    text-align: center;
+}
+
+.ley-visor {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    position: relative;
+}
+
+.ley-pagina {
+    position: absolute;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .16), 0 6px 18px rgba(16, 24, 40, .14);
+}
+
+.ley-pagina canvas {
+    display: block;
+}
+
+.ley-pagina:empty::before {
+    content: attr(data-pagina);
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #b4bbcc;
+    font-size: 28px;
+}
+
+@media (max-width: 1100px) {
+    .ley-layout {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+    }
+
+    .ley-visor-caja {
+        height: 70vh;
+        flex: none;
+    }
+}

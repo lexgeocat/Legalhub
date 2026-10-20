@@ -19,6 +19,7 @@ const ICONOS = {
     atras: 'M19 12H5 M11 6l-6 6 6 6',
     alerta: 'M12 4l9 16H3z M12 10v4 M12 17h.01',
     balanza: 'M12 3v18 M6 21h12 M5 7h14 M5 7l-3 7a3 3 0 0 0 6 0z M19 7l-3 7a3 3 0 0 0 6 0z',
+    libro: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h11',
 } as const;
 
 export type NombreIcono = keyof typeof ICONOS;

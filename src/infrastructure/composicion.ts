@@ -30,6 +30,8 @@ import { MotorDocx } from './docx/motor/motor';
 import { FormatoPaqueteFflate } from './docx/paqueteModelo';
 import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
 import { Plantillas } from '../application/casosDeUso/plantillas';
+import { Leyes } from '../application/casosDeUso/leyes';
+import { LectorPdfPdfjs } from './pdf/lectorPdf';
 
 
 export interface Servicios {
@@ -65,6 +67,7 @@ export interface Servicios {
     eliminarDocumento: EliminarDocumento;
     eliminarExpediente: EliminarExpediente;
     eliminarModelo: EliminarModelo;
+    leyes: Leyes;
 }
 
 export async function crearServicios(): Promise<Servicios> {
@@ -111,5 +114,6 @@ export async function crearServicios(): Promise<Servicios> {
         eliminarDocumento: new EliminarDocumento(db),
         eliminarExpediente: new EliminarExpediente(db),
         eliminarModelo: new EliminarModelo(db),
+        leyes: new Leyes({ db, archivos, lector: new LectorPdfPdfjs() }),
     };
 }

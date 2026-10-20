@@ -9,7 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, State};
 use zip::write::SimpleFileOptions;
 
-const CARPETAS: [&str; 2] = ["Modelos", "Expedientes"];
+const CARPETAS: [&str; 3] = ["Modelos", "Expedientes", "Leyes"];
 const MAGIC_AGE: &[u8] = b"age-encryption.org/";
 
 #[derive(Serialize, Deserialize)]
