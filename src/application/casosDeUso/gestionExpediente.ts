@@ -1,6 +1,6 @@
-import { ErrorDeDatos } from '../../domain/errores';
-import { claveCampo } from '../../domain/texto';
-import { obtenerTipo } from '../../domain/tiposExpediente';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { claveCampo } from '../../domain/comun/texto';
+import { obtenerTipo } from '../../domain/expedientes/tiposExpediente';
 import type { DbPuerto } from '../puertos/db';
 import { actualizar } from '../sql';
 

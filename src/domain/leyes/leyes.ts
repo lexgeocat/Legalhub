@@ -1,4 +1,4 @@
-import { claveNormalizada } from './texto';
+import { claveNormalizada } from '../comun/texto';
 
 /* ================= Niveles y tipos ================= */
 export const NIVELES_LEY = ['parte', 'libro', 'titulo', 'capitulo', 'seccion', 'subseccion', 'articulo'] as const;

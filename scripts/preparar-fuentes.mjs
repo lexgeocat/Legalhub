@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
-const catalogo = JSON.parse(readFileSync(join(raiz, 'src/domain/fuentes.json'), 'utf8'));
+const catalogo = JSON.parse(readFileSync(join(raiz, 'src/domain/fuentes/fuentes.json'), 'utf8'));
 const salida = join(raiz, 'public', 'fuentes');
 
 rmSync(salida, { recursive: true, force: true });

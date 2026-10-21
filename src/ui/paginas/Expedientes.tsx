@@ -1,8 +1,8 @@
 ﻿import { useMemo, useState, type FormEvent } from 'react';
 import { esTextoLargo } from '../../application/camposModelo';
 import type { ExpedienteResumen, PersonaResumen } from '../../application/consultas';
-import { claveNormalizada } from '../../domain/texto';
-import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, clienteAlInicio, obtenerTipo } from '../../domain/tiposExpediente';
+import { claveNormalizada } from '../../domain/comun/texto';
+import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, clienteAlInicio, obtenerTipo } from '../../domain/expedientes/tiposExpediente';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Modal, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta,

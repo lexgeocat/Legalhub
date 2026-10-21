@@ -1,9 +1,9 @@
-import { ErrorDeDatos } from '../../domain/errores';
+import { ErrorDeDatos } from '../../domain/comun/errores';
 import {
     bloquesATexto, CONFIG_POR_DEFECTO, fuenteVacia, parsearTexto,
     type Bloque, type ConfigPagina, type FuenteModelo,
-} from '../../domain/fuenteModelo';
-import { PLANTILLAS_INICIALES } from '../../domain/plantillasIniciales';
+} from '../../domain/modelos/fuenteModelo';
+import { PLANTILLAS_INICIALES } from '../../domain/modelos/plantillasIniciales';
 import { camposDesdeEsquema } from '../camposModelo';
 import type { DbPuerto, Fila } from '../puertos/db';
 import type { LectorDocx, RepositorioModelos } from '../puertos/modelos';

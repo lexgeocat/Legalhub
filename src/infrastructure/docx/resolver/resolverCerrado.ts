@@ -1,6 +1,6 @@
 import { ScopeData, type ScopeDataArgs, type ScopeDataResolver, type TemplateContent, type TemplateData } from 'easy-template-x';
 import type { EntradaVerificacion } from '../../../application/puertos/motorPlantillas';
-import { ErrorDeDatos, FILTROS } from '../../../domain/filtros';
+import { ErrorDeDatos, FILTROS } from '../../../domain/modelos/filtros';
 import { claveNormalizada, mensaje, normalizarCaracteres, parsearToken } from '../gramatica';
 
 export interface OpcionesResolver {

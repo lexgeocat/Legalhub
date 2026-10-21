@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ErrorDeDatos } from '../../domain/errores';
-import { nuevoId } from '../../domain/id';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { nuevoId } from '../../domain/comun/id';
 import type { DbPuerto } from '../puertos/db';
 import { insertar } from '../sql';
 

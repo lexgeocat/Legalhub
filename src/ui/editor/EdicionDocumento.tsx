@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { bloquesATexto, type Bloque, type ConfigPagina } from '../../domain/fuenteModelo';
+import { bloquesATexto, type Bloque, type ConfigPagina } from '../../domain/modelos/fuenteModelo';
 import { Tb } from './BarraFormato';
 import { Alerta, Icono, Insignia, confirmar } from '../_core/comunes';
 import { EditorHoja } from './EditorHoja';

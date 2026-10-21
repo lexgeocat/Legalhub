@@ -1,6 +1,6 @@
-import { ErrorDeDatos } from './errores';
-import { nuevoId } from './id';
-import { claveNormalizada } from './texto';
+import { ErrorDeDatos } from '../comun/errores';
+import { nuevoId } from '../comun/id';
+import { claveNormalizada } from '../comun/texto';
 
 /* ================= Requisitos ================= */
 export const FORMATOS_REQUISITO = [

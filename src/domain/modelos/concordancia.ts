@@ -1,4 +1,4 @@
-import { aFemenino } from './personas';
+import { aFemenino } from '../personas/personas';
 
 export interface FormasConcordancia { sm: string; sf: string; pm: string; pf: string }
 

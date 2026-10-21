@@ -2,7 +2,7 @@
 import {
     AREA_MIN_CM, ESPACIO_MAX_PT, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES, presetDe,
     type ConfigPagina, type Margenes, type TamanoPagina,
-} from '../../domain/fuenteModelo';
+} from '../../domain/modelos/fuenteModelo';
 import { coma } from '../editor/BarraFormato';
 import { Aviso, Campo, Modal } from '../_core/comunes';
 

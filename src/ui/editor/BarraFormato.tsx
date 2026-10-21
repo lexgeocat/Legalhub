@@ -1,6 +1,6 @@
 ﻿import type { ReactNode, RefObject } from 'react';
-import { FUENTES_PAGINA, type Alineacion, type ConfigPagina } from '../../domain/fuenteModelo';
-import { GRUPOS_FUENTES, buscarFuente, pilaCss } from '../../domain/fuentes';
+import { FUENTES_PAGINA, type Alineacion, type ConfigPagina } from '../../domain/modelos/fuenteModelo';
+import { GRUPOS_FUENTES, buscarFuente, pilaCss } from '../../domain/fuentes/fuentes';
 import type { ControlHoja, FormatoActivo } from './HojaEditable';
 
 export const TAMANOS_LETRA = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 36];

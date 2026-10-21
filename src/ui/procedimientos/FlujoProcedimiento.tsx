@@ -1,14 +1,14 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { nombreSeguro } from '../domain/nombreArchivo';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
 import {
     ETIQUETA_PASO, TIPOS_PASO, calcularFlujo, caminoHasta, flujoBase, nuevoPaso, revisarFlujo, sinPaso,
     type HallazgoFlujo, type Paso, type Requisito, type Salida, type TipoPaso,
-} from '../domain/procedimientos';
-import { Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, Vacio, avisar, confirmar } from './_core/comunes';
+} from '../../domain/procedimientos/procedimientos';
+import { Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, Vacio, avisar, confirmar } from '../_core/comunes';
 import { COLOR_PASO, Flujograma } from './Flujograma';
-import { mensajeError, useServicios } from './_core/servicios';
+import { mensajeError, useServicios } from '../_core/servicios';
 import './procedimientos.css';
 
 type Modo = 'editar' | 'recorrer';

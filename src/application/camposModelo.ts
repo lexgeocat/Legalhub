@@ -1,7 +1,7 @@
-import { CAMPOS_PERSONA, DATOS_FICHA, ROL_PENDIENTE, datoDeParteEnRuta, mismoRol } from '../domain/catalogo';
-import type { CampoPropio, FuenteModelo, GrupoDatos, TipoCampo } from '../domain/fuenteModelo';
-import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../domain/texto';
-import { ROLES_CONOCIDOS } from '../domain/tiposExpediente';
+import { CAMPOS_PERSONA, DATOS_FICHA, ROL_PENDIENTE, datoDeParteEnRuta, mismoRol } from '../domain/expedientes/catalogo';
+import type { CampoPropio, FuenteModelo, GrupoDatos, TipoCampo } from '../domain/modelos/fuenteModelo';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../domain/comun/texto';
+import { ROLES_CONOCIDOS } from '../domain/expedientes/tiposExpediente';
 import type { CampoEsquema } from './puertos/motorPlantillas';
 const USO_CASO = /\{\{\s*caso\.([\p{L}_][\p{L}\p{N}_]*)\s*(\?)?/giu;
 

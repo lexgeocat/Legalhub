@@ -1,7 +1,7 @@
-import { ErrorDeDatos } from '../../domain/errores';
-import { nuevoId } from '../../domain/id';
-import { nombreSeguro } from '../../domain/nombreArchivo';
-import { VERSION_APP } from '../../domain/version';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { nuevoId } from '../../domain/comun/id';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
+import { VERSION_APP } from '../../domain/comun/version';
 import type { ArchivosPuerto } from '../puertos/archivos';
 import type { DbPuerto, Fila } from '../puertos/db';
 import type { ContenidoPaquete, FormatoPaquete, RepositorioModelos } from '../puertos/modelos';

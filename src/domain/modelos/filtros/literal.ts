@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 import { aDecimal, cardinalEntero } from './numeros';
 
 export function literal(numero: unknown): string {

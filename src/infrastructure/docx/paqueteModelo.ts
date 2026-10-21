@@ -1,7 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import type { ContenidoPaquete, FormatoPaquete } from '../../application/puertos/modelos';
-import { ErrorDeDatos } from '../../domain/errores';
-import { leerFuente } from '../../domain/fuenteModelo';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { leerFuente } from '../../domain/modelos/fuenteModelo';
 
 const OBLIGATORIAS = ['template.docx', 'schema.json', 'manifest.json'] as const;
 

@@ -1,5 +1,5 @@
 import { useId, useMemo, type KeyboardEvent, type Ref } from 'react';
-import { partirLineas, type DisposicionFlujo, type Paso, type TipoPaso } from '../domain/procedimientos';
+import { partirLineas, type DisposicionFlujo, type Paso, type TipoPaso } from '../../domain/procedimientos/procedimientos';
 import './procedimientos.css';
 
 export const COLOR_PASO: Record<TipoPaso, { fondo: string; borde: string }> = {

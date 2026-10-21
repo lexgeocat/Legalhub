@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../../domain/errores';
+import { ErrorDeDatos } from '../../domain/comun/errores';
 import type { DbPuerto, Sentencia } from '../puertos/db';
 
 const ahoraISO = () => new Date().toISOString();

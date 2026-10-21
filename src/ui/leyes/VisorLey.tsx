@@ -3,7 +3,7 @@ import type { Ley, NodoConLey } from '../../application/casosDeUso/leyes';
 import {
     ETIQUETA_NIVEL, NIVELES_LEY, TIPOS_LEY, citar, construirOrg, etiquetaNodo, rangoArticulos, rutaDe,
     type ModoCita, type NivelLey, type NodoArbol, type NodoLey, type NodoOrg,
-} from '../../domain/leyes';
+} from '../../domain/leyes/leyes';
 import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar, copiarTexto } from '../_core/comunes';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { useBuscarLeyes } from './useBuscarLeyes';

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
-import { pilaCss } from '../../domain/fuentes';
+import { pilaCss } from '../../domain/fuentes/fuentes';
 
 /**
  * Word: «interlineado 1,5» = 1,5 × altura de línea NATURAL de la fuente

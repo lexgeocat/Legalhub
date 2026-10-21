@@ -8,15 +8,15 @@ import type { DocumentoPreparado } from '../../application/casosDeUso/generarDoc
 import type { ResultadoImportacion } from '../../application/casosDeUso/importarModelo';
 import type { ExpedienteResumen, ModeloResumen } from '../../application/consultas';
 import type { CampoEsquema, EntradaVerificacion } from '../../application/puertos/motorPlantillas';
-import { mismoRol } from '../../domain/catalogo';
-import { mismoTexto, type AnalisisModelo } from '../../domain/edicionModelo';
+import { mismoRol } from '../../domain/expedientes/catalogo';
+import { mismoTexto, type AnalisisModelo } from '../../domain/modelos/edicionModelo';
 import {
     bloquesATexto, esMateriaRecomendada, margenesIguales, parsearTexto,
     type Bloque, type ConfigPagina, type FuenteModelo,
-} from '../../domain/fuenteModelo';
-import { revisarTexto, type HallazgoTexto } from '../../domain/revisionTexto';
-import { asignarRuta, leerRuta } from '../../domain/rutas';
-import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../domain/texto';
+} from '../../domain/modelos/fuenteModelo';
+import { revisarTexto, type HallazgoTexto } from '../../domain/modelos/revisionTexto';
+import { asignarRuta, leerRuta } from '../../domain/expedientes/rutas';
+import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../domain/comun/texto';
 import type { Servicios } from '../../infrastructure/composicion';
 import { ActualizarModelo } from './ActualizarModelo';
 import {

@@ -1,13 +1,13 @@
 import type { Configuracion } from '../../application/configuracion';
 import type { ConstructorContexto } from '../../application/puertos/contexto';
 import type { DbPuerto, Fila } from '../../application/puertos/db';
-import { ErrorDeDatos } from '../../domain/errores';
-import { ci } from '../../domain/filtros/ci';
-import { hoyISO } from '../../domain/filtros/fecha';
-import { atributoConcordado, estadoCivilConcordado, nombrePersona } from '../../domain/personas';
-import { fusionarProfundo } from '../../domain/rutas';
-import { claveNormalizada, normalizarRol, pluralRol } from '../../domain/texto';
-import { ROLES_CONOCIDOS } from '../../domain/tiposExpediente';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { ci } from '../../domain/modelos/filtros/ci';
+import { hoyISO } from '../../domain/modelos/filtros/fecha';
+import { atributoConcordado, estadoCivilConcordado, nombrePersona } from '../../domain/personas/personas';
+import { fusionarProfundo } from '../../domain/expedientes/rutas';
+import { claveNormalizada, normalizarRol, pluralRol } from '../../domain/comun/texto';
+import { ROLES_CONOCIDOS } from '../../domain/expedientes/tiposExpediente';
 
 type Ctx = Record<string, unknown>;
 const s = (v: unknown): string => (v == null ? '' : String(v));

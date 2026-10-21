@@ -1,11 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { nuevoId } from '../domain/id';
+import { nuevoId } from '../../domain/comun/id';
 import {
     FORMATOS_REQUISITO, agruparRequisitos, etiquetaFormato, textoRequisitos,
     type FormatoRequisito, type Requisito,
-} from '../domain/procedimientos';
-import { claveNormalizada } from '../domain/texto';
-import { Alerta, Campo, Icono, Insignia, Modal, avisar, copiarTexto } from './_core/comunes';
+} from '../../domain/procedimientos/procedimientos';
+import { claveNormalizada } from '../../domain/comun/texto';
+import { Alerta, Campo, Icono, Insignia, Modal, avisar, copiarTexto } from '../_core/comunes';
 import './procedimientos.css';
 
 export function RequisitosProcedimiento({ nombre, requisitos, quienes, usos, cambiar, quitar }: {

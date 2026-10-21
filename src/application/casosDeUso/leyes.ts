@@ -1,11 +1,11 @@
-import { ErrorDeDatos } from '../../domain/errores';
-import { nuevoId } from '../../domain/id';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { nuevoId } from '../../domain/comun/id';
 import {
     NIVELES_LEY, analizarLey,
     type NivelLey, type NodoArbol, type NodoBorrador, type NodoLey,
-} from '../../domain/leyes';
-import { nombreSeguro } from '../../domain/nombreArchivo';
-import { claveNormalizada } from '../../domain/texto';
+} from '../../domain/leyes/leyes';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
+import { claveNormalizada } from '../../domain/comun/texto';
 import type { ArchivosPuerto } from '../puertos/archivos';
 import type { DbPuerto, Fila, Sentencia } from '../puertos/db';
 import type { LectorPdf } from '../puertos/pdf';

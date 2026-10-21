@@ -17,7 +17,7 @@ import { ImportarModelo } from '../application/casosDeUso/importarModelo';
 import { Configuracion } from '../application/configuracion';
 import { Consultas } from '../application/consultas';
 import type { LectorDocx } from '../application/puertos/modelos';
-import { validarRutaCatalogo } from '../domain/catalogo';
+import { validarRutaCatalogo } from '../domain/expedientes/catalogo';
 import { ArchivosTauri } from './archivos/adaptadorTauri';
 import { DbTauri } from './db/adaptadorTauri';
 import { ConstructorContextoDb } from './db/constructorContexto';

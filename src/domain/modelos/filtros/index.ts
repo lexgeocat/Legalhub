@@ -8,4 +8,4 @@ export * from './moneda';
 export * from './superficie';
 export * from './ci';
 export * from './registro';
-export { ErrorDeDatos } from '../errores';
+export { ErrorDeDatos } from '../../comun/errores';

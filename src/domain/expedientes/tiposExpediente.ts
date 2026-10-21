@@ -1,4 +1,4 @@
-import { normalizarRol } from './texto';
+import { normalizarRol } from '../comun/texto';
 
 export type GrupoTipo = 'Procesos judiciales' | 'Contratos y documentos' | 'Trámites y asesoría';
 export const GRUPOS_TIPO: GrupoTipo[] = ['Procesos judiciales', 'Contratos y documentos', 'Trámites y asesoría'];

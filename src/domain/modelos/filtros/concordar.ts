@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 
 type Genero = 'M' | 'F';
 type ConGenero = { genero: Genero | null };

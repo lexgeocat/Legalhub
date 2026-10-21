@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PersonaDetalle, VinculoPersona } from '../../application/consultas';
-import { claveNormalizada, etiquetaRol } from '../../domain/texto';
+import { claveNormalizada, etiquetaRol } from '../../domain/comun/texto';
 import {
     Alerta, Aviso, EstadoInsignia, Icono, Insignia, Segmentado, Vacio, avisar, confirmar, etiquetaTipo,
 } from '../_core/comunes';

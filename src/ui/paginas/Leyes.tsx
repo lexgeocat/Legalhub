@@ -1,6 +1,6 @@
 ﻿import { useState, type FormEvent } from 'react';
 import type { Ley } from '../../application/casosDeUso/leyes';
-import { TIPOS_LEY, etiquetaNodo } from '../../domain/leyes';
+import { TIPOS_LEY, etiquetaNodo } from '../../domain/leyes/leyes';
 import { Aviso, Campo, Icono, Insignia, Modal, Vacio, avisar, confirmar } from '../_core/comunes';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { useBuscarLeyes } from '../leyes/useBuscarLeyes';

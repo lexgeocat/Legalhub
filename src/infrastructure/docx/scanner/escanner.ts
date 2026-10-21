@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 import type { CampoEsquema, ResultadoEscaneo } from '../../../application/puertos/motorPlantillas';
-import { FILTROS } from '../../../domain/filtros';
+import { FILTROS } from '../../../domain/modelos/filtros';
 import { claveNormalizada, mensaje, normalizarCaracteres, parsearToken, type Token } from '../gramatica';
 
 export interface OpcionesEscaneo {

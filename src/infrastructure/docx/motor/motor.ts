@@ -2,7 +2,7 @@ import { TemplateHandler, type TemplateData } from 'easy-template-x';
 import type {
   EntradaVerificacion, MotorPlantillas, ResultadoEscaneo, ResultadoRender,
 } from '../../../application/puertos/motorPlantillas';
-import { ErrorDeDatos } from '../../../domain/filtros';
+import { ErrorDeDatos } from '../../../domain/modelos/filtros';
 import { resolverCerrado } from '../resolver/resolverCerrado';
 import { escanear, type OpcionesEscaneo } from '../scanner/escanner';
 import { textoPlano } from '../textoPlano';

@@ -5,15 +5,15 @@
 import {
     bloquesATexto, PAGINA_CM, margenesSeguros, parsearTexto, tramosDe,
     type Alineacion, type Bloque, type BloqueParrafo, type ConfigPagina, type EstiloParrafo, type Margenes, type Tramo,
-} from '../../domain/fuenteModelo';
+} from '../../domain/modelos/fuenteModelo';
 import { Regla } from './Regla';
 import { usePaginacion } from '../compartidos/Paginacion';
 import './editorWord.css';
-import { pilaCss } from '../../domain/fuentes';
+import { pilaCss } from '../../domain/fuentes/fuentes';
 import { htmlABloques } from './pegadoHtml';
-import { SIN_CONTEXTO, describirMarcador, type ContextoMarcadores } from '../../domain/marcadores';
+import { SIN_CONTEXTO, describirMarcador, type ContextoMarcadores } from '../../domain/modelos/marcadores';
 import { lineaCss, useRazonLinea } from './metricasFuente';
-import { datoAsignable } from '../../domain/camposParte';
+import { datoAsignable } from '../../domain/modelos/camposParte';
 
 const PX_POR_CM = 37.7953;
 const MARGEN_LIENZO = 48;

@@ -2,8 +2,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useState, type FormEvent } from 'react';
-import { hoyISO } from '../../domain/filtros/fecha';
-import { VERSION_APP } from '../../domain/version';
+import { hoyISO } from '../../domain/modelos/filtros/fecha';
+import { VERSION_APP } from '../../domain/comun/version';
 import { Alerta, Aviso, Campo, Insignia, Modal, avisar, confirmar } from '../_core/comunes';
 import { FormularioPersona } from '../compartidos/FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';

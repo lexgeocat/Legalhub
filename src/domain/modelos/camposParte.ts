@@ -1,10 +1,10 @@
-import { CAMPOS_PERSONA, ROL_PENDIENTE, datoDeFicha, mismoRol } from './catalogo';
+import { CAMPOS_PERSONA, ROL_PENDIENTE, datoDeFicha, mismoRol } from '../expedientes/catalogo';
 import {
     marcadorDeCampo,
     type CampoPropio, type DatoParte, type GrupoDatos, type TipoCampo,
 } from './fuenteModelo';
 import { analizarMarcador, armarMarcador, type FiltroMarcador } from './marcadores';
-import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from './texto';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol } from '../comun/texto';
 
 const FILTRO_TIPO: Partial<Record<TipoCampo, string>> = { fecha: 'fecha', fechalarga: 'fechalarga', moneda: 'moneda', dolares: 'dolares', superficie: 'superficie' };
 const esTexto = (t: TipoCampo) => t === 'texto' || t === 'texto_largo';

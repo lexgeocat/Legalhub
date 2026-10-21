@@ -1,16 +1,16 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { esTextoLargo, tipoSugerido, usosCaso } from '../../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../../application/casosDeUso/importarModelo';
-import { datoAsignable, reasignarDato } from '../../domain/camposParte';
-import { ROL_PENDIENTE, etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../../domain/catalogo';
+import { datoAsignable, reasignarDato } from '../../domain/modelos/camposParte';
+import { ROL_PENDIENTE, etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../../domain/expedientes/catalogo';
 import {
     fuenteVacia,
     type CampoPropio, type ConfigPagina, type DatoParte, type FuenteModelo, type GrupoDatos, type TipoCampo,
-} from '../../domain/fuenteModelo';
-import { precargarFuentes } from '../../domain/fuentes';
-import { nuevoId } from '../../domain/id';
-import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../../domain/marcadores';
-import { claveCampo, etiquetaRol } from '../../domain/texto';
+} from '../../domain/modelos/fuenteModelo';
+import { precargarFuentes } from '../../domain/fuentes/fuentes';
+import { nuevoId } from '../../domain/comun/id';
+import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../../domain/modelos/marcadores';
+import { claveCampo, etiquetaRol } from '../../domain/comun/texto';
 import { SelectFuente, SelectInterlineado, SelectTamano, Tb } from './BarraFormato';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, SelectCategoria, SelectMateria, TablaEsquema,

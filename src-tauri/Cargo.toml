@@ -1,8 +1,8 @@
 [package]
 name = "legal-hub"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Legal-Hub: gestión de expedientes, personas, modelos de documentos, procedimientos y leyes"
+authors = ["lexgeocat"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

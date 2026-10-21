@@ -391,10 +391,6 @@
 }
 
 /* ===== Constructor de campos (panel único) ===== */
-.pc-tabs.tres {
-    grid-template-columns: repeat(3, 1fr);
-}
-
 .cb-form,
 .cb-edicion {
     display: flex;

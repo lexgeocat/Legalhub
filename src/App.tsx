@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { VERSION_APP } from './domain/version';
+import { VERSION_APP } from './domain/comun/version';
 import { Buscador } from './ui/compartidos/Buscador';
 import { Icono, Notificaciones, avisar, permitirSalir, type NombreIcono } from './ui/_core/comunes';
 import { FormularioPersona } from './ui/compartidos/FormularioPersona';

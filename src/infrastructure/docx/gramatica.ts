@@ -27,7 +27,7 @@ export function normalizarCaracteres(s: string): string {
         .replace(/\u00A0/g, ' ');
 }
 
-export { claveNormalizada } from '../../domain/texto';
+export { claveNormalizada } from '../../domain/comun/texto';
 function dividir(s: string, sep: string): string[] {
     const partes: string[] = [];
     let actual = '';

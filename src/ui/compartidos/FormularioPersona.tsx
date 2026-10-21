@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type { DatosPersona } from '../../application/casosDeUso/crearPersona';
 import type { PersonaResumen } from '../../application/consultas';
-import { claveNormalizada, etiquetaRol } from '../../domain/texto';
+import { claveNormalizada, etiquetaRol } from '../../domain/comun/texto';
 import { Alerta, Aviso, Campo, Modal, Segmentado, confirmar, datosDeForm, fechaHora } from '../_core/comunes';
 import { borrarBorrador, guardarBorrador, leerBorrador } from '../editor/borradores';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';

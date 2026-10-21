@@ -1,5 +1,5 @@
-import type { Genero } from './entidades';
-import { claveNormalizada } from './texto';
+import type { Genero } from '../entidades';
+import { claveNormalizada } from '../comun/texto';
 
 const ESTADO_CIVIL: Record<string, readonly [string, string]> = {
     soltero: ['soltero', 'soltera'], soltera: ['soltero', 'soltera'],

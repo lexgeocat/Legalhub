@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../../domain/errores';
+import { ErrorDeDatos } from '../../domain/comun/errores';
 import type { DbPuerto } from '../puertos/db';
 import { actualizar } from '../sql';
 import { columnasPersona, validarPersona, type DatosPersona } from './crearPersona';

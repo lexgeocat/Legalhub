@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 
 export function ci(datos: unknown): string {
   if (!Array.isArray(datos)) {

@@ -1,8 +1,8 @@
 ﻿import { ask } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import type { CampoEsquema } from '../../application/puertos/motorPlantillas';
-import { CATEGORIAS_MODELO, MATERIAS_MODELO } from '../../domain/fuenteModelo';
-import { TIPOS_EXPEDIENTE } from '../../domain/tiposExpediente';
+import { CATEGORIAS_MODELO, MATERIAS_MODELO } from '../../domain/modelos/fuenteModelo';
+import { TIPOS_EXPEDIENTE } from '../../domain/expedientes/tiposExpediente';
 
 /* ---------------- Iconos ---------------- */
 const ICONOS = {

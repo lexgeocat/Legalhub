@@ -1,4 +1,4 @@
-import { NOMBRES_FUENTES } from './fuentes';
+import { NOMBRES_FUENTES } from '../fuentes/fuentes';
 export type TipoCampo = 'texto' | 'texto_largo' | 'fecha' | 'fechalarga' | 'moneda' | 'dolares' | 'numero' | 'superficie';
 
 export const TIPOS_CAMPO: { valor: TipoCampo; etiqueta: string }[] = [

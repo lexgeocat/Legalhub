@@ -1,19 +1,19 @@
 import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { tipoSugerido } from '../../application/camposModelo';
-import { ROL_PENDIENTE, mismoRol, rolDesdeTexto } from '../../domain/catalogo';
+import { ROL_PENDIENTE, mismoRol, rolDesdeTexto } from '../../domain/expedientes/catalogo';
 import {
     armarFrase, datosDe, deCaso, marcadorDato, partirFrase, planCampos, planDatos,
     type DatoInsertable,
-} from '../../domain/camposParte';
-import { formasConcordancia, type FormasConcordancia } from '../../domain/concordancia';
+} from '../../domain/modelos/camposParte';
+import { formasConcordancia, type FormasConcordancia } from '../../domain/modelos/concordancia';
 import {
     TIPOS_CAMPO, type CampoPropio, type DatoParte, type GrupoDatos, type TipoCampo,
-} from '../../domain/fuenteModelo';
-import { nuevoId } from '../../domain/id';
-import { matizDePersona } from '../../domain/marcadores';
-import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../domain/texto';
+} from '../../domain/modelos/fuenteModelo';
+import { nuevoId } from '../../domain/comun/id';
+import { matizDePersona } from '../../domain/modelos/marcadores';
+import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../domain/comun/texto';
 import { Campo, Icono, Segmentado, confirmar } from '../_core/comunes';
-import { fecha, fechalarga, hoyISO } from '../../domain/filtros/fecha';
+import { fecha, fechalarga, hoyISO } from '../../domain/modelos/filtros/fecha';
 import { BuscadorLeyes } from '../leyes/PanelLeyes';
 
 type Pestana = 'datos' | 'partes' | 'genero' | 'leyes';

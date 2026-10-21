@@ -1,4 +1,4 @@
-import { claveNormalizada } from './texto';
+import { claveNormalizada } from '../comun/texto';
 
 const PELIGROSAS = new Set(['__proto__', 'constructor', 'prototype']);
 const esObjeto = (v: unknown): v is Record<string, unknown> =>

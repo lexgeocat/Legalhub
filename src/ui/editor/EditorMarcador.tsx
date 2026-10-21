@@ -1,13 +1,13 @@
 ﻿import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { datoAsignable, reasignarDato } from '../../domain/camposParte';
-import { mismoRol } from '../../domain/catalogo';
-import { formasConcordancia, type FormasConcordancia } from '../../domain/concordancia';
-import type { CampoPropio, TipoCampo } from '../../domain/fuenteModelo';
+import { datoAsignable, reasignarDato } from '../../domain/modelos/camposParte';
+import { mismoRol } from '../../domain/expedientes/catalogo';
+import { formasConcordancia, type FormasConcordancia } from '../../domain/modelos/concordancia';
+import type { CampoPropio, TipoCampo } from '../../domain/modelos/fuenteModelo';
 import {
     TRANSFORMACIONES, armarDato, armarGenero, describirMarcador, editarMarcador, formatosPara, matizDePersona, resolverRol,
     type ContextoMarcadores, type EdicionMarcador, type Formato, type Transformacion,
-} from '../../domain/marcadores';
-import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../../domain/texto';
+} from '../../domain/modelos/marcadores';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../../domain/comun/texto';
 import { Alerta, Aviso, Campo, Modal } from '../_core/comunes';
 
 /** Cambio que el editor pide en el campo declarado («Datos» del constructor). */

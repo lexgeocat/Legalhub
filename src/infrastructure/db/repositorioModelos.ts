@@ -2,7 +2,7 @@ import type { ArchivosPuerto } from '../../application/puertos/archivos';
 import type { DbPuerto, Fila } from '../../application/puertos/db';
 import type { ContenidoPaquete, FormatoPaquete, RepositorioModelos } from '../../application/puertos/modelos';
 import type { ModeloVersion } from '../../domain/entidades';
-import { ErrorDeDatos } from '../../domain/errores';
+import { ErrorDeDatos } from '../../domain/comun/errores';
 
 const t = (v: unknown) => (v == null ? '' : String(v));
 

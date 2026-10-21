@@ -1,5 +1,5 @@
 import type { LectorPdf } from '../../application/puertos/pdf';
-import { ErrorDeDatos } from '../../domain/errores';
+import { ErrorDeDatos } from '../../domain/comun/errores';
 import { getDocument, type PDFDocumentProxy } from './pdfjs';
 
 interface Trozo { str: string; x: number; y: number; w: number; h: number }

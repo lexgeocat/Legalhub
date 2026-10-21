@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import { toCardinal } from 'n2words/es';
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 
 /**
  * Acepta «15000,50», «15.000,50», «15,000.50» y «15.000» (miles).

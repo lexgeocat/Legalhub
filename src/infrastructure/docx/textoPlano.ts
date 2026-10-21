@@ -1,5 +1,5 @@
 import { strFromU8, unzipSync } from 'fflate';
-import { ErrorDeDatos } from '../../domain/errores';
+import { ErrorDeDatos } from '../../domain/comun/errores';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const PARTES = /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/;

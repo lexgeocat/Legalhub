@@ -1,10 +1,10 @@
-import { ROL_PENDIENTE, etiquetaCampoCaso } from './catalogo';
+import { ROL_PENDIENTE, etiquetaCampoCaso } from '../expedientes/catalogo';
 import { formasConcordancia, type FormasConcordancia } from './concordancia';
 import { hoyISO } from './filtros/fecha';
 import { FILTROS } from './filtros/registro';
 import type { FuenteModelo, TipoCampo } from './fuenteModelo';
-import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from './texto';
-import { ROLES_CONOCIDOS } from './tiposExpediente';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../comun/texto';
+import { ROLES_CONOCIDOS } from '../expedientes/tiposExpediente';
 
 /* ---------------- Análisis de un marcador {{…}} ---------------- */
 export interface FiltroMarcador { nombre: string; args: string[] }

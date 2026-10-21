@@ -1,4 +1,4 @@
-import { nombrePersona } from '../../domain/personas';
+import { nombrePersona } from '../../domain/personas/personas';
 import type { DbPuerto, Fila } from '../puertos/db';
 
 export interface ResultadoBusqueda {

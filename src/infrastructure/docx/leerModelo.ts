@@ -1,7 +1,7 @@
 import { strFromU8, unzipSync } from 'fflate';
 import type { LectorDocx } from '../../application/puertos/modelos';
-import { ErrorDeDatos } from '../../domain/errores';
-import type { Alineacion, Bloque, BloqueParrafo, EstiloParrafo, Tramo } from '../../domain/fuenteModelo';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import type { Alineacion, Bloque, BloqueParrafo, EstiloParrafo, Tramo } from '../../domain/modelos/fuenteModelo';
 import { normalizarCaracteres } from './gramatica';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

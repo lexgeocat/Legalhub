@@ -1,7 +1,7 @@
 import type { Expediente } from '../../domain/entidades';
-import { ErrorDeDatos } from '../../domain/errores';
-import { nuevoId } from '../../domain/id';
-import { clienteAlInicio, obtenerTipo } from '../../domain/tiposExpediente';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { nuevoId } from '../../domain/comun/id';
+import { clienteAlInicio, obtenerTipo } from '../../domain/expedientes/tiposExpediente';
 import type { DbPuerto } from '../puertos/db';
 import { limpiarDatos } from './gestionExpediente';
 

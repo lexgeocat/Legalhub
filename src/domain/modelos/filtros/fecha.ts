@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 import { cardinalEntero } from './numeros';
 
 const MESES = [

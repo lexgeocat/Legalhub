@@ -1,4 +1,4 @@
-﻿import type { Alineacion, Bloque, EstiloParrafo, Tramo } from '../../domain/fuenteModelo';
+﻿import type { Alineacion, Bloque, EstiloParrafo, Tramo } from '../../domain/modelos/fuenteModelo';
 
 interface Fmt { b: boolean; i: boolean; u: boolean }
 interface Pieza { texto: string; f: Fmt }

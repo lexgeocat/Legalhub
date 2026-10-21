@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 
 const conjuncion = (siguiente: string) => (/^h?[ií](?![aeiouáéíóú])/i.test(siguiente) ? 'e' : 'y');
 

@@ -1,7 +1,7 @@
 ﻿import { useState } from 'react';
 import type { ResultadoImportacion } from '../../application/casosDeUso/importarModelo';
 import type { ModeloResumen } from '../../application/consultas';
-import type { AnalisisModelo, CambioModelo } from '../../domain/edicionModelo';
+import type { AnalisisModelo, CambioModelo } from '../../domain/modelos/edicionModelo';
 import { Alerta, Aviso, Insignia, Modal, type Tono } from '../_core/comunes';
 import { mensajeError, useServicios } from '../_core/servicios';
 

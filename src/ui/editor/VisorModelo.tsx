@@ -1,10 +1,10 @@
 ﻿import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
-import { contextoDeFuente } from '../../domain/marcadores';
+import { contextoDeFuente } from '../../domain/modelos/marcadores';
 import { Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectCategoria, SelectMateria, TablaEsquema, avisar, confirmar, etiquetaMateria, fechaHora } from '../_core/comunes';
 import { Hoja } from './Hoja';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { save } from '@tauri-apps/plugin-dialog';
-import { nombreSeguro } from '../../domain/nombreArchivo';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
 
 type PestanaVisor = 'campos' | 'versiones' | 'datos';
 

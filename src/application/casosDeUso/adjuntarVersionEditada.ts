@@ -1,6 +1,6 @@
 import type { DocumentoVersion } from '../../domain/entidades';
-import { nuevoId } from '../../domain/id';
-import { nombreSeguro } from '../../domain/nombreArchivo';
+import { nuevoId } from '../../domain/comun/id';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
 import type { ArchivosPuerto } from '../puertos/archivos';
 import type { DbPuerto } from '../puertos/db';
 import type { MotorPlantillas } from '../puertos/motorPlantillas';

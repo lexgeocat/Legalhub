@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { ProcedimientoResumen } from '../../domain/procedimientos';
-import { PROCEDIMIENTOS_INICIALES } from '../../domain/procedimientosIniciales';
-import { claveNormalizada } from '../../domain/texto';
+import type { ProcedimientoResumen } from '../../domain/procedimientos/procedimientos';
+import { PROCEDIMIENTOS_INICIALES } from '../../domain/procedimientos/procedimientosIniciales';
+import { claveNormalizada } from '../../domain/comun/texto';
 import {
     Alerta, Aviso, Icono, Insignia, Modal, Vacio, avisar, confirmar, etiquetaMateria, fechaCorta,
 } from '../_core/comunes';
-import { EditorProcedimiento } from '../EditorProcedimiento';
+import { EditorProcedimiento } from '../procedimientos/EditorProcedimiento';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 type Vista = { n: 'lista' } | { n: 'editar'; id?: string };

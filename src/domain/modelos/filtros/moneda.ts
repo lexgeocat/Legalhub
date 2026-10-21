@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 import { aDecimal, agruparMiles, capitalizar, cardinalEntero } from './numeros';
 
 export function moneda(monto: unknown, simbolo = 'Bs.', nombre = 'bolivianos'): string {

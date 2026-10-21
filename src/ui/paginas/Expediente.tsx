@@ -3,8 +3,8 @@ import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { fichaDeModelo, seccionesDeModelo, type FichaModelo } from '../../application/camposModelo';
 import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
 import type { DocumentoResumen, ExpedienteResumen, ModeloResumen, PersonaResumen } from '../../application/consultas';
-import { claveNormalizada, etiquetaRol } from '../../domain/texto';
-import { TIPOS_EXPEDIENTE, clienteAlInicio, obtenerTipo } from '../../domain/tiposExpediente';
+import { claveNormalizada, etiquetaRol } from '../../domain/comun/texto';
+import { TIPOS_EXPEDIENTE, clienteAlInicio, obtenerTipo } from '../../domain/expedientes/tiposExpediente';
 import { AsistenteDocumento } from '../editor/AsistenteDocumento';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Vacio,
@@ -14,8 +14,8 @@ import {
 import { DatosExpediente } from '../compartidos/DatosExpediente';
 import { Hoja } from '../editor/Hoja';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
-import { esMateriaRecomendada } from '../../domain/fuenteModelo';
-import { contextoDeFuente } from '../../domain/marcadores';
+import { esMateriaRecomendada } from '../../domain/modelos/fuenteModelo';
+import { contextoDeFuente } from '../../domain/modelos/marcadores';
 
 type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos';
 

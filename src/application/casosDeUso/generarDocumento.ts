@@ -1,7 +1,7 @@
 import type { DocumentoVersion } from '../../domain/entidades';
-import type { FuenteModelo } from '../../domain/fuenteModelo';
-import { nuevoId } from '../../domain/id';
-import { nombreSeguro } from '../../domain/nombreArchivo';
+import type { FuenteModelo } from '../../domain/modelos/fuenteModelo';
+import { nuevoId } from '../../domain/comun/id';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
 import type { ArchivosPuerto } from '../puertos/archivos';
 import type { ConstructorContexto } from '../puertos/contexto';
 import type { DbPuerto, Sentencia } from '../puertos/db';

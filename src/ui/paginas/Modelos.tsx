@@ -1,8 +1,8 @@
 ﻿import { useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ModeloResumen } from '../../application/consultas';
-import { CATEGORIAS_MODELO } from '../../domain/fuenteModelo';
-import { PLANTILLAS_INICIALES } from '../../domain/plantillasIniciales';
-import { claveNormalizada } from '../../domain/texto';
+import { CATEGORIAS_MODELO } from '../../domain/modelos/fuenteModelo';
+import { PLANTILLAS_INICIALES } from '../../domain/modelos/plantillasIniciales';
+import { claveNormalizada } from '../../domain/comun/texto';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Pestanas, SelectCategoria, SelectMateria, Vacio,
     avisar, confirmar, etiquetaMateria, fechaCorta,

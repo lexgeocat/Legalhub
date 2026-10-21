@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import type { IncrustadorFuentes } from '../../application/puertos/fuentes';
-import { buscarFuente } from '../../domain/fuentes';
+import { buscarFuente } from '../../domain/fuentes/fuentes';
 
 export interface CargadorFuentes {
     familiasDisponibles(): Promise<string[]>;

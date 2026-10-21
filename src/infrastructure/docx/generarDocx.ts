@@ -3,7 +3,7 @@ import type { GeneradorDocx } from '../../application/puertos/modelos';
 import {
     CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, espacioSeguro, margenesSeguros, parsearTexto,
     type BloqueParrafo, type ConfigPagina, type FuenteModelo, type Tramo,
-} from '../../domain/fuenteModelo';
+} from '../../domain/modelos/fuenteModelo';
 
 const NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const CABECERA = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';

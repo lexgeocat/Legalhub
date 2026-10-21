@@ -1,9 +1,9 @@
 import {
     aplicarCambios, leerTraza, marcarModelo, normalizar, proponerCambios,
     type AnalisisModelo, type CambioModelo,
-} from '../../domain/edicionModelo';
-import { ErrorDeDatos } from '../../domain/errores';
-import { bloquesATexto } from '../../domain/fuenteModelo';
+} from '../../domain/modelos/edicionModelo';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { bloquesATexto } from '../../domain/modelos/fuenteModelo';
 import type { GeneradorDocx, LectorDocx, RepositorioModelos } from '../puertos/modelos';
 import type { MotorPlantillas } from '../puertos/motorPlantillas';
 import type { ImportarModelo, ResultadoImportacion } from './importarModelo';

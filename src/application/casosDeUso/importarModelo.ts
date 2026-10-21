@@ -1,15 +1,15 @@
-import { ErrorDeDatos } from '../../domain/errores';
-import { normalizarCategoria, normalizarMateria, type FuenteModelo } from '../../domain/fuenteModelo'
-import { nuevoId } from '../../domain/id';
-import { nombreSeguro } from '../../domain/nombreArchivo';
-import { claveCampo, pluralRol } from '../../domain/texto';
-import { VERSION_APP } from '../../domain/version';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { normalizarCategoria, normalizarMateria, type FuenteModelo } from '../../domain/modelos/fuenteModelo'
+import { nuevoId } from '../../domain/comun/id';
+import { nombreSeguro } from '../../domain/comun/nombreArchivo';
+import { claveCampo, pluralRol } from '../../domain/comun/texto';
+import { VERSION_APP } from '../../domain/comun/version';
 import { analizarCampos, aplicarCampos } from '../camposModelo';
 import type { ArchivosPuerto } from '../puertos/archivos';
 import type { DbPuerto, Sentencia } from '../puertos/db';
 import type { FormatoPaquete, GeneradorDocx, RepositorioModelos } from '../puertos/modelos';
 import type { CampoEsquema, MotorPlantillas, ResultadoEscaneo } from '../puertos/motorPlantillas';
-import { ROL_PENDIENTE } from '../../domain/catalogo';
+import { ROL_PENDIENTE } from '../../domain/expedientes/catalogo';
 import { actualizar, insertar } from '../sql';
 
 export interface DatosModelo {

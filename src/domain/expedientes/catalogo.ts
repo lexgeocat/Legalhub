@@ -1,5 +1,5 @@
-import type { TipoCampo } from './fuenteModelo';
-import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from './texto';
+import type { TipoCampo } from '../modelos/fuenteModelo';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../comun/texto';
 import { ROLES_CONOCIDOS, TIPOS_EXPEDIENTE } from './tiposExpediente';
 
 export const CAMPOS_PERSONA = [

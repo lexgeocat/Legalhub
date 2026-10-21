@@ -1,6 +1,6 @@
 ﻿import { useState, type ReactNode, type RefObject } from 'react';
-import { margenesSeguros, type ConfigPagina, type Margenes, type TamanoPagina } from '../../domain/fuenteModelo';
-import type { ContextoMarcadores } from '../../domain/marcadores';
+import { margenesSeguros, type ConfigPagina, type Margenes, type TamanoPagina } from '../../domain/modelos/fuenteModelo';
+import type { ContextoMarcadores } from '../../domain/modelos/marcadores';
 import { BarraFormato, coma } from './BarraFormato';
 import {
     FORMATO_INICIAL, HojaEditable,

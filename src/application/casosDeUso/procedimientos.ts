@@ -1,11 +1,11 @@
-import { ErrorDeDatos } from '../../domain/errores';
-import { normalizarMateria } from '../../domain/fuenteModelo';
-import { nuevoId } from '../../domain/id';
+import { ErrorDeDatos } from '../../domain/comun/errores';
+import { normalizarMateria } from '../../domain/modelos/fuenteModelo';
+import { nuevoId } from '../../domain/comun/id';
 import {
     leerFlujo, leerRequisitos, normalizarProcedimiento, renovarIds,
     type DatosProcedimiento, type Procedimiento, type ProcedimientoResumen,
-} from '../../domain/procedimientos';
-import { PROCEDIMIENTOS_INICIALES } from '../../domain/procedimientosIniciales';
+} from '../../domain/procedimientos/procedimientos';
+import { PROCEDIMIENTOS_INICIALES } from '../../domain/procedimientos/procedimientosIniciales';
 import type { DbPuerto, Fila } from '../puertos/db';
 import { actualizar, insertar } from '../sql';
 

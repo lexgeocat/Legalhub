@@ -1,4 +1,4 @@
-import { ErrorDeDatos } from '../errores';
+import { ErrorDeDatos } from '../../comun/errores';
 import { aDecimal, agruparMiles, cardinalEntero } from './numeros';
 
 export function superficie(valor: unknown): string {

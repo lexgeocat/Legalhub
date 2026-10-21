@@ -1,5 +1,5 @@
 import type { ModeloVersion } from '../../domain/entidades';
-import type { Bloque, FuenteModelo } from '../../domain/fuenteModelo';
+import type { Bloque, FuenteModelo } from '../../domain/modelos/fuenteModelo';
 import type { CampoEsquema } from './motorPlantillas';
 
 export interface ManifiestoModelo {

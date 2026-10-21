@@ -1,5 +1,5 @@
 ﻿import { useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { AREA_MIN_CM, type Margenes } from '../../domain/fuenteModelo';
+import { AREA_MIN_CM, type Margenes } from '../../domain/modelos/fuenteModelo';
 
 const PX_POR_CM = 37.7953;
 const GROSOR = 20;

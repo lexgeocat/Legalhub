@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { claveNormalizada } from '../../domain/texto';
+import { claveNormalizada } from '../../domain/comun/texto';
 import { ETIQUETA_ESTADO, Icono, iniciales } from '../_core/comunes';
 import { useCargar, useServicios } from '../_core/servicios';
 

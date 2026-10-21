@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     sinRequisito,
     type DatosProcedimiento, type Paso, type Procedimiento, type Requisito,
-} from '../domain/procedimientos';
-import { borrarBorrador, guardarBorrador, leerBorrador } from './editor/borradores';
+} from '../../domain/procedimientos/procedimientos';
+import { borrarBorrador, guardarBorrador, leerBorrador } from '../editor/borradores';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectMateria,
     avisar, confirmar, etiquetaMateria, marcarCambiosPendientes,
-} from './_core/comunes';
+} from '../_core/comunes';
 import { FlujoProcedimiento } from './FlujoProcedimiento';
 import { RequisitosProcedimiento } from './RequisitosProcedimiento';
-import { mensajeError, useCargar, useServicios } from './_core/servicios';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import './procedimientos.css';
 
 type PestanaProc = 'requisitos' | 'flujo' | 'datos';
