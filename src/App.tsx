@@ -11,14 +11,16 @@ import { PanelClientes } from './ui/clientes/PanelClientes';
 import { useCargar, useServicios } from './ui/_core/servicios';
 import { Personas } from './ui/paginas/Personas';
 import { Leyes } from './ui/paginas/Leyes';
+import { Procedimientos } from './ui/paginas/Procedimientos';
 
-type Item = 'expedientes' | 'personas' | 'modelos' | 'leyes' | 'config';
+type Item = 'expedientes' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
 
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'expedientes', etiqueta: 'Expedientes', icono: 'carpeta' },
   { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
+  { id: 'procedimientos', etiqueta: 'Procedimientos', icono: 'flujo' },
   { id: 'leyes', etiqueta: 'Leyes', icono: 'libro' },
   { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
 ];
@@ -101,6 +103,7 @@ export default function App() {
         )}
         {vista.n === 'personas' && <Personas abrirExpediente={(id) => void navegar({ n: 'expediente', id })} />}
         {vista.n === 'modelos' && <Modelos />}
+        {vista.n === 'procedimientos' && <Procedimientos />}
         {vista.n === 'leyes' && <Leyes />}
         {vista.n === 'config' && <Configuracion />}
       </main>

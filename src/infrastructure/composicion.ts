@@ -32,6 +32,7 @@ import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
 import { Plantillas } from '../application/casosDeUso/plantillas';
 import { Leyes } from '../application/casosDeUso/leyes';
 import { LectorPdfPdfjs } from './pdf/lectorPdf';
+import { Procedimientos } from '../application/casosDeUso/procedimientos';
 
 
 export interface Servicios {
@@ -68,6 +69,7 @@ export interface Servicios {
     eliminarExpediente: EliminarExpediente;
     eliminarModelo: EliminarModelo;
     leyes: Leyes;
+    procedimientos: Procedimientos;
 }
 
 export async function crearServicios(): Promise<Servicios> {
@@ -115,5 +117,6 @@ export async function crearServicios(): Promise<Servicios> {
         eliminarExpediente: new EliminarExpediente(db),
         eliminarModelo: new EliminarModelo(db),
         leyes: new Leyes({ db, archivos, lector: new LectorPdfPdfjs() }),
+        procedimientos: new Procedimientos(db),
     };
 }

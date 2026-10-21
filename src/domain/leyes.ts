@@ -25,17 +25,6 @@ export function etiquetaNodo(n: Pick<NodoArbol, 'nivel' | 'numero' | 'titulo'>):
     return [cab, n.titulo].filter(Boolean).join(' · ') || ETIQUETA_NIVEL[n.nivel];
 }
 
-/** Profundidad de cada nodo (lista ordenada) según la pila de niveles. */
-export function profundidades(nodos: readonly { nivel: NivelLey }[]): number[] {
-    const pila: number[] = [];
-    return nodos.map((n) => {
-        const r = RANGO_NIVEL[n.nivel];
-        while (pila.length > 0 && pila[pila.length - 1] >= r) pila.pop();
-        pila.push(r);
-        return pila.length - 1;
-    });
-}
-
 /** Ancestros (Libro › Título › Capítulo…) del nodo en `indice`. */
 export function rutaDe<T extends { nivel: NivelLey }>(nodos: readonly T[], indice: number): T[] {
     const ruta: T[] = [];
@@ -266,3 +255,51 @@ export function aTextoDeModelo(texto: string): string {
 
 /** Cita lista para el editor: escapada y en un solo párrafo (los saltos de línea pasan a saltos suaves). */
 export const citaParaEditor = (texto: string): string => aTextoDeModelo(texto).replace(/\n/g, '\u2028');
+
+/* ================= Árbol (organigrama) ================= */
+export interface NodoOrg<T extends NodoArbol = NodoArbol> {
+    n: T;
+    hijos: NodoOrg<T>[];
+    /** Artículos dentro de esta división (1 si es un artículo). */
+    arts: number;
+    /** Primer y último artículo en orden de lectura ('' si no hay). */
+    desde: string;
+    hasta: string;
+}
+
+/** Lista ordenada de marcadores → árbol anidado (según `nivel`), con el conteo y rango de artículos de cada división. */
+export function construirOrg<T extends NodoArbol>(nodos: readonly T[]): { raices: NodoOrg<T>[]; porId: Map<string, NodoOrg<T>> } {
+    const raices: NodoOrg<T>[] = [];
+    const porId = new Map<string, NodoOrg<T>>();
+    const pila: NodoOrg<T>[] = [];
+    for (const n of nodos) {
+        const item: NodoOrg<T> = { n, hijos: [], arts: 0, desde: '', hasta: '' };
+        porId.set(n.id, item);
+        const r = RANGO_NIVEL[n.nivel];
+        while (pila.length > 0 && RANGO_NIVEL[pila[pila.length - 1].n.nivel] >= r) pila.pop();
+        (pila.length > 0 ? pila[pila.length - 1].hijos : raices).push(item);
+        pila.push(item);
+    }
+    const calcular = (o: NodoOrg<T>): void => {
+        if (o.n.nivel === 'articulo') {
+            o.arts = 1;
+            o.desde = o.n.numero;
+            o.hasta = o.n.numero;
+            return;
+        }
+        for (const h of o.hijos) {
+            calcular(h);
+            o.arts += h.arts;
+            if (h.desde && !o.desde) o.desde = h.desde;
+            if (h.hasta) o.hasta = h.hasta;
+        }
+    };
+    raices.forEach(calcular);
+    return { raices, porId };
+}
+
+/** «Arts. 1–45» / «Art. 12» / '' si la división no tiene artículos. */
+export function rangoArticulos(o: Pick<NodoOrg, 'arts' | 'desde' | 'hasta'>): string {
+    if (o.arts === 0 || !o.desde) return '';
+    return o.desde === o.hasta ? `Art. ${o.desde}` : `Arts. ${o.desde}–${o.hasta}`;
+}

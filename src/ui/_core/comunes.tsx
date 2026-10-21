@@ -20,6 +20,7 @@ const ICONOS = {
     alerta: 'M12 4l9 16H3z M12 10v4 M12 17h.01',
     balanza: 'M12 3v18 M6 21h12 M5 7h14 M5 7l-3 7a3 3 0 0 0 6 0z M19 7l-3 7a3 3 0 0 0 6 0z',
     libro: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h11',
+    flujo: 'M4 4h6v5H4z M14 15h6v5h-6z M7 9v3a3 3 0 0 0 3 3h4',
 } as const;
 
 export type NombreIcono = keyof typeof ICONOS;
@@ -291,7 +292,7 @@ export const marcarCambiosPendientes = (v: boolean): void => {
 /** true si se puede salir: no hay cambios pendientes o la persona aceptó descartarlos. */
 export async function permitirSalir(): Promise<boolean> {
     if (!cambiosPendientes) return true;
-    return confirmar('Hay cambios sin guardar en las partes o datos del expediente. Quedará un borrador para restaurarlos al volver. ¿Salir?', 'Cambios sin guardar');
+    return confirmar('Hay cambios sin guardar. Quedará un borrador para restaurarlos al volver. ¿Salir?', 'Cambios sin guardar');
 }
 
 export function fechaHora(iso: string): string {

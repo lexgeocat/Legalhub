@@ -1,6 +1,7 @@
+/* ===== Distribución ===== */
 .ley-layout {
     display: grid;
-    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+    grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
     gap: 14px;
     height: calc(100vh - 230px);
     min-height: 480px;
@@ -22,6 +23,36 @@
     white-space: nowrap;
 }
 
+/* Colores por nivel (matiz) */
+.niv-parte {
+    --h: 262;
+}
+
+.niv-libro {
+    --h: 215;
+}
+
+.niv-titulo {
+    --h: 165;
+}
+
+.niv-capitulo {
+    --h: 28;
+}
+
+.niv-seccion {
+    --h: 340;
+}
+
+.niv-subseccion {
+    --h: 90;
+}
+
+.niv-articulo {
+    --h: 220;
+}
+
+/* ===== Árbol tipo organigrama ===== */
 .ley-arbol {
     flex: 1 1 0;
     min-height: 140px;
@@ -29,43 +60,68 @@
     background: #fff;
     border: 1px solid var(--borde);
     border-radius: 10px;
-    padding: 4px;
+    padding: 10px 8px 14px;
 }
 
-.ley-fila {
+.org-rama {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.org-rama .org-rama {
+    margin-left: 11px;
+    padding-left: 14px;
+    border-left: 1px solid var(--borde-fuerte);
+}
+
+.org-rama .org-rama>li {
+    position: relative;
+}
+
+.org-rama .org-rama>li::before {
+    content: "";
+    position: absolute;
+    left: -14px;
+    top: 17px;
+    width: 12px;
+    border-top: 1px solid var(--borde-fuerte);
+}
+
+.org-fila {
+    --h: 215;
     display: flex;
     align-items: center;
-    border-radius: 6px;
-    color: var(--texto);
+    gap: 2px;
+    margin: 2px 0;
+    border: 1px solid hsl(var(--h) 55% 86%);
+    border-radius: 8px;
+    background: hsl(var(--h) 90% 96%);
 }
 
-.ley-fila:hover:not(.sel) {
-    background: var(--primario-claro);
+.org-fila.niv-articulo {
+    border-color: transparent;
+    background: transparent;
 }
 
-.ley-fila.n-parte,
-.ley-fila.n-libro {
-    font-weight: 700;
+.org-fila:hover {
+    border-color: hsl(var(--h) 55% 68%);
 }
 
-.ley-fila.n-titulo,
-.ley-fila.n-capitulo {
-    font-weight: 650;
+.org-fila.en-ruta {
+    border-color: hsl(var(--h) 60% 62%);
 }
 
-.ley-fila.n-articulo {
-    color: var(--texto-2);
-}
-
-.ley-fila.sel {
+.org-fila.sel {
     background: var(--primario);
+    border-color: var(--primario);
     color: #fff;
 }
 
-.ley-plegar {
+.org-plegar {
     flex: none;
-    width: 18px;
-    height: 22px;
+    width: 20px;
+    height: 26px;
     padding: 0;
     border: 0;
     background: transparent;
@@ -74,15 +130,15 @@
     font-size: 11px;
 }
 
-.ley-nodo {
+.org-nodo {
     flex: 1;
     min-width: 0;
     display: flex;
+    align-items: baseline;
     gap: 8px;
-    align-items: center;
-    padding: 4px 6px;
+    padding: 5px 8px 5px 2px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
     color: inherit;
     font: inherit;
@@ -91,33 +147,250 @@
     cursor: pointer;
 }
 
-.ley-txt {
+.org-cab {
+    flex: none;
+    font-weight: 650;
+}
+
+.niv-parte>.org-nodo .org-cab,
+.niv-libro>.org-nodo .org-cab {
+    font-weight: 750;
+}
+
+.niv-articulo>.org-nodo .org-cab {
+    font-weight: 550;
+}
+
+.org-tit {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--texto-2);
 }
 
-.ley-pg {
+.org-meta {
     flex: none;
+    margin-left: auto;
     font-size: 11px;
-    opacity: .65;
+    color: var(--texto-3);
 }
 
-.ley-detalle {
-    flex: 0 1 auto;
-    max-height: 45%;
+.org-fila.sel .org-tit,
+.org-fila.sel .org-meta {
+    color: inherit;
+    opacity: .9;
+}
+
+.org-nodo:focus-visible,
+.org-plegar:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: -2px;
+}
+
+/* ===== Lector ===== */
+.ley-lector {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px 28px 26px;
+    background: #fff;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
 }
 
-.ley-texto {
-    white-space: pre-wrap;
+.ley-lector h2 {
+    font-size: 24px;
+    line-height: 1.25;
+}
+
+.ley-rubro {
+    margin-top: 2px;
+    font-size: 16px;
+    font-style: italic;
+    color: var(--texto-2);
+}
+
+.ley-migas {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    font-size: 12.5px;
+    color: var(--texto-3);
+}
+
+.ley-miga-par {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ley-miga {
+    max-width: 260px;
+    padding: 2px 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--primario);
+    font: inherit;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ley-miga:hover {
+    background: var(--primario-claro);
+}
+
+.ley-cuerpo {
+    max-width: 78ch;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 16px;
+    line-height: 1.75;
+    color: #1a1d29;
+}
+
+.ley-cuerpo p {
+    margin: 0;
     overflow-wrap: anywhere;
-    font-size: 13px;
-    line-height: 1.5;
 }
 
+.ley-cuerpo p.inciso {
+    margin-left: 1.5em;
+}
+
+.ley-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--borde);
+}
+
+.ley-nav .btn {
+    min-width: 0;
+    max-width: 49%;
+}
+
+.ley-nav-txt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Tarjetas de subdivisiones y chips de artículos */
+.ley-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px;
+}
+
+.ley-card {
+    --h: 215;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid hsl(var(--h) 55% 84%);
+    border-left: 4px solid hsl(var(--h) 60% 55%);
+    border-radius: 10px;
+    background: hsl(var(--h) 90% 97%);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ley-card:hover {
+    background: hsl(var(--h) 90% 93%);
+}
+
+.ley-card:focus-visible,
+.ley-art:focus-visible {
+    outline: 2px solid var(--primario);
+    outline-offset: 2px;
+}
+
+.ley-card-niv {
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: hsl(var(--h) 45% 36%);
+}
+
+.ley-card-tit {
+    font-size: 13px;
+    color: var(--texto-2);
+}
+
+.ley-arts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ley-art {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    max-width: 100%;
+    padding: 4px 10px;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 999px;
+    background: #fff;
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.ley-art:hover {
+    background: var(--primario-claro);
+    border-color: var(--primario);
+}
+
+.ley-art b {
+    flex: none;
+}
+
+.ley-art span {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--texto-3);
+}
+
+/* ===== Barra del PDF ===== */
+.ley-pdf-cab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+}
+
+.ley-pdf-info {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===== Visor PDF ===== */
 .ley-visor-caja {
     flex: 1;
     min-height: 0;
@@ -172,18 +445,6 @@
     font-size: 28px;
 }
 
-@media (max-width: 1100px) {
-    .ley-layout {
-        grid-template-columns: minmax(0, 1fr);
-        height: auto;
-    }
-
-    .ley-visor-caja {
-        height: 70vh;
-        flex: none;
-    }
-}
-
 /* ===== Citar leyes desde el editor ===== */
 .ley-cita-res {
     max-height: 240px;
@@ -223,4 +484,25 @@
     color: var(--texto-2);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+    .ley-layout {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+    }
+
+    .ley-arbol {
+        max-height: 50vh;
+        flex: none;
+    }
+
+    .ley-lector {
+        min-height: 360px;
+    }
+
+    .ley-visor-caja {
+        height: 70vh;
+        flex: none;
+    }
 }

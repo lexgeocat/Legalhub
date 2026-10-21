@@ -1,0 +1,261 @@
+/* ===== Requisitos ===== */
+.req-resumen {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.req-fila {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.req-fila:last-child {
+    border-bottom: 0;
+}
+
+.req-fila>input[type=checkbox] {
+    margin-top: 4px;
+}
+
+.req-cuerpo {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.req-nombre {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.req-fila.hecho .req-nombre {
+    color: var(--texto-3);
+    text-decoration: line-through;
+}
+
+.req-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.req-acciones {
+    flex: none;
+    display: flex;
+    gap: 2px;
+    opacity: .55;
+}
+
+.req-fila:hover .req-acciones,
+.req-acciones:focus-within {
+    opacity: 1;
+}
+
+/* ===== Flujograma: distribución ===== */
+.fl-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    gap: 14px;
+    height: calc(100vh - 290px);
+    min-height: 520px;
+}
+
+.fl-escena {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    min-width: 0;
+}
+
+.fl-barra {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+}
+
+.fl-lienzo {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+}
+
+.fl-lienzo>svg {
+    display: block;
+    margin: 0 auto;
+}
+
+.fl-lienzo>.vacio {
+    border: 0;
+}
+
+.fl-lateral {
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ===== Flujograma: figuras ===== */
+.fl-nodo {
+    cursor: pointer;
+    outline: none;
+    transition: opacity .15s;
+}
+
+.fl-nodo:hover .fl-forma {
+    filter: drop-shadow(0 2px 4px rgba(16, 24, 40, .25));
+}
+
+.fl-nodo:focus-visible .fl-forma {
+    stroke: #3556d8;
+    stroke-dasharray: 5 3;
+}
+
+/* ===== Paneles laterales ===== */
+.fl-panel-paso h3 {
+    margin-top: 6px;
+}
+
+.fl-tipo {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 1.5px solid;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.fl-texto {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.fl-historial {
+    margin: 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+}
+
+.fl-historial .btn-enlace {
+    text-align: left;
+}
+
+.fl-reqs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow: auto;
+    padding: 8px 10px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    background: var(--superficie-2);
+}
+
+.fl-salida-fila {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    gap: 6px;
+    align-items: center;
+    margin-top: 4px;
+}
+
+/* ===== Leyenda ===== */
+.fl-leyenda {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--texto-2);
+}
+
+.fl-leyenda span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fl-leyenda i {
+    flex: none;
+    width: 22px;
+    height: 14px;
+    border: 1.5px solid;
+    border-radius: 4px;
+}
+
+.fl-leyenda i.lg-inicio,
+.fl-leyenda i.lg-fin {
+    border-radius: 999px;
+}
+
+.fl-leyenda i.lg-documento {
+    border-radius: 2px 2px 8px 8px;
+}
+
+.fl-leyenda i.lg-espera {
+    transform: skewX(-14deg);
+}
+
+.fl-leyenda i.lg-decision {
+    width: 14px;
+    height: 14px;
+    margin: 0 4px;
+    border-radius: 2px;
+    transform: rotate(45deg);
+}
+
+.fl-leyenda i.lg-retorno {
+    height: 0;
+    border: 0;
+    border-top: 2px dashed #8a93a8;
+    border-radius: 0;
+}
+
+.fl-leyenda .lg-badge {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--primario);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+@media (max-width: 1100px) {
+    .fl-layout {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+    }
+
+    .fl-lienzo {
+        height: 70vh;
+        flex: none;
+    }
+}
