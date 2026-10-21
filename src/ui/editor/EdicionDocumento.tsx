@@ -1,10 +1,10 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { bloquesATexto, type Bloque, type ConfigPagina } from '../domain/fuenteModelo';
+import { bloquesATexto, type Bloque, type ConfigPagina } from '../../domain/fuenteModelo';
 import { Tb } from './BarraFormato';
-import { Alerta, Icono, Insignia, confirmar } from './comunes';
+import { Alerta, Icono, Insignia, confirmar } from '../_core/comunes';
 import { EditorHoja } from './EditorHoja';
 import type { ControlHoja } from './HojaEditable';
-import { PanelLeyes } from './PanelLeyes';
+import { PanelLeyes } from '../leyes/PanelLeyes';
 
 /** Edita un documento ya completado con el mismo editor del modelo, a pantalla completa y sin campos. */
 export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar, descartar }: {

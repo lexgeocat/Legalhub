@@ -1,12 +1,12 @@
-// src/ui/paginas/Configuracion.tsx
+﻿// src/ui/paginas/Configuracion.tsx
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useState, type FormEvent } from 'react';
 import { hoyISO } from '../../domain/filtros/fecha';
 import { VERSION_APP } from '../../domain/version';
-import { Alerta, Aviso, Campo, Insignia, Modal, avisar, confirmar } from '../comunes';
-import { FormularioPersona } from '../FormularioPersona';
-import { mensajeError, useCargar, useServicios } from '../servicios';
+import { Alerta, Aviso, Campo, Insignia, Modal, avisar, confirmar } from '../_core/comunes';
+import { FormularioPersona } from '../compartidos/FormularioPersona';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | 'limpieza' | null;
 

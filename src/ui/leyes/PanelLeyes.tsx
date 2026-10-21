@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { citaParaEditor, citar, etiquetaNodo, type ModoCita } from '../domain/leyes';
-import { Aviso, Insignia, avisar, copiarTexto } from './comunes';
-import { useCargar, useServicios } from './servicios';
+﻿import { useState } from 'react';
+import { citaParaEditor, citar, etiquetaNodo, type ModoCita } from '../../domain/leyes';
+import { Aviso, Insignia, avisar, copiarTexto } from '../_core/comunes';
+import { useCargar, useServicios } from '../_core/servicios';
 import { consultaValida, useBuscarLeyes } from './useBuscarLeyes';
 import './leyes.css';
 

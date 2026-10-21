@@ -1,13 +1,13 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
-import type { NodoConLey } from '../application/casosDeUso/leyes';
+﻿import { useMemo, useRef, useState, type FormEvent } from 'react';
+import type { NodoConLey } from '../../application/casosDeUso/leyes';
 import {
     ETIQUETA_NIVEL, NIVELES_LEY, RANGO_NIVEL, TIPOS_LEY, citar, etiquetaNodo, profundidades, rutaDe,
     type ModoCita, type NivelLey, type NodoArbol, type NodoLey,
-} from '../domain/leyes';
-import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar, copiarTexto } from './comunes';
-import { mensajeError, useCargar, useServicios } from './servicios';
+} from '../../domain/leyes';
+import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar, copiarTexto } from '../_core/comunes';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { useBuscarLeyes } from './useBuscarLeyes';
-import { VisorPdf, type ControlVisor } from './VisorPdf';
+import { VisorPdf, type ControlVisor } from '../pdf/VisorPdf';
 import './leyes.css';
 
 type Dlg = { n: 'nodo'; nodo?: NodoLey } | { n: 'ley' } | null;

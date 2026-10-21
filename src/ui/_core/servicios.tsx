@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { crearServicios, type Servicios } from '../infrastructure/composicion';
+﻿import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { crearServicios, type Servicios } from '../../infrastructure/composicion';
 
 export const mensajeError = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 

@@ -2,29 +2,29 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
     camposParaFormulario, esCampoCaso, esTextoLargo, fichaDeModelo, seccionesDeModelo,
-} from '../application/camposModelo';
-import type { ModeloVisible } from '../application/casosDeUso/administrarModelos';
-import type { DocumentoPreparado } from '../application/casosDeUso/generarDocumento';
-import type { ResultadoImportacion } from '../application/casosDeUso/importarModelo';
-import type { ExpedienteResumen, ModeloResumen } from '../application/consultas';
-import type { CampoEsquema, EntradaVerificacion } from '../application/puertos/motorPlantillas';
-import { mismoRol } from '../domain/catalogo';
-import { mismoTexto, type AnalisisModelo } from '../domain/edicionModelo';
+} from '../../application/camposModelo';
+import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
+import type { DocumentoPreparado } from '../../application/casosDeUso/generarDocumento';
+import type { ResultadoImportacion } from '../../application/casosDeUso/importarModelo';
+import type { ExpedienteResumen, ModeloResumen } from '../../application/consultas';
+import type { CampoEsquema, EntradaVerificacion } from '../../application/puertos/motorPlantillas';
+import { mismoRol } from '../../domain/catalogo';
+import { mismoTexto, type AnalisisModelo } from '../../domain/edicionModelo';
 import {
     bloquesATexto, esMateriaRecomendada, margenesIguales, parsearTexto,
     type Bloque, type ConfigPagina, type FuenteModelo,
-} from '../domain/fuenteModelo';
-import { revisarTexto, type HallazgoTexto } from '../domain/revisionTexto';
-import { asignarRuta, leerRuta } from '../domain/rutas';
-import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../domain/texto';
-import type { Servicios } from '../infrastructure/composicion';
+} from '../../domain/fuenteModelo';
+import { revisarTexto, type HallazgoTexto } from '../../domain/revisionTexto';
+import { asignarRuta, leerRuta } from '../../domain/rutas';
+import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../domain/texto';
+import type { Servicios } from '../../infrastructure/composicion';
 import { ActualizarModelo } from './ActualizarModelo';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Pestanas, avisar, confirmar, datosDeForm, normalizarNumero,
-} from './comunes';
+} from '../_core/comunes';
 import { EditorDocumento } from './EdicionDocumento';
 import { Hoja } from './Hoja';
-import { mensajeError, useCargar, useServicios } from './servicios';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 /* ---------------- Tipos ---------------- */
 interface Pendiente { seccion: string; texto: string }

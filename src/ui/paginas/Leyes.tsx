@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react';
+﻿import { useState, type FormEvent } from 'react';
 import type { Ley } from '../../application/casosDeUso/leyes';
 import { TIPOS_LEY, etiquetaNodo } from '../../domain/leyes';
-import { Aviso, Campo, Icono, Insignia, Modal, Vacio, avisar, confirmar } from '../comunes';
-import { mensajeError, useCargar, useServicios } from '../servicios';
-import { useBuscarLeyes } from '../useBuscarLeyes';
-import { VisorLey } from '../VisorLey';
+import { Aviso, Campo, Icono, Insignia, Modal, Vacio, avisar, confirmar } from '../_core/comunes';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
+import { useBuscarLeyes } from '../leyes/useBuscarLeyes';
+import { VisorLey } from '../leyes/VisorLey';
 
 export function Leyes() {
     const [vista, setVista] = useState<{ leyId: string; nodoId?: string } | null>(null);

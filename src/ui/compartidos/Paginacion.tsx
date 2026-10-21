@@ -1,13 +1,13 @@
-import {
+﻿import {
     useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
     type CSSProperties, type ReactNode, type RefObject,
 } from 'react';
-import type { ConfigPagina } from '../domain/fuenteModelo';
+import type { ConfigPagina } from '../../domain/fuenteModelo';
 import {
     alturaSalto, alturaTotal, crearGeometria, exclusiones, finContenido, inicioContenido, margenesLaterales,
     paginaDe, paginasCota, paginasPara,
     type Exclusion, type GeometriaPagina,
-} from '../domain/paginacion';
+} from '../../domain/paginacion';
 
 const LARGO_MARCA = 14;
 const MAX_ITERACIONES = 8;

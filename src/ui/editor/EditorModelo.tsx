@@ -1,27 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { esTextoLargo, tipoSugerido, usosCaso } from '../application/camposModelo';
-import type { ResultadoImportacion, ResultadoValidacion } from '../application/casosDeUso/importarModelo';
-import { datoAsignable, reasignarDato } from '../domain/camposParte';
-import { ROL_PENDIENTE, etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../domain/catalogo';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { esTextoLargo, tipoSugerido, usosCaso } from '../../application/camposModelo';
+import type { ResultadoImportacion, ResultadoValidacion } from '../../application/casosDeUso/importarModelo';
+import { datoAsignable, reasignarDato } from '../../domain/camposParte';
+import { ROL_PENDIENTE, etiquetaCampoCaso, rolesEnTexto, usosDatosParte } from '../../domain/catalogo';
 import {
     fuenteVacia,
     type CampoPropio, type ConfigPagina, type DatoParte, type FuenteModelo, type GrupoDatos, type TipoCampo,
-} from '../domain/fuenteModelo';
-import { precargarFuentes } from '../domain/fuentes';
-import { nuevoId } from '../domain/id';
-import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
-import { claveCampo, etiquetaRol } from '../domain/texto';
+} from '../../domain/fuenteModelo';
+import { precargarFuentes } from '../../domain/fuentes';
+import { nuevoId } from '../../domain/id';
+import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../../domain/marcadores';
+import { claveCampo, etiquetaRol } from '../../domain/texto';
 import { SelectFuente, SelectInterlineado, SelectTamano, Tb } from './BarraFormato';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, SelectCategoria, SelectMateria, TablaEsquema,
     avisar, confirmar,
-} from './comunes';
+} from '../_core/comunes';
 import { EditorHoja } from './EditorHoja';
 import { ModalMarcador } from './EditorMarcador';
 import type { ControlHoja, EdicionDirecta, LlenadoHoja, MenuCampoInfo, SelectorEdicion } from './HojaEditable';
 import { MenuCampo } from './MenuCampo';
 import { PanelCampos } from './PanelCampos';
-import { mensajeError, useCargar, useServicios } from './servicios';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 export interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 

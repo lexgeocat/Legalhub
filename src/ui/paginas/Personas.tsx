@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PersonaDetalle, VinculoPersona } from '../../application/consultas';
 import { claveNormalizada, etiquetaRol } from '../../domain/texto';
 import {
     Alerta, Aviso, EstadoInsignia, Icono, Insignia, Segmentado, Vacio, avisar, confirmar, etiquetaTipo,
-} from '../comunes';
-import { FormularioPersona } from '../FormularioPersona';
-import { mensajeError, useCargar, useServicios } from '../servicios';
+} from '../_core/comunes';
+import { FormularioPersona } from '../compartidos/FormularioPersona';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 type Filtro = 'todas' | 'clientes' | 'partes' | 'libres';
 type TipoF = '' | 'natural' | 'juridica';

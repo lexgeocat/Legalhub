@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import type { ResultadoBusquedaLey } from '../application/casosDeUso/leyes';
-import { mensajeError, useServicios } from './servicios';
+﻿import { useEffect, useState } from 'react';
+import type { ResultadoBusquedaLey } from '../../application/casosDeUso/leyes';
+import { mensajeError, useServicios } from '../_core/servicios';
 
 /** ≥ 2 letras, o un número suelto («45» = artículo 45). */
 export const consultaValida = (q: string): boolean => {

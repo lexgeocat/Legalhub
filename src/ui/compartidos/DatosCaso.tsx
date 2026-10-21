@@ -1,6 +1,6 @@
-import { esTextoLargo } from '../application/camposModelo';
-import { etiquetaRol } from '../domain/texto';
-import { Campo } from './comunes';
+﻿import { esTextoLargo } from '../../application/camposModelo';
+import { etiquetaRol } from '../../domain/texto';
+import { Campo } from '../_core/comunes';
 
 export interface CampoForm { clave: string; etiqueta: string; tipo: string; requerido?: boolean; ejemplo?: string }
 

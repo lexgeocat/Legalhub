@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { VERSION_APP } from './domain/version';
-import { Buscador } from './ui/Buscador';
-import { Icono, Notificaciones, avisar, permitirSalir, type NombreIcono } from './ui/comunes';
-import { FormularioPersona } from './ui/FormularioPersona';
+import { Buscador } from './ui/compartidos/Buscador';
+import { Icono, Notificaciones, avisar, permitirSalir, type NombreIcono } from './ui/_core/comunes';
+import { FormularioPersona } from './ui/compartidos/FormularioPersona';
 import { Configuracion } from './ui/paginas/Configuracion';
 import { Expediente } from './ui/paginas/Expediente';
 import { Expedientes } from './ui/paginas/Expedientes';
 import { Modelos } from './ui/paginas/Modelos';
-import { PanelClientes } from './ui/PanelClientes';
-import { useCargar, useServicios } from './ui/servicios';
+import { PanelClientes } from './ui/clientes/PanelClientes';
+import { useCargar, useServicios } from './ui/_core/servicios';
 import { Personas } from './ui/paginas/Personas';
 import { Leyes } from './ui/paginas/Leyes';
 

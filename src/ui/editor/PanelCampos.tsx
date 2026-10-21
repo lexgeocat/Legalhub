@@ -1,20 +1,20 @@
 import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
-import { tipoSugerido } from '../application/camposModelo';
-import { ROL_PENDIENTE, mismoRol, rolDesdeTexto } from '../domain/catalogo';
+import { tipoSugerido } from '../../application/camposModelo';
+import { ROL_PENDIENTE, mismoRol, rolDesdeTexto } from '../../domain/catalogo';
 import {
     armarFrase, datosDe, deCaso, marcadorDato, partirFrase, planCampos, planDatos,
     type DatoInsertable,
-} from '../domain/camposParte';
-import { formasConcordancia, type FormasConcordancia } from '../domain/concordancia';
+} from '../../domain/camposParte';
+import { formasConcordancia, type FormasConcordancia } from '../../domain/concordancia';
 import {
     TIPOS_CAMPO, type CampoPropio, type DatoParte, type GrupoDatos, type TipoCampo,
-} from '../domain/fuenteModelo';
-import { nuevoId } from '../domain/id';
-import { matizDePersona } from '../domain/marcadores';
-import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../domain/texto';
-import { Campo, Icono, Segmentado, confirmar } from './comunes';
-import { fecha, fechalarga, hoyISO } from '../domain/filtros/fecha';
-import { BuscadorLeyes } from './PanelLeyes';
+} from '../../domain/fuenteModelo';
+import { nuevoId } from '../../domain/id';
+import { matizDePersona } from '../../domain/marcadores';
+import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../domain/texto';
+import { Campo, Icono, Segmentado, confirmar } from '../_core/comunes';
+import { fecha, fechalarga, hoyISO } from '../../domain/filtros/fecha';
+import { BuscadorLeyes } from '../leyes/PanelLeyes';
 
 type Pestana = 'datos' | 'partes' | 'genero' | 'leyes';
 type Insertar = (texto: string, bloque: boolean) => void;

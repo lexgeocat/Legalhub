@@ -6,9 +6,8 @@ import 'pdfjs-dist/web/pdf_viewer.css';
 import {
     RenderingCancelledException, TextLayer, getDocument,
     type PDFDocumentProxy, type RenderTask,
-} from '../infrastructure/pdf/pdfjs';
-import './leyes.css';
-import { mensajeError } from './servicios';
+} from '../../infrastructure/pdf/pdfjs';
+import { mensajeError } from '../_core/servicios';
 
 export interface ControlVisor { irA(pagina: number): void }
 

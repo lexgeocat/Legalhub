@@ -1,14 +1,14 @@
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { datoAsignable, reasignarDato } from '../domain/camposParte';
-import { mismoRol } from '../domain/catalogo';
-import { formasConcordancia, type FormasConcordancia } from '../domain/concordancia';
-import type { CampoPropio, TipoCampo } from '../domain/fuenteModelo';
+﻿import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { datoAsignable, reasignarDato } from '../../domain/camposParte';
+import { mismoRol } from '../../domain/catalogo';
+import { formasConcordancia, type FormasConcordancia } from '../../domain/concordancia';
+import type { CampoPropio, TipoCampo } from '../../domain/fuenteModelo';
 import {
     TRANSFORMACIONES, armarDato, armarGenero, describirMarcador, editarMarcador, formatosPara, matizDePersona, resolverRol,
     type ContextoMarcadores, type EdicionMarcador, type Formato, type Transformacion,
-} from '../domain/marcadores';
-import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../domain/texto';
-import { Alerta, Aviso, Campo, Modal } from './comunes';
+} from '../../domain/marcadores';
+import { claveCampo, claveNormalizada, etiquetaRol, normalizarRol, pluralRol } from '../../domain/texto';
+import { Alerta, Aviso, Campo, Modal } from '../_core/comunes';
 
 /** Cambio que el editor pide en el campo declarado («Datos» del constructor). */
 export interface CambioCampo { clave: string; tipo?: TipoCampo; requerido?: boolean }

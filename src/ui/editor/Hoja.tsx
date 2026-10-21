@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
     CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, PAGINA_CM,
     type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
-} from '../domain/fuenteModelo';
-import { usePaginacion } from './Paginacion';
-import { pilaCss } from '../domain/fuentes';
-import { describirMarcador, type ContextoMarcadores } from '../domain/marcadores';
+} from '../../domain/fuenteModelo';
+import { usePaginacion } from '../compartidos/Paginacion';
+import { pilaCss } from '../../domain/fuentes';
+import { describirMarcador, type ContextoMarcadores } from '../../domain/marcadores';
 import { lineaCss, useRazonLinea } from './metricasFuente';
 const PX_POR_CM = 37.7953;
 

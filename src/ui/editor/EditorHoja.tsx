@@ -1,12 +1,12 @@
-import { useState, type ReactNode, type RefObject } from 'react';
-import { margenesSeguros, type ConfigPagina, type Margenes, type TamanoPagina } from '../domain/fuenteModelo';
-import type { ContextoMarcadores } from '../domain/marcadores';
+﻿import { useState, type ReactNode, type RefObject } from 'react';
+import { margenesSeguros, type ConfigPagina, type Margenes, type TamanoPagina } from '../../domain/fuenteModelo';
+import type { ContextoMarcadores } from '../../domain/marcadores';
 import { BarraFormato, coma } from './BarraFormato';
 import {
     FORMATO_INICIAL, HojaEditable,
     type ControlHoja, type FormatoActivo, type LlenadoHoja, type MenuCampoInfo,
 } from './HojaEditable';
-import { ModalPagina } from './ModalPagina';
+import { ModalPagina } from '../compartidos/ModalPagina';
 
 const PAPEL: Record<TamanoPagina, string> = { carta: 'Carta', oficio: 'Oficio', a4: 'A4' };
 

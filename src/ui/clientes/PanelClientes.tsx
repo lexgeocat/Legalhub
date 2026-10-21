@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { claveNormalizada } from '../domain/texto';
-import { ETIQUETA_ESTADO, Icono, iniciales } from './comunes';
-import { useCargar, useServicios } from './servicios';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { claveNormalizada } from '../../domain/texto';
+import { ETIQUETA_ESTADO, Icono, iniciales } from '../_core/comunes';
+import { useCargar, useServicios } from '../_core/servicios';
 
 /** Clientes asignados a los expedientes (barra lateral). Cada cliente se despliega con sus expedientes. */
 export function PanelClientes({ activo, abrir, ficha }: {

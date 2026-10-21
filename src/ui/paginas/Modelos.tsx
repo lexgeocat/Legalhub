@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+﻿import { useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ModeloResumen } from '../../application/consultas';
 import { CATEGORIAS_MODELO } from '../../domain/fuenteModelo';
 import { PLANTILLAS_INICIALES } from '../../domain/plantillasIniciales';
@@ -6,10 +6,10 @@ import { claveNormalizada } from '../../domain/texto';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Pestanas, SelectCategoria, SelectMateria, Vacio,
     avisar, confirmar, etiquetaMateria, fechaCorta,
-} from '../comunes';
-import { EditorModelo } from '../EditorModelo';
-import { mensajeError, useCargar, useServicios } from '../servicios';
-import { VisorModelo } from '../VisorModelo';
+} from '../_core/comunes';
+import { EditorModelo } from '../editor/EditorModelo';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
+import { VisorModelo } from '../editor/VisorModelo';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { ResultadoImportacion } from '../../application/casosDeUso/importarModelo';
 import type { PlantillaGuardada } from '../../application/casosDeUso/plantillas';

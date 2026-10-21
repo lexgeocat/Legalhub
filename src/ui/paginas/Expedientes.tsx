@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+﻿import { useMemo, useState, type FormEvent } from 'react';
 import { esTextoLargo } from '../../application/camposModelo';
 import type { ExpedienteResumen, PersonaResumen } from '../../application/consultas';
 import { claveNormalizada } from '../../domain/texto';
@@ -6,9 +6,9 @@ import { GRUPOS_TIPO, TIPOS_EXPEDIENTE, TIPO_POR_DEFECTO, clienteAlInicio, obten
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, EstadoInsignia, Icono, Modal, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta,
-} from '../comunes';
-import { FormularioPersona } from '../FormularioPersona';
-import { mensajeError, useCargar, useServicios } from '../servicios';
+} from '../_core/comunes';
+import { FormularioPersona } from '../compartidos/FormularioPersona';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 export function Expedientes({ abrir }: { abrir: (id: string) => void }) {
     const s = useServicios();

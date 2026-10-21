@@ -1,7 +1,7 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
-import type { ResultadoBusqueda } from '../application/casosDeUso/buscar';
-import { Aviso, Icono, Insignia, type Tono } from './comunes';
-import { mensajeError, useServicios } from './servicios';
+﻿import { useEffect, useState, type KeyboardEvent } from 'react';
+import type { ResultadoBusqueda } from '../../application/casosDeUso/buscar';
+import { Aviso, Icono, Insignia, type Tono } from '../_core/comunes';
+import { mensajeError, useServicios } from '../_core/servicios';
 
 const ETIQUETA: Record<ResultadoBusqueda['tipo'], string> = {
     persona: 'Persona', expediente: 'Expediente', documento: 'Documento'

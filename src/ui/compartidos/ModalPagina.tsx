@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react';
+﻿import { useState, type FormEvent } from 'react';
 import {
     AREA_MIN_CM, ESPACIO_MAX_PT, MARGEN_MAX_CM, PAGINA_CM, PRESETS_MARGENES, presetDe,
     type ConfigPagina, type Margenes, type TamanoPagina,
-} from '../domain/fuenteModelo';
-import { coma } from './BarraFormato';
-import { Aviso, Campo, Modal } from './comunes';
+} from '../../domain/fuenteModelo';
+import { coma } from '../editor/BarraFormato';
+import { Aviso, Campo, Modal } from '../_core/comunes';
 
 const LADOS: (keyof Margenes)[] = ['superior', 'inferior', 'izquierdo', 'derecho'];
 const NOMBRE_LADO: Record<keyof Margenes, string> = {

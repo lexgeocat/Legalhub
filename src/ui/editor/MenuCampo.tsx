@@ -1,8 +1,8 @@
-import { useLayoutEffect, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { datoAsignable, reasignarDato } from '../domain/camposParte';
-import { mismoRol } from '../domain/catalogo';
-import { describirMarcador, matizDePersona, type ContextoMarcadores } from '../domain/marcadores';
-import { etiquetaRol } from '../domain/texto';
+﻿import { useLayoutEffect, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { datoAsignable, reasignarDato } from '../../domain/camposParte';
+import { mismoRol } from '../../domain/catalogo';
+import { describirMarcador, matizDePersona, type ContextoMarcadores } from '../../domain/marcadores';
+import { etiquetaRol } from '../../domain/texto';
 import type { MenuCampoInfo } from './HojaEditable';
 
 /** Menú de clic derecho sobre un campo del documento: asignar un dato de parte, editarlo o quitarlo. */

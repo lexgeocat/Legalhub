@@ -1,19 +1,19 @@
-import { open } from '@tauri-apps/plugin-dialog';
+﻿import { open } from '@tauri-apps/plugin-dialog';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { fichaDeModelo, seccionesDeModelo, type FichaModelo } from '../../application/camposModelo';
 import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
 import type { DocumentoResumen, ExpedienteResumen, ModeloResumen, PersonaResumen } from '../../application/consultas';
 import { claveNormalizada, etiquetaRol } from '../../domain/texto';
 import { TIPOS_EXPEDIENTE, clienteAlInicio, obtenerTipo } from '../../domain/tiposExpediente';
-import { AsistenteDocumento } from '../AsistenteDocumento';
+import { AsistenteDocumento } from '../editor/AsistenteDocumento';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta, fechaHora,
     hayCambiosPendientes, marcarCambiosPendientes, permitirSalir,
-} from '../comunes';
-import { DatosExpediente } from '../DatosExpediente';
-import { Hoja } from '../Hoja';
-import { mensajeError, useCargar, useServicios } from '../servicios';
+} from '../_core/comunes';
+import { DatosExpediente } from '../compartidos/DatosExpediente';
+import { Hoja } from '../editor/Hoja';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { esMateriaRecomendada } from '../../domain/fuenteModelo';
 import { contextoDeFuente } from '../../domain/marcadores';
 
