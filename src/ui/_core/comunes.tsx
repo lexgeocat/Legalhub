@@ -1,4 +1,4 @@
-﻿import { ask } from '@tauri-apps/plugin-dialog';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import type { CampoEsquema } from '../../application/puertos/motorPlantillas';
 import { CATEGORIAS_MODELO, MATERIAS_MODELO } from '../../domain/modelos/fuenteModelo';
@@ -21,6 +21,11 @@ const ICONOS = {
     balanza: 'M12 3v18 M6 21h12 M5 7h14 M5 7l-3 7a3 3 0 0 0 6 0z M19 7l-3 7a3 3 0 0 0 6 0z',
     libro: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h11',
     flujo: 'M4 4h6v5H4z M14 15h6v5h-6z M7 9v3a3 3 0 0 0 3 3h4',
+    chevronIzquierda: 'M15 18l-6-6 6-6',
+    chevronDerecha: 'M9 18l6-6-6-6',
+    chevronAbajo: 'M6 9l6 6 6-6',
+    panelColapsar: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M9 4v16 M15 15l-3-3 3-3',
+    panelExpandir: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M9 4v16 M13 9l3 3-3 3',
 } as const;
 
 export type NombreIcono = keyof typeof ICONOS;

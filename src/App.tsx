@@ -44,12 +44,47 @@ export default function App() {
   const [vista, setVista] = useState<Vista>({ n: 'expedientes' });
   const [buscando, setBuscando] = useState(false);
   const [persona, setPersona] = useState<string | null>(null);
+  const [colapsado, setColapsado] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('legalhub_panel_colapsado') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [tooltip, setTooltip] = useState<{ texto: string; top: number } | null>(null);
+
+  const alternarColapso = () => {
+    setColapsado((prev) => {
+      const nuevo = !prev;
+      try {
+        localStorage.setItem('legalhub_panel_colapsado', String(nuevo));
+      } catch {
+        // ignore
+      }
+      return nuevo;
+    });
+    setTooltip(null);
+  };
+
+  const mostrarTooltip = (e: React.MouseEvent, texto: string) => {
+    if (!colapsado) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({ texto, top: rect.top + rect.height / 2 });
+  };
+
+  const ocultarTooltip = () => {
+    setTooltip(null);
+  };
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setBuscando(true);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        alternarColapso();
       }
     };
     window.addEventListener('keydown', f);
@@ -67,34 +102,128 @@ export default function App() {
   const expedienteActivo = vista.n === 'expediente' ? vista.id : null;
 
   return (
-    <div className="app">
-      <nav className="nav">
-        <div className="nav-marca">
-          <span className="logo"><Icono n="balanza" tam={18} /></span>
-          LEGAL-HUB
+    <div className={`app${colapsado ? ' nav-colapsado' : ''}`}>
+      <nav className={`nav${colapsado ? ' colapsada' : ''}`} aria-label="Navegación principal">
+        <div className={`nav-marca${colapsado ? ' colapsada' : ''}`}>
+          {colapsado ? (
+            <button
+              type="button"
+              className="nav-marca-logo-btn"
+              onClick={alternarColapso}
+              onMouseEnter={(e) => mostrarTooltip(e, 'LEGAL-HUB · Expandir panel (Ctrl+B)')}
+              onMouseLeave={ocultarTooltip}
+              aria-label="Expandir panel"
+            >
+              <span className="logo">
+                <Icono n="balanza" tam={18} />
+              </span>
+            </button>
+          ) : (
+            <>
+              <div className="nav-marca-info">
+                <span className="logo" title="LEGAL-HUB">
+                  <Icono n="balanza" tam={18} />
+                </span>
+                <span className="nav-marca-texto">LEGAL-HUB</span>
+              </div>
+              <button
+                type="button"
+                className="nav-btn-colapsar"
+                onClick={alternarColapso}
+                title="Colapsar panel (Ctrl+B)"
+                aria-label="Colapsar panel"
+              >
+                <Icono n="chevronIzquierda" tam={15} />
+              </button>
+            </>
+          )}
         </div>
-        <button type="button" className="nav-buscar" onClick={() => setBuscando(true)}>
-          <Icono n="buscar" tam={16} /> Buscar <kbd>Ctrl K</kbd>
+
+        <button
+          type="button"
+          className={`nav-buscar${colapsado ? ' colapsado' : ''}`}
+          onClick={() => setBuscando(true)}
+          onMouseEnter={(e) => mostrarTooltip(e, 'Buscar (Ctrl+K)')}
+          onMouseLeave={ocultarTooltip}
+          aria-label="Buscar"
+          title={colapsado ? undefined : 'Buscar (Ctrl+K)'}
+        >
+          <Icono n="buscar" tam={16} />
+          {!colapsado && (
+            <>
+              <span>Buscar</span>
+              <kbd>Ctrl K</kbd>
+            </>
+          )}
         </button>
-        {MENU.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className={`nav-item${vista.n === m.id || (m.id === 'expedientes' && vista.n === 'expediente') ? ' activo' : ''}`}
-            onClick={() => ir(m.id)}
-          >
-            <Icono n={m.icono} /> {m.etiqueta}
-          </button>
-        ))}
+
+        {MENU.map((m) => {
+          const activo = vista.n === m.id || (m.id === 'expedientes' && vista.n === 'expediente');
+          return (
+            <button
+              key={m.id}
+              type="button"
+              className={`nav-item${activo ? ' activo' : ''}${colapsado ? ' colapsado' : ''}`}
+              onClick={() => ir(m.id)}
+              onMouseEnter={(e) => mostrarTooltip(e, m.etiqueta)}
+              onMouseLeave={ocultarTooltip}
+              aria-label={m.etiqueta}
+            >
+              <Icono n={m.icono} tam={18} />
+              {!colapsado && <span className="nav-item-texto">{m.etiqueta}</span>}
+            </button>
+          );
+        })}
 
         <PanelClientes
           activo={expedienteActivo}
           abrir={(id) => void navegar({ n: 'expediente', id })}
           ficha={setPersona}
+          colapsado={colapsado}
+          onExpandirNav={() => setColapsado(false)}
+          onTooltip={mostrarTooltip}
+          onOcultarTooltip={ocultarTooltip}
         />
 
-        <div className="nav-pie">Versión {VERSION_APP}</div>
+        <div className={`nav-pie${colapsado ? ' colapsado' : ''}`}>
+          {colapsado ? (
+            <button
+              type="button"
+              className="nav-pie-colapsar colapsado"
+              onClick={alternarColapso}
+              onMouseEnter={(e) => mostrarTooltip(e, 'Expandir panel (Ctrl+B)')}
+              onMouseLeave={ocultarTooltip}
+              aria-label="Expandir panel"
+              title="Expandir panel (Ctrl+B)"
+            >
+              <Icono n="chevronDerecha" tam={16} />
+            </button>
+          ) : (
+            <>
+              <span className="nav-pie-version" title={`Legal-Hub versión ${VERSION_APP}`}>
+                v{VERSION_APP}
+              </span>
+              <button
+                type="button"
+                className="nav-pie-colapsar"
+                onClick={alternarColapso}
+                title="Colapsar panel (Ctrl+B)"
+                aria-label="Colapsar panel"
+              >
+                <Icono n="chevronIzquierda" tam={13} />
+                <span>Colapsar</span>
+                <kbd>Ctrl B</kbd>
+              </button>
+            </>
+          )}
+        </div>
       </nav>
+
+      {colapsado && tooltip && (
+        <div className="nav-tooltip-flotante" style={{ top: tooltip.top }} role="tooltip">
+          {tooltip.texto}
+        </div>
+      )}
 
       <main className="contenido">
         {vista.n === 'expedientes' && <Expedientes abrir={(id) => void navegar({ n: 'expediente', id })} />}
