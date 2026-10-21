@@ -1,16 +1,18 @@
-﻿// src/ui/paginas/Configuracion.tsx
+// src/ui/paginas/Configuracion.tsx
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useState, type FormEvent } from 'react';
 import { hoyISO } from '../../domain/modelos/filtros/fecha';
 import { VERSION_APP } from '../../domain/comun/version';
-import { Alerta, Aviso, Campo, Insignia, Modal, avisar, confirmar } from '../_core/comunes';
+import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar } from '../_core/comunes';
 import { FormularioPersona } from '../compartidos/FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
+import { useTema } from '../_core/tema';
 
 type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | 'limpieza' | null;
 
 export function Configuracion() {
+    const [tema, fijarTema] = useTema();
     const s = useServicios();
     const cfg = useCargar(() => s.config.cargar(), []);
     const personas = useCargar(() => s.consultas.listarPersonas(), []);
@@ -167,6 +169,90 @@ export function Configuracion() {
             </div>
 
             <Aviso error={error ?? cfg.error ?? personas.error ?? abogado.error} />
+            <section className="tarjeta">
+                <div className="tarjeta-cab">
+                    <div>
+                        <h3>Apariencia y tema</h3>
+                        <p className="suave">Personaliza el entorno visual del despacho. El modo oscuro reduce la fatiga visual durante sesiones prolongadas de redacción y lectura de expedientes.</p>
+                    </div>
+                </div>
+                <div className="tema-selector-grid">
+                    <button
+                        type="button"
+                        className={`tema-opcion-card${tema === 'oxford' ? ' sel' : ''}`}
+                        onClick={() => {
+                            fijarTema('oxford');
+                            avisar('Tema Oxford Editorial activado');
+                        }}
+                    >
+                        <div className="tema-preview tema-preview-claro">
+                            <div className="tp-nav" />
+                            <div className="tp-content">
+                                <div className="tp-bar" />
+                                <div className="tp-card" />
+                            </div>
+                        </div>
+                        <div className="tema-opcion-info">
+                            <div className="tema-opcion-titulo">
+                                <Icono n="sol" tam={16} />
+                                <b>Oxford Editorial</b>
+                                {tema === 'oxford' && <Insignia tono="azul">Activo</Insignia>}
+                            </div>
+                            <p className="suave">Oxford Navy & Alabastro. Tonalidad de prestigio jurídico y legibilidad óptima para despachos.</p>
+                        </div>
+                    </button>
+
+                    <button
+                        type="button"
+                        className={`tema-opcion-card${tema === 'slate' ? ' sel' : ''}`}
+                        onClick={() => {
+                            fijarTema('slate');
+                            avisar('Tema Slate Dusk activado');
+                        }}
+                    >
+                        <div className="tema-preview tema-preview-oscuro">
+                            <div className="tp-nav" />
+                            <div className="tp-content">
+                                <div className="tp-bar" />
+                                <div className="tp-card" />
+                            </div>
+                        </div>
+                        <div className="tema-opcion-info">
+                            <div className="tema-opcion-titulo">
+                                <Icono n="luna" tam={16} />
+                                <b>Slate Dusk</b>
+                                {tema === 'slate' && <Insignia tono="azul">Activo</Insignia>}
+                            </div>
+                            <p className="suave">Pizarra nocturno suave anti-fatiga. Diseñado para juristas en jornadas de trabajo prolongadas.</p>
+                        </div>
+                    </button>
+
+                    <button
+                        type="button"
+                        className={`tema-opcion-card${tema === 'rose' ? ' sel' : ''}`}
+                        onClick={() => {
+                            fijarTema('rose');
+                            avisar('Tema Rose Quartz Boutique activado');
+                        }}
+                    >
+                        <div className="tema-preview" style={{ background: '#fdfbf9', borderColor: '#f2e2df' }}>
+                            <div className="tp-nav" style={{ background: '#22111a', borderRight: '1px solid rgba(244, 215, 222, 0.15)' }} />
+                            <div className="tp-content">
+                                <div className="tp-bar" style={{ background: '#9d4466' }} />
+                                <div className="tp-card" style={{ background: '#ffffff', borderColor: '#f2e2df' }} />
+                            </div>
+                        </div>
+                        <div className="tema-opcion-info">
+                            <div className="tema-opcion-titulo">
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#9d4466' }} />
+                                <b>Rose Quartz Boutique</b>
+                                {tema === 'rose' && <Insignia tono="violeta">Activo</Insignia>}
+                            </div>
+                            <p className="suave">Panel oscuro boutique (Plum Wine & Rose Gold) con espacio de trabajo marfil suave. Sofisticación para firmas ejecutivas.</p>
+                        </div>
+                    </button>
+                </div>
+            </section>
 
             {c && (
                 <form key={JSON.stringify(c)} className="tarjeta" onSubmit={(e) => void guardar(e)}>

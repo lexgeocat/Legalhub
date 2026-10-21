@@ -13,6 +13,8 @@ import { Personas } from './ui/paginas/Personas';
 import { Leyes } from './ui/paginas/Leyes';
 import { Procedimientos } from './ui/paginas/Procedimientos';
 
+import { useTema } from './ui/_core/tema';
+
 type Item = 'expedientes' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
 
@@ -41,6 +43,7 @@ function FichaPersona({ id, cerrar }: { id: string; cerrar: () => void }) {
 }
 
 export default function App() {
+  const [tema, , alternarTema] = useTema();
   const [vista, setVista] = useState<Vista>({ n: 'expedientes' });
   const [buscando, setBuscando] = useState(false);
   const [persona, setPersona] = useState<string | null>(null);
@@ -86,10 +89,14 @@ export default function App() {
         e.preventDefault();
         alternarColapso();
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        alternarTema();
+      }
     };
     window.addEventListener('keydown', f);
     return () => window.removeEventListener('keydown', f);
-  }, []);
+  }, [alternarTema]);
 
   /** Toda navegación pasa por aquí: si hay datos sin guardar en un expediente, pregunta antes de salir. */
   async function navegar(destino: Vista) {
@@ -187,22 +194,75 @@ export default function App() {
 
         <div className={`nav-pie${colapsado ? ' colapsado' : ''}`}>
           {colapsado ? (
-            <button
-              type="button"
-              className="nav-pie-colapsar colapsado"
-              onClick={alternarColapso}
-              onMouseEnter={(e) => mostrarTooltip(e, 'Expandir panel (Ctrl+B)')}
-              onMouseLeave={ocultarTooltip}
-              aria-label="Expandir panel"
-              title="Expandir panel (Ctrl+B)"
-            >
-              <Icono n="chevronDerecha" tam={16} />
-            </button>
+            <div className="nav-pie-colapsado-grupo">
+              <button
+                type="button"
+                className="nav-btn-tema colapsado"
+                onClick={alternarTema}
+                onMouseEnter={(e) =>
+                  mostrarTooltip(
+                    e,
+                    `Tema activo: ${
+                      tema === 'rose' ? 'Rose Quartz' : tema === 'slate' ? 'Slate Dusk' : 'Oxford Light'
+                    } · Clic para alternar (Ctrl+Shift+T)`,
+                  )
+                }
+                onMouseLeave={ocultarTooltip}
+                aria-label="Alternar tema visual"
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor:
+                      tema === 'rose' ? '#9D4466' : tema === 'slate' ? '#60A5FA' : '#1D4ED8',
+                    boxShadow: '0 0 6px rgba(0,0,0,0.3)'
+                  }}
+                />
+              </button>
+              <button
+                type="button"
+                className="nav-pie-colapsar colapsado"
+                onClick={alternarColapso}
+                onMouseEnter={(e) => mostrarTooltip(e, 'Expandir panel (Ctrl+B)')}
+                onMouseLeave={ocultarTooltip}
+                aria-label="Expandir panel"
+                title="Expandir panel (Ctrl+B)"
+              >
+                <Icono n="chevronDerecha" tam={16} />
+              </button>
+            </div>
           ) : (
             <>
-              <span className="nav-pie-version" title={`Legal-Hub versión ${VERSION_APP}`}>
-                v{VERSION_APP}
-              </span>
+              <div className="nav-pie-fila">
+                <button
+                  type="button"
+                  className="nav-btn-tema"
+                  onClick={alternarTema}
+                  title="Cambiar tema (Oxford Editorial → Slate Dusk → Rose Quartz Boutique) (Ctrl+Shift+T)"
+                  aria-label="Alternar tema"
+                >
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor:
+                        tema === 'rose' ? '#9D4466' : tema === 'slate' ? '#60A5FA' : '#1D4ED8',
+                      boxShadow: '0 0 4px currentColor'
+                    }}
+                  />
+                  <span>
+                    {tema === 'rose' ? 'Rose Boutique' : tema === 'slate' ? 'Slate Dusk' : 'Oxford Light'}
+                  </span>
+                </button>
+                <span className="nav-pie-version" title={`Legal-Hub versión ${VERSION_APP}`}>
+                  v{VERSION_APP}
+                </span>
+              </div>
               <button
                 type="button"
                 className="nav-pie-colapsar"

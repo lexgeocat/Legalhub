@@ -26,6 +26,8 @@ const ICONOS = {
     chevronAbajo: 'M6 9l6 6 6-6',
     panelColapsar: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M9 4v16 M15 15l-3-3 3-3',
     panelExpandir: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M9 4v16 M13 9l3 3-3 3',
+    sol: 'M12 3v1 M12 20v1 M4.22 4.22l.71.71 M18.36 18.36l.71.71 M1 12h2 M21 12h2 M4.22 19.78l.71-.71 M18.36 5.64l.71-.71 M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z',
+    luna: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
 } as const;
 
 export type NombreIcono = keyof typeof ICONOS;
