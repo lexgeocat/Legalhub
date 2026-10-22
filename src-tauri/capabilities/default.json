@@ -18,6 +18,20 @@
       ]
     },
     "dialog:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://ollama.com/*" },
+        { "url": "https://*.ollama.com/*" },
+        { "url": "https://api.groq.com/*" },
+        { "url": "https://generativelanguage.googleapis.com/*" },
+        { "url": "https://api.anthropic.com/*" },
+        { "url": "https://opencode.ai/*" },
+        { "url": "https://*/*" },
+        { "url": "http://localhost:*/*" },
+        { "url": "http://127.0.0.1:*/*" }
+      ]
+    },
     "fs:allow-read-file",
     "fs:allow-write-file",
     "fs:allow-mkdir",

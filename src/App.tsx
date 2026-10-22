@@ -14,12 +14,14 @@ import { Leyes } from './ui/paginas/Leyes';
 import { Procedimientos } from './ui/paginas/Procedimientos';
 
 import { useTema } from './ui/_core/tema';
+import LexAi from './ui/paginas/LexAi';
 
-type Item = 'expedientes' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'config';
+type Item = 'expedientes' | 'lex-ai' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
 
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'expedientes', etiqueta: 'Expedientes', icono: 'carpeta' },
+  { id: 'lex-ai', etiqueta: 'Lex AI', icono: 'destello' },
   { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
   { id: 'procedimientos', etiqueta: 'Procedimientos', icono: 'flujo' },
@@ -290,6 +292,7 @@ export default function App() {
         {vista.n === 'expediente' && (
           <Expediente key={vista.id} id={vista.id} volver={() => void navegar({ n: 'expedientes' })} />
         )}
+        {vista.n === 'lex-ai' && <LexAi />}
         {vista.n === 'personas' && <Personas abrirExpediente={(id) => void navegar({ n: 'expediente', id })} />}
         {vista.n === 'modelos' && <Modelos />}
         {vista.n === 'procedimientos' && <Procedimientos />}
