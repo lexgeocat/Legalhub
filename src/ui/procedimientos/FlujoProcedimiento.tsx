@@ -7,6 +7,7 @@ import {
     type HallazgoFlujo, type Paso, type Requisito, type Salida, type TipoPaso,
 } from '../../domain/procedimientos/procedimientos';
 import { Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, Vacio, avisar, confirmar } from '../_core/comunes';
+import { useTema } from '../_core/tema';
 import { COLOR_PASO, Flujograma } from './Flujograma';
 import { mensajeError, useServicios } from '../_core/servicios';
 import './procedimientos.css';
@@ -26,16 +27,31 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
     cambiarCarriles: (c: string[]) => void;
 }) {
     const s = useServicios();
+    const [tema, , alternarTema] = useTema();
+    const esOscuro = tema === 'slate';
     const svg = useRef<SVGSVGElement>(null);
     const lienzo = useRef<HTMLDivElement>(null);
-    const [ancho, setAncho] = useState(0);
-    const [zoom, setZoom] = useState<number | null>(null); // null = ajustar al ancho
     const [modo, setModo] = useState<Modo>('editar');
     const [sel, setSel] = useState<string | null>(null);
     const [recorrido, setRecorrido] = useState<string[]>([]);
     const [dlg, setDlg] = useState<{ paso: Paso | null; desde?: Paso } | null>(null);
     const [exportando, setExportando] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [pantallaCompleta, setPantallaCompleta] = useState(false);
+    const [panelVisible, setPanelVisible] = useState(true);
+
+    const [transform, setTransform] = useState<{ x: number; y: number; zoom: number }>({ x: 0, y: 0, zoom: 1 });
+    const transformRef = useRef<{ x: number; y: number; zoom: number }>({ x: 0, y: 0, zoom: 1 });
+    transformRef.current = transform;
+
+    const [arrastrando, setArrastrando] = useState(false);
+    const arrastrandoRef = useRef<{
+        inicioMouseX: number;
+        inicioMouseY: number;
+        inicioPanX: number;
+        inicioPanY: number;
+        activo: boolean;
+    }>({ inicioMouseX: 0, inicioMouseY: 0, inicioPanX: 0, inicioPanY: 0, activo: false });
 
     const mapa = useMemo(() => new Map(pasos.map((p) => [p.id, p] as const)), [pasos]);
     const disp = useMemo(() => calcularFlujo(pasos, carriles), [pasos, carriles]);
@@ -44,34 +60,144 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
     const ruta = useMemo(() => recorrido.filter((id) => mapa.has(id)), [recorrido, mapa]);
     const actualRec = modo === 'recorrer' ? ruta[ruta.length - 1] ?? null : null;
 
+    /* ----- Ajustar diagrama a pantalla ----- */
+    const ajustarVista = () => {
+        const el = lienzo.current;
+        if (!el || disp.ancho === 0 || disp.alto === 0) return;
+        const padding = 48;
+        const fitW = (el.clientWidth - padding) / disp.ancho;
+        const fitH = (el.clientHeight - padding) / disp.alto;
+        const z = Math.min(1.15, Math.max(0.25, Math.min(fitW, fitH > 0 ? fitH : fitW)));
+        const targetX = Math.round((el.clientWidth - disp.ancho * z) / 2);
+        const targetY = Math.max(24, Math.round((el.clientHeight - disp.alto * z) / 2));
+        const nueva = { x: targetX, y: targetY, zoom: z };
+        transformRef.current = nueva;
+        setTransform(nueva);
+    };
+
+    const inicializadoRef = useRef(false);
     useEffect(() => {
         const el = lienzo.current;
         if (!el) return;
-        const medir = () => setAncho(el.clientWidth);
+        const medir = () => {
+            if (!inicializadoRef.current && el.clientWidth > 0 && disp.ancho > 0) {
+                ajustarVista();
+                inicializadoRef.current = true;
+            }
+        };
         medir();
         const o = new ResizeObserver(medir);
         o.observe(el);
         return () => o.disconnect();
-    }, []);
-
-    const fit = ancho > 0 && disp.ancho > 0 ? (ancho - 24) / disp.ancho : 1;
-    const escala = zoom ?? Math.min(1.15, Math.max(0.4, fit));
+    }, [disp.ancho, disp.alto, pantallaCompleta, panelVisible]);
 
     function centrar(id: string) {
         const n = disp.nodos.find((x) => x.id === id);
         const el = lienzo.current;
         if (!n || !el) return;
-        el.scrollTo({
-            left: Math.max(0, (n.x + n.w / 2) * escala - el.clientWidth / 2),
-            top: Math.max(0, (n.y + n.h / 2) * escala - el.clientHeight / 2),
-            behavior: 'smooth',
-        });
+        const z = transformRef.current.zoom;
+        const targetX = Math.round(el.clientWidth / 2 - (n.x + n.w / 2) * z);
+        const targetY = Math.round(el.clientHeight / 2 - (n.y + n.h / 2) * z);
+        const nueva = { x: targetX, y: targetY, zoom: z };
+        transformRef.current = nueva;
+        setTransform(nueva);
     }
 
     useEffect(() => {
         if (actualRec) centrar(actualRec);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [actualRec]);
+
+    /* ----- Zoom con rueda del ratón (fluido, focal al cursor, sin clamping) ----- */
+    useEffect(() => {
+        const el = lienzo.current;
+        if (!el) return;
+
+        const alRueda = (e: WheelEvent) => {
+            e.preventDefault();
+
+            const cur = transformRef.current;
+            const rect = el.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const factor = e.deltaY < 0 ? 1.12 : 0.89;
+            const newZ = Math.min(3.0, Math.max(0.2, Math.round(cur.zoom * factor * 100) / 100));
+            if (newZ === cur.zoom) return;
+
+            const wx = (mx - cur.x) / cur.zoom;
+            const wy = (my - cur.y) / cur.zoom;
+
+            const newX = Math.round(mx - wx * newZ);
+            const newY = Math.round(my - wy * newZ);
+
+            const nueva = { x: newX, y: newY, zoom: newZ };
+            transformRef.current = nueva;
+            setTransform(nueva);
+        };
+
+        el.addEventListener('wheel', alRueda, { passive: false });
+        return () => el.removeEventListener('wheel', alRueda);
+    }, []);
+
+    /* ----- Mover / panear con clic derecho (o botón central) ----- */
+    const alIniciarArrastre = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (e.button === 2 || e.button === 1) {
+            e.preventDefault();
+            arrastrandoRef.current = {
+                inicioMouseX: e.clientX,
+                inicioMouseY: e.clientY,
+                inicioPanX: transformRef.current.x,
+                inicioPanY: transformRef.current.y,
+                activo: true,
+            };
+            setArrastrando(true);
+        }
+    };
+
+    useEffect(() => {
+        if (!arrastrando) return;
+
+        const alMover = (e: PointerEvent) => {
+            const a = arrastrandoRef.current;
+            if (!a.activo) return;
+            const dx = e.clientX - a.inicioMouseX;
+            const dy = e.clientY - a.inicioMouseY;
+            const newX = a.inicioPanX + dx;
+            const newY = a.inicioPanY + dy;
+            transformRef.current.x = newX;
+            transformRef.current.y = newY;
+            setTransform((prev) => ({ ...prev, x: newX, y: newY }));
+        };
+
+        const alSoltar = (e: PointerEvent) => {
+            if (e.button === 2 || e.button === 1 || e.buttons === 0) {
+                arrastrandoRef.current.activo = false;
+                setArrastrando(false);
+            }
+        };
+
+        window.addEventListener('pointermove', alMover);
+        window.addEventListener('pointerup', alSoltar);
+        window.addEventListener('pointercancel', alSoltar);
+        return () => {
+            window.removeEventListener('pointermove', alMover);
+            window.removeEventListener('pointerup', alSoltar);
+            window.removeEventListener('pointercancel', alSoltar);
+        };
+    }, [arrastrando]);
+
+    /* ----- Salir de pantalla completa con Escape ----- */
+    useEffect(() => {
+        if (!pantallaCompleta) return;
+        const alTecla = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setPantallaCompleta(false);
+            }
+        };
+        window.addEventListener('keydown', alTecla);
+        return () => window.removeEventListener('keydown', alTecla);
+    }, [pantallaCompleta]);
 
     /* ----- resaltado: camino hasta el paso elegido, o lo recorrido ----- */
     const resalte = useMemo(() => {
@@ -141,7 +267,21 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
     }
 
     function ajustarZoom(d: number) {
-        setZoom(Math.min(2, Math.max(0.25, Math.round((escala + d) * 100) / 100)));
+        const el = lienzo.current;
+        if (!el) return;
+        const cur = transformRef.current;
+        const factor = d > 0 ? 1.15 : 1 / 1.15;
+        const newZ = Math.min(3.0, Math.max(0.2, Math.round(cur.zoom * factor * 100) / 100));
+        if (newZ === cur.zoom) return;
+        const mx = el.clientWidth / 2;
+        const my = el.clientHeight / 2;
+        const wx = (mx - cur.x) / cur.zoom;
+        const wy = (my - cur.y) / cur.zoom;
+        const newX = Math.round(mx - wx * newZ);
+        const newY = Math.round(my - wy * newZ);
+        const nueva = { x: newX, y: newY, zoom: newZ };
+        transformRef.current = nueva;
+        setTransform(nueva);
     }
 
     async function exportar() {
@@ -174,9 +314,15 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
     };
 
     return (
-        <div className="fl-layout">
+        <div className={`fl-layout${pantallaCompleta ? ' fl-pantalla-completa' : ''}${!panelVisible ? ' sin-panel' : ''}`}>
             <div className="fl-escena">
                 <div className="fl-barra">
+                    {pantallaCompleta && (
+                        <div className="fl-barra-titulo" title={nombre}>
+                            <Icono n="flujo" tam={16} />
+                            <span>{nombre.trim() || 'Flujograma'}</span>
+                        </div>
+                    )}
                     <Segmentado<Modo>
                         valor={modo}
                         cambiar={cambiarModo}
@@ -188,16 +334,106 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
                         </button>
                     )}
                     <span className="espacio" />
-                    <button type="button" className="btn btn-fan btn-sm" aria-label="Reducir" onClick={() => ajustarZoom(-0.1)}>−</button>
-                    <span className="suave">{Math.round(escala * 100)} %</span>
-                    <button type="button" className="btn btn-fan btn-sm" aria-label="Ampliar" onClick={() => ajustarZoom(0.1)}>+</button>
-                    <button type="button" className="btn btn-fan btn-sm" onClick={() => setZoom(null)}>Ajustar</button>
-                    <button type="button" className="btn btn-sec btn-sm" disabled={pasos.length === 0} onClick={() => void exportar()}>Exportar SVG</button>
+                    <div className="fl-zoom-grupo">
+                        <button
+                            type="button"
+                            className="btn-zoom"
+                            aria-label="Reducir zoom"
+                            onClick={() => ajustarZoom(-0.1)}
+                            title="Reducir zoom (−)"
+                        >
+                            −
+                        </button>
+                        <button
+                            type="button"
+                            className="fl-zoom-badge"
+                            onClick={() => {
+                                if (transform.zoom === 1) ajustarVista();
+                                else {
+                                    const el = lienzo.current;
+                                    if (el) {
+                                        const cx = el.clientWidth / 2;
+                                        const cy = el.clientHeight / 2;
+                                        const wx = (cx - transform.x) / transform.zoom;
+                                        const wy = (cy - transform.y) / transform.zoom;
+                                        const nueva = { x: Math.round(cx - wx * 1), y: Math.round(cy - wy * 1), zoom: 1 };
+                                        transformRef.current = nueva;
+                                        setTransform(nueva);
+                                    }
+                                }
+                            }}
+                            title="Alternar entre 100% y ajustar al ancho"
+                        >
+                            {Math.round(transform.zoom * 100)} %
+                        </button>
+                        <button
+                            type="button"
+                            className="btn-zoom"
+                            aria-label="Ampliar zoom"
+                            onClick={() => ajustarZoom(0.1)}
+                            title="Ampliar zoom (+)"
+                        >
+                            +
+                        </button>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-fan btn-sm"
+                        onClick={ajustarVista}
+                        title="Ajustar diagrama al tamaño de la pantalla"
+                    >
+                        Ajustar
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-sec btn-sm"
+                        disabled={pasos.length === 0}
+                        onClick={() => void exportar()}
+                        title="Exportar diagrama en formato vectorial SVG"
+                    >
+                        Exportar SVG
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-sec btn-sm"
+                        onClick={() => alternarTema()}
+                        title={esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                    >
+                        <Icono n={esOscuro ? 'sol' : 'luna'} tam={14} />
+                        <span>{esOscuro ? 'Claro' : 'Oscuro'}</span>
+                    </button>
+                    <button
+                        type="button"
+                        className={`btn ${panelVisible ? 'btn-fan' : 'btn-sec'} btn-sm`}
+                        onClick={() => setPanelVisible((v) => !v)}
+                        title={panelVisible ? 'Ocultar panel lateral de detalles' : 'Mostrar panel lateral de detalles'}
+                    >
+                        <Icono n={panelVisible ? 'panelColapsar' : 'panelExpandir'} tam={14} />
+                        <span>{panelVisible ? 'Panel' : 'Ver panel'}</span>
+                    </button>
+                    <button
+                        type="button"
+                        className={`btn ${pantallaCompleta ? 'btn-pri' : 'btn-sec'} btn-sm`}
+                        onClick={() => setPantallaCompleta((v) => !v)}
+                        title={pantallaCompleta ? 'Salir de pantalla completa (Esc)' : 'Ver flujograma en pantalla completa'}
+                    >
+                        <Icono n={pantallaCompleta ? 'minimizar' : 'maximizar'} tam={14} />
+                        <span>{pantallaCompleta ? 'Salir' : 'Pantalla completa'}</span>
+                    </button>
                 </div>
 
                 <Aviso error={error} />
 
-                <div className="fl-lienzo" ref={lienzo}>
+                <div
+                    className={`fl-lienzo${arrastrando ? ' arrastrando' : ''}`}
+                    ref={lienzo}
+                    onPointerDown={alIniciarArrastre}
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{
+                        backgroundPosition: `${transform.x}px ${transform.y}px`,
+                        backgroundSize: `${24 * transform.zoom}px ${24 * transform.zoom}px`,
+                    }}
+                >
                     {pasos.length === 0 ? (
                         <Vacio
                             icono="flujo"
@@ -208,37 +444,58 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
                             <button type="button" className="btn btn-sec" onClick={() => setDlg({ paso: null })}>Agregar el primer paso</button>
                         </Vacio>
                     ) : (
-                        <Flujograma
-                            disp={disp} pasos={pasos} actual={actual} nodosOn={resalte.nodos} aristasOn={resalte.aristas}
-                            escala={escala} svgRef={svg} onElegir={alElegir}
-                        />
+                        <div
+                            className="fl-lienzo-capa"
+                            style={{
+                                transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})`,
+                                transformOrigin: '0 0',
+                                willChange: arrastrando ? 'transform' : 'auto',
+                            }}
+                        >
+                            <Flujograma
+                                disp={disp}
+                                pasos={pasos}
+                                actual={actual}
+                                nodosOn={resalte.nodos}
+                                aristasOn={resalte.aristas}
+                                escala={1}
+                                svgRef={svg}
+                                onElegir={alElegir}
+                                esOscuro={esOscuro}
+                            />
+                        </div>
                     )}
                 </div>
             </div>
 
-            <aside className="fl-lateral">
-                {modo === 'recorrer' ? (
-                    <PanelRecorrido
-                        ruta={ruta} mapa={mapa} requisitos={requisitos}
-                        avanzar={(id) => setRecorrido([...ruta, id])}
-                        atras={() => setRecorrido(ruta.slice(0, -1))}
-                        reiniciar={iniciar}
-                        saltar={(i) => setRecorrido(ruta.slice(0, i + 1))}
-                    />
-                ) : paso ? (
-                    <PanelPaso
-                        paso={paso} pasos={pasos} mapa={mapa} requisitos={requisitos} ir={irA}
-                        editar={() => setDlg({ paso })}
-                        agregar={() => setDlg({ paso: null, desde: paso })}
-                        quitar={() => void quitarPaso(paso)}
-                    />
-                ) : (
-                    <PanelGeneral
-                        pasos={pasos} hallazgos={hallazgos} carriles={disp.carriles.map((c) => c.nombre)}
-                        ir={irA} moverCarril={moverCarril}
-                    />
-                )}
-            </aside>
+            {panelVisible && (
+                <aside className="fl-lateral">
+                    {modo === 'recorrer' ? (
+                        <PanelRecorrido
+                            ruta={ruta} mapa={mapa} requisitos={requisitos}
+                            avanzar={(id) => setRecorrido([...ruta, id])}
+                            atras={() => setRecorrido(ruta.slice(0, -1))}
+                            reiniciar={iniciar}
+                            saltar={(i) => setRecorrido(ruta.slice(0, i + 1))}
+                            esOscuro={esOscuro}
+                        />
+                    ) : paso ? (
+                        <PanelPaso
+                            paso={paso} pasos={pasos} mapa={mapa} requisitos={requisitos} ir={irA}
+                            editar={() => setDlg({ paso })}
+                            agregar={() => setDlg({ paso: null, desde: paso })}
+                            quitar={() => void quitarPaso(paso)}
+                            esOscuro={esOscuro}
+                        />
+                    ) : (
+                        <PanelGeneral
+                            pasos={pasos} hallazgos={hallazgos} carriles={disp.carriles.map((c) => c.nombre)}
+                            ir={irA} moverCarril={moverCarril}
+                            esOscuro={esOscuro}
+                        />
+                    )}
+                </aside>
+            )}
 
             {dlg && (
                 <ModalPaso
@@ -251,7 +508,7 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
 }
 
 /* ================= Panel: paso elegido ================= */
-function PanelPaso({ paso, pasos, mapa, requisitos, ir, editar, agregar, quitar }: {
+function PanelPaso({ paso, pasos, mapa, requisitos, ir, editar, agregar, quitar, esOscuro }: {
     paso: Paso;
     pasos: readonly Paso[];
     mapa: ReadonlyMap<string, Paso>;
@@ -260,6 +517,7 @@ function PanelPaso({ paso, pasos, mapa, requisitos, ir, editar, agregar, quitar 
     editar: () => void;
     agregar: () => void;
     quitar: () => void;
+    esOscuro?: boolean;
 }) {
     const entradas = pasos.filter((p) => p.siguientes.some((x) => x.a === paso.id));
     const reqs = nombresDe(paso.requisitos, requisitos);
@@ -267,7 +525,16 @@ function PanelPaso({ paso, pasos, mapa, requisitos, ir, editar, agregar, quitar 
     return (
         <div className="tarjeta fl-panel-paso">
             <div>
-                <span className="fl-tipo" style={{ background: col.fondo, borderColor: col.borde }}>{ETIQUETA_PASO[paso.tipo]}</span>
+                <span
+                    className="fl-tipo"
+                    style={{
+                        background: esOscuro ? col.fondoOscuro : col.fondo,
+                        borderColor: esOscuro ? col.bordeOscuro : col.borde,
+                        color: esOscuro ? col.textoOscuro : col.texto,
+                    }}
+                >
+                    {ETIQUETA_PASO[paso.tipo]}
+                </span>
                 <h3>{paso.titulo}</h3>
                 <p className="suave">
                     {[paso.responsable, paso.plazo && `Plazo: ${paso.plazo}`].filter(Boolean).join(' · ') || 'Sin responsable ni plazo'}
@@ -334,12 +601,13 @@ function PanelPaso({ paso, pasos, mapa, requisitos, ir, editar, agregar, quitar 
 /* ================= Panel: vista general ================= */
 const LEYENDA: { tipo: TipoPaso; clase: string }[] = TIPOS_PASO.map((tipo) => ({ tipo, clase: `lg-${tipo}` }));
 
-function PanelGeneral({ pasos, hallazgos, carriles, ir, moverCarril }: {
+function PanelGeneral({ pasos, hallazgos, carriles, ir, moverCarril, esOscuro }: {
     pasos: readonly Paso[];
     hallazgos: readonly HallazgoFlujo[];
     carriles: string[];
     ir: (id: string) => void;
     moverCarril: (i: number, d: -1 | 1) => void;
+    esOscuro?: boolean;
 }) {
     return (
         <div className="tarjeta fl-panel-paso">
@@ -382,7 +650,13 @@ function PanelGeneral({ pasos, hallazgos, carriles, ir, moverCarril }: {
                 <div className="fl-leyenda">
                     {LEYENDA.map(({ tipo, clase }) => (
                         <span key={tipo}>
-                            <i className={clase} style={{ background: COLOR_PASO[tipo].fondo, borderColor: COLOR_PASO[tipo].borde }} />
+                            <i
+                                className={clase}
+                                style={{
+                                    background: esOscuro ? COLOR_PASO[tipo].fondoOscuro : COLOR_PASO[tipo].fondo,
+                                    borderColor: esOscuro ? COLOR_PASO[tipo].bordeOscuro : COLOR_PASO[tipo].borde,
+                                }}
+                            />
                             {ETIQUETA_PASO[tipo]}
                         </span>
                     ))}
@@ -395,7 +669,7 @@ function PanelGeneral({ pasos, hallazgos, carriles, ir, moverCarril }: {
 }
 
 /* ================= Panel: recorrido guiado ================= */
-function PanelRecorrido({ ruta, mapa, requisitos, avanzar, atras, reiniciar, saltar }: {
+function PanelRecorrido({ ruta, mapa, requisitos, avanzar, atras, reiniciar, saltar, esOscuro }: {
     ruta: string[];
     mapa: ReadonlyMap<string, Paso>;
     requisitos: readonly Requisito[];
@@ -403,6 +677,7 @@ function PanelRecorrido({ ruta, mapa, requisitos, avanzar, atras, reiniciar, sal
     atras: () => void;
     reiniciar: () => void;
     saltar: (indice: number) => void;
+    esOscuro?: boolean;
 }) {
     const paso = mapa.get(ruta[ruta.length - 1] ?? '');
     if (!paso) return <div className="tarjeta"><p className="suave">No hay pasos para recorrer.</p></div>;
@@ -411,7 +686,14 @@ function PanelRecorrido({ ruta, mapa, requisitos, avanzar, atras, reiniciar, sal
     return (
         <div className="tarjeta fl-panel-paso">
             <div>
-                <span className="fl-tipo" style={{ background: col.fondo, borderColor: col.borde }}>
+                <span
+                    className="fl-tipo"
+                    style={{
+                        background: esOscuro ? col.fondoOscuro : col.fondo,
+                        borderColor: esOscuro ? col.bordeOscuro : col.borde,
+                        color: esOscuro ? col.textoOscuro : col.texto,
+                    }}
+                >
                     Paso {ruta.length} · {ETIQUETA_PASO[paso.tipo]}
                 </span>
                 <h3>{paso.titulo}</h3>

@@ -7,7 +7,6 @@ import { Configuracion } from './ui/paginas/Configuracion';
 import { Expediente } from './ui/paginas/Expediente';
 import { Expedientes } from './ui/paginas/Expedientes';
 import { Modelos } from './ui/paginas/Modelos';
-import { PanelClientes } from './ui/clientes/PanelClientes';
 import { useCargar, useServicios } from './ui/_core/servicios';
 import { Personas } from './ui/paginas/Personas';
 import { Leyes } from './ui/paginas/Leyes';
@@ -108,7 +107,6 @@ export default function App() {
   }
 
   const ir = (n: Item) => void navegar({ n });
-  const expedienteActivo = vista.n === 'expediente' ? vista.id : null;
 
   return (
     <div className={`app${colapsado ? ' nav-colapsado' : ''}`}>
@@ -183,16 +181,6 @@ export default function App() {
             </button>
           );
         })}
-
-        <PanelClientes
-          activo={expedienteActivo}
-          abrir={(id) => void navegar({ n: 'expediente', id })}
-          ficha={setPersona}
-          colapsado={colapsado}
-          onExpandirNav={() => setColapsado(false)}
-          onTooltip={mostrarTooltip}
-          onOcultarTooltip={ocultarTooltip}
-        />
 
         <div className={`nav-pie${colapsado ? ' colapsado' : ''}`}>
           {colapsado ? (
