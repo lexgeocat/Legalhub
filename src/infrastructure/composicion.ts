@@ -16,7 +16,6 @@ import { ActualizarPersona, EliminarPersona, LimpiarPersonasSinVinculos, Unifica
 import { ImportarModelo } from '../application/casosDeUso/importarModelo';
 import { Configuracion } from '../application/configuracion';
 import { Consultas } from '../application/consultas';
-import type { LectorDocx } from '../application/puertos/modelos';
 import { validarRutaCatalogo } from '../domain/expedientes/catalogo';
 import { ArchivosTauri } from './archivos/adaptadorTauri';
 import { DbTauri } from './db/adaptadorTauri';
@@ -32,6 +31,8 @@ import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
 import { Plantillas } from '../application/casosDeUso/plantillas';
 import { Leyes } from '../application/casosDeUso/leyes';
 import { LectorPdfPdfjs } from './pdf/lectorPdf';
+import type { GeneradorDocx, LectorDocx } from '../application/puertos/modelos';
+import { GuardarEscritoIa } from '../application/casosDeUso/guardarEscritoIa';
 import { Procedimientos } from '../application/casosDeUso/procedimientos';
 
 
@@ -43,6 +44,8 @@ export interface Servicios {
     consultas: Consultas;
     contexto: ConstructorContextoDb;
     lector: LectorDocx;
+    generador: GeneradorDocx;
+    guardarEscritoIa: GuardarEscritoIa;
     crearExpediente: CrearExpediente;
     actualizarExpediente: ActualizarExpediente;
     crearPersona: CrearPersona;
@@ -89,7 +92,7 @@ export async function crearServicios(): Promise<Servicios> {
     const importarModelo = new ImportarModelo({ db, archivos, motor, formato, modelos, generador });
 
     return {
-        raiz, db, archivos, config, contexto, lector,
+        raiz, db, archivos, config, contexto, lector, generador,
         consultas: new Consultas(db),
         crearExpediente: new CrearExpediente(db),
         actualizarExpediente: new ActualizarExpediente(db),
@@ -118,5 +121,6 @@ export async function crearServicios(): Promise<Servicios> {
         eliminarModelo: new EliminarModelo(db),
         leyes: new Leyes({ db, archivos, lector: new LectorPdfPdfjs() }),
         procedimientos: new Procedimientos(db),
+        guardarEscritoIa: new GuardarEscritoIa({ db, archivos, motor }),
     };
 }

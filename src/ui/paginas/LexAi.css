@@ -159,7 +159,9 @@
   flex-direction: column;
   gap: 12px;
   box-shadow: var(--sombra-xs);
-  max-height: calc(100vh - 170px);
+  height: calc(100vh - 210px);
+  min-height: 520px;
+  max-height: calc(100vh - 210px);
   position: sticky;
   top: 16px;
   overflow: hidden;
@@ -316,8 +318,9 @@
   border: 1px solid var(--borde);
   border-radius: var(--radio, 12px);
   box-shadow: var(--sombra);
-  min-height: calc(100vh - 170px);
-  max-height: calc(100vh - 170px);
+  height: calc(100vh - 210px);
+  min-height: 520px;
+  max-height: calc(100vh - 210px);
   overflow: hidden;
 }
 
@@ -677,6 +680,12 @@
   color: var(--primario);
 }
 
+.lexai-cita-tag.verificada {
+  background: var(--ok-bg, rgba(16, 185, 129, 0.12));
+  border-color: var(--ok-borde, rgba(16, 185, 129, 0.35));
+  color: var(--ok, #10b981);
+}
+
 /* Hoja de Redacción Procesal */
 .lexai-msg-texto-legal {
   padding: 28px 34px;
@@ -760,10 +769,24 @@
   transition: all 0.15s ease;
 }
 
+[data-tema="slate"] .lexai-doc-marcador,
 [data-tema="oscuro"] .lexai-doc-marcador {
   background: rgba(245, 158, 11, 0.18);
   border-color: rgba(245, 158, 11, 0.55);
   color: #fbbf24;
+}
+
+.lexai-doc-ref {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--primario-claro);
+  color: var(--primario);
+  border: 1px solid var(--primario-borde);
+  margin: 0 2px;
+  vertical-align: baseline;
 }
 
 .lexai-doc-divisor {
@@ -1394,6 +1417,7 @@
   color: #4f46e5;
 }
 
+[data-tema="slate"] .lexai-badge-tipo-web.jurisprudencia,
 [data-tema="oscuro"] .lexai-badge-tipo-web.jurisprudencia {
   color: #a5b4fc;
 }
@@ -1403,6 +1427,7 @@
   color: #b45309;
 }
 
+[data-tema="slate"] .lexai-badge-tipo-web.tratado,
 [data-tema="oscuro"] .lexai-badge-tipo-web.tratado {
   color: #fcd34d;
 }
@@ -1412,6 +1437,7 @@
   color: #047857;
 }
 
+[data-tema="slate"] .lexai-badge-tipo-web.doctrina,
 [data-tema="oscuro"] .lexai-badge-tipo-web.doctrina {
   color: #6ee7b7;
 }
@@ -1434,5 +1460,55 @@
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--texto-2);
+}
+
+/* Modo Selector */
+.lexai-modo-selector {
+  display: inline-flex;
+  align-items: center;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.lexai-btn-modo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--texto-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lexai-btn-modo:hover {
+  color: var(--texto);
+  background: var(--superficie);
+}
+
+.lexai-btn-modo.activo {
+  background: var(--superficie);
+  color: var(--primario);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-tema="slate"] .lexai-btn-modo.activo {
+  background: var(--superficie-3);
+  color: var(--primario);
+}
+
+.lexai-fuente-item.sin-arts {
+  opacity: 0.65;
+}
+
+.lexai-msg-tarjeta-legal.con-error {
+  border-color: var(--err-borde, rgba(239, 68, 68, 0.3));
 }
 

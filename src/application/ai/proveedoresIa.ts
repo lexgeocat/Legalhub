@@ -1,5 +1,6 @@
 // src/application/ai/proveedoresIa.ts
 import { fetch as fetchTauri } from '@tauri-apps/plugin-http';
+import { hoyISO } from '../../domain/modelos/filtros/fecha';
 import type { AmbitoJuridico, FuenteWebJuridica } from './busquedaJuridicaWeb';
 export type { AmbitoJuridico, FuenteWebJuridica } from './busquedaJuridicaWeb';
 
@@ -26,7 +27,7 @@ export const PROVEEDORES_IA: Record<ProveedorIaId, InfoProveedor> = {
       'Modelos de Ollama en la nube (https://ollama.com) o en tu propio servidor. La lista de modelos sale directamente del servidor; para generar texto en Ollama Cloud necesitas tu API key (cuenta gratuita con límite de uso).',
     urlClave: 'https://ollama.com/settings/keys',
     claveParaListar: false,
-    placeholderClave: 'API key de ollama.com/settings/keys'
+    placeholderClave: 'API key de ollama.com/settings/keys',
   },
   opencode: {
     id: 'opencode',
@@ -36,7 +37,7 @@ export const PROVEEDORES_IA: Record<ProveedorIaId, InfoProveedor> = {
       'Modelos de OpenCode Zen (https://opencode.ai/console). Incluye modelos "-free" (DeepSeek Flash, GLM Flash, MiniMax, etc.) y modelos avanzados. Si tu cuenta no tiene saldo en OpenCode, te recomendamos usar Ollama Cloud o Google Gemini que son 100% gratuitos.',
     urlClave: 'https://opencode.ai/console',
     claveParaListar: false,
-    placeholderClave: 'API key de OpenCode Console'
+    placeholderClave: 'API key de OpenCode Console',
   },
   gemini: {
     id: 'gemini',
@@ -45,7 +46,7 @@ export const PROVEEDORES_IA: Record<ProveedorIaId, InfoProveedor> = {
     descripcion: 'Google AI Studio ofrece una capa gratuita con límites por minuto y por día.',
     urlClave: 'https://aistudio.google.com/app/apikey',
     claveParaListar: true,
-    placeholderClave: 'AIza...'
+    placeholderClave: 'AIza...',
   },
   groq: {
     id: 'groq',
@@ -54,7 +55,7 @@ export const PROVEEDORES_IA: Record<ProveedorIaId, InfoProveedor> = {
     descripcion: 'Inferencia muy rápida con capa gratuita limitada.',
     urlClave: 'https://console.groq.com/keys',
     claveParaListar: true,
-    placeholderClave: 'gsk_...'
+    placeholderClave: 'gsk_...',
   },
   claude: {
     id: 'claude',
@@ -63,8 +64,8 @@ export const PROVEEDORES_IA: Record<ProveedorIaId, InfoProveedor> = {
     descripcion: 'Requiere saldo en la consola de Anthropic.',
     urlClave: 'https://console.anthropic.com/settings/keys',
     claveParaListar: true,
-    placeholderClave: 'sk-ant-...'
-  }
+    placeholderClave: 'sk-ant-...',
+  },
 };
 
 export const ORDEN_PROVEEDORES: ProveedorIaId[] = ['ollama', 'gemini', 'groq', 'opencode', 'claude'];
@@ -82,18 +83,23 @@ export interface ConfigIa {
   groqModelo: string;
   claudeApiKey: string;
   claudeModelo: string;
+  /** Búsqueda web profesional (opcional). Sin clave se usa DuckDuckGo. */
+  tavilyApiKey: string;
   temperatura: number;
+  /** Tope de tokens de salida por respuesta. */
+  maxTokens: number;
+  /** Enmascara C.I./NIT/teléfonos/correos antes de enviarlos a la IA o a la web. */
+  protegerDatos: boolean;
 }
 
-type CampoTexto = Exclude<keyof ConfigIa, 'proveedorActivo' | 'temperatura'>;
+type CampoTexto = Exclude<keyof ConfigIa, 'proveedorActivo' | 'temperatura' | 'maxTokens' | 'protegerDatos'>;
 
-/** Campos de configuración (clave y modelo) de cada proveedor */
 export const CAMPOS_IA: Record<ProveedorIaId, { clave: CampoTexto; modelo: CampoTexto }> = {
   ollama: { clave: 'ollamaApiKey', modelo: 'ollamaModelo' },
   opencode: { clave: 'opencodeApiKey', modelo: 'opencodeModelo' },
   gemini: { clave: 'geminiApiKey', modelo: 'geminiModelo' },
   groq: { clave: 'groqApiKey', modelo: 'groqModelo' },
-  claude: { clave: 'claudeApiKey', modelo: 'claudeModelo' }
+  claude: { clave: 'claudeApiKey', modelo: 'claudeModelo' },
 };
 
 const CLAVE_STORAGE = 'legalhub_ia_config';
@@ -102,17 +108,15 @@ const URL_OLLAMA_CLOUD = 'https://ollama.com';
 export const CONFIG_IA_DEFECTO: ConfigIa = {
   proveedorActivo: 'ollama',
   ollamaUrl: URL_OLLAMA_CLOUD,
-  ollamaApiKey: '',
-  ollamaModelo: '',
-  opencodeApiKey: '',
-  opencodeModelo: '',
-  geminiApiKey: '',
-  geminiModelo: '',
-  groqApiKey: '',
-  groqModelo: '',
-  claudeApiKey: '',
-  claudeModelo: '',
-  temperatura: 0.2
+  ollamaApiKey: '', ollamaModelo: '',
+  opencodeApiKey: '', opencodeModelo: '',
+  geminiApiKey: '', geminiModelo: '',
+  groqApiKey: '', groqModelo: '',
+  claudeApiKey: '', claudeModelo: '',
+  tavilyApiKey: '',
+  temperatura: 0.2,
+  maxTokens: 8192,
+  protegerDatos: true,
 };
 
 export function obtenerConfigIa(): ConfigIa {
@@ -120,11 +124,9 @@ export function obtenerConfigIa(): ConfigIa {
     const raw = localStorage.getItem(CLAVE_STORAGE);
     if (!raw) return { ...CONFIG_IA_DEFECTO };
     const cfg: ConfigIa = { ...CONFIG_IA_DEFECTO, ...JSON.parse(raw) };
-    // Versiones anteriores guardaban localhost o api.ollama.com (que no existe) por defecto
-    if (!cfg.ollamaUrl.trim() || /localhost:11434|api\.ollama\.com/.test(cfg.ollamaUrl)) {
-      cfg.ollamaUrl = URL_OLLAMA_CLOUD;
-    }
+    if (!cfg.ollamaUrl.trim() || /localhost:11434|api\.ollama\.com/.test(cfg.ollamaUrl)) cfg.ollamaUrl = URL_OLLAMA_CLOUD;
     if (!PROVEEDORES_IA[cfg.proveedorActivo]) cfg.proveedorActivo = 'ollama';
+    if (!(cfg.maxTokens >= 256)) cfg.maxTokens = CONFIG_IA_DEFECTO.maxTokens;
     return cfg;
   } catch {
     return { ...CONFIG_IA_DEFECTO };
@@ -139,16 +141,30 @@ export function guardarConfigIa(cfg: ConfigIa): void {
   }
 }
 
+function normalizarUrlOllama(url: string): string {
+  return (url.trim() || URL_OLLAMA_CLOUD).replace(/\/+$/, '').replace(/\/(api|v1)$/, '');
+}
+
+/** null = listo para consultar; si no, el motivo en una frase. */
+export function motorListo(cfg: ConfigIa): string | null {
+  const p = cfg.proveedorActivo;
+  const { clave, modelo } = CAMPOS_IA[p];
+  const nombre = PROVEEDORES_IA[p].nombre;
+  if (!(cfg[modelo] as string).trim()) return `Elige un modelo de ${nombre} en la configuración de IA.`;
+  const necesitaClave = p !== 'ollama' || /ollama\.com/i.test(normalizarUrlOllama(cfg.ollamaUrl));
+  if (necesitaClave && !(cfg[clave] as string).trim()) return `Falta la API key de ${nombre}.`;
+  return null;
+}
+
 // ───────────────────────── HTTP ─────────────────────────
 
 const EN_TAURI = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-/**
- * En la app de escritorio las peticiones salen desde Rust (plugin HTTP), así no las bloquea
- * el CORS del webview: ollama.com, por ejemplo, no envía cabeceras CORS.
- */
-function http(url: string, init: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
-  const opciones: RequestInit = { ...init, signal: AbortSignal.timeout(timeoutMs) };
+interface OpcHttp { timeoutMs?: number; signal?: AbortSignal }
+
+/** En escritorio las peticiones salen desde Rust (sin CORS). `signal` permite cancelar desde la UI. */
+function http(url: string, init: RequestInit = {}, { timeoutMs = 15000, signal }: OpcHttp = {}): Promise<Response> {
+  const opciones: RequestInit = { ...init, signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(signal ? [signal] : [])]) };
   return EN_TAURI ? fetchTauri(url, opciones) : fetch(url, opciones);
 }
 
@@ -166,191 +182,82 @@ async function leerError(resp: Response): Promise<string> {
 
 function describirFallo(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
-  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-    return 'El servidor tardó demasiado en responder.';
-  }
+  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) return 'El servidor tardó demasiado en responder.';
   if (/failed to fetch|networkerror|load failed/i.test(msg)) {
     return EN_TAURI
       ? 'No hay conexión con el servidor. Revisa la URL y tu internet.'
       : 'El navegador bloqueó la petición (CORS). Abre Legal-Hub como app de escritorio (pnpm tauri dev).';
   }
+  if (/HTTP 401/.test(msg)) return 'La API key fue rechazada (HTTP 401). Revísala en la configuración de IA.';
+  if (/HTTP 429/.test(msg)) return 'Límite de uso del proveedor alcanzado (HTTP 429). Espera un momento o cambia de modelo.';
   if (/Insufficient account funds|insufficient_quota/i.test(msg)) {
-    return 'Saldo insuficiente en tu cuenta (HTTP 402 Insufficient account funds). Necesitas recargar fondos en opencode.ai/console para usar modelos de pago, o usar Ollama Cloud o Google Gemini que son 100% gratuitos.';
+    return 'Saldo insuficiente en tu cuenta (HTTP 402). Recarga fondos o usa Ollama Cloud o Google Gemini, que tienen capa gratuita.';
   }
   if (/FreeTierError|free tier can only be used from within/i.test(msg)) {
-    return 'OpenCode bloquea los modelos "-free" para llamadas API externas (HTTP 403 FreeTierError: solo funcionan en la app de escritorio de OpenCode). Para usar IA gratuita por API directamente en Legal-Hub, te recomendamos cambiar a Ollama Cloud (minimax-m3.1-flash) o Google Gemini.';
+    return 'OpenCode no permite usar sus modelos "-free" por API externa (HTTP 403). Cambia a Ollama Cloud o Google Gemini.';
   }
   return msg;
 }
 
-function normalizarUrlOllama(url: string): string {
-  return (url.trim() || URL_OLLAMA_CLOUD).replace(/\/+$/, '').replace(/\/(api|v1)$/, '');
-}
+const cabecerasBearer = (clave: string): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  ...(clave.trim() ? { Authorization: `Bearer ${clave.trim()}` } : {}),
+});
+const cabecerasGemini = (clave: string): Record<string, string> => ({ 'Content-Type': 'application/json', 'x-goog-api-key': clave.trim() });
+const cabecerasClaude = (clave: string): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  'x-api-key': clave.trim(),
+  'anthropic-version': '2023-06-01',
+  'anthropic-dangerous-direct-browser-access': 'true',
+});
 
-function cabecerasBearer(clave: string): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (clave.trim()) h.Authorization = `Bearer ${clave.trim()}`;
-  return h;
-}
-
-function cabecerasOpenCode(clave: string): Record<string, string> {
-  const h: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'User-Agent': 'opencode/1.18.32',
-    'x-opencode-client': 'cli'
-  };
-  if (clave.trim()) h.Authorization = `Bearer ${clave.trim()}`;
-  return h;
-}
-
-function cabecerasClaude(clave: string): Record<string, string> {
-  return {
-    'Content-Type': 'application/json',
-    'x-api-key': clave.trim(),
-    'anthropic-version': '2023-06-01',
-    // Necesaria solo si se llama desde el navegador; inocua desde Rust
-    'anthropic-dangerous-direct-browser-access': 'true'
-  };
-}
-
-/**
- * Filtra los modelos compatibles de OpenCode para el endpoint de chat/completions.
- * Incluye todos los modelos "-free" (DeepSeek, GLM, MiniMax, Nemotron, etc.) y los modelos de chat de consola.
- */
+/** Modelos de chat de OpenCode (el endpoint lista también modelos que no sirven para chat). */
 function opencodeCompatible(id: string): boolean {
   if (id === 'test' || id === 'big-pickle' || /-backup$/.test(id)) return false;
-  // Permitir explícitamente todos los modelos -free de OpenCode
-  if (/-free$/.test(id)) return true;
-  // Permitir los modelos de chat reconocidos de OpenCode
-  if (/^(deepseek-|glm-|kimi-|minimax-|mistral-|qwen|gemini-|gpt-|claude-)/.test(id)) return true;
-  return false;
+  return /-free$/.test(id) || /^(deepseek-|glm-|kimi-|minimax-|mistral-|qwen|gemini-|gpt-|claude-)/.test(id);
 }
 
 // ───────────────────────── Listado de modelos ─────────────────────────
 
-/** Lista los modelos reales que ofrece el proveedor con la configuración dada. Lanza Error si falla. */
-export async function listarModelos(proveedor: ProveedorIaId, cfg: ConfigIa): Promise<string[]> {
+export async function listarModelos(proveedor: ProveedorIaId, cfg: ConfigIa, signal?: AbortSignal): Promise<string[]> {
   const clave = (cfg[CAMPOS_IA[proveedor].clave] as string).trim();
-  if (PROVEEDORES_IA[proveedor].claveParaListar && !clave) {
-    throw new Error('Pega tu API key para ver tus modelos.');
-  }
+  if (PROVEEDORES_IA[proveedor].claveParaListar && !clave) throw new Error('Pega tu API key para ver tus modelos.');
+
+  const pedir = async <T>(url: string, cabeceras: Record<string, string>): Promise<T> => {
+    const r = await http(url, { headers: cabeceras }, { signal });
+    if (!r.ok) throw new Error(await leerError(r));
+    return (await r.json()) as T;
+  };
+  type Lista = { data?: { id: string; active?: boolean }[] };
 
   try {
     let modelos: string[] = [];
-
     if (proveedor === 'ollama') {
       const base = normalizarUrlOllama(cfg.ollamaUrl);
-      const esCloud = /ollama\.com/i.test(base);
-      let resp = await http(`${base}/api/tags`, { headers: cabecerasBearer(clave) });
-      if (resp.ok) {
-        const data = await resp.json();
-        modelos = (data.models ?? []).map((m: { name?: string; model?: string }) => m.name ?? m.model ?? '');
-      } else {
-        resp = await http(`${base}/v1/models`, { headers: cabecerasBearer(clave) });
-        if (!resp.ok) throw new Error(await leerError(resp));
-        const data = await resp.json();
-        modelos = (data.data ?? []).map((m: { id: string }) => m.id);
+      try {
+        const d = await pedir<{ models?: { name?: string; model?: string }[] }>(`${base}/api/tags`, cabecerasBearer(clave));
+        modelos = (d.models ?? []).map((m) => m.name ?? m.model ?? '');
+      } catch {
+        modelos = ((await pedir<Lista>(`${base}/v1/models`, cabecerasBearer(clave))).data ?? []).map((m) => m.id);
       }
-
-      // En Ollama Cloud, verificar en vivo cada modelo y conservar ÚNICAMENTE los que responden con 200 OK.
-      // Descarta modelos con cuota agotada (HTTP 429), planes restringidos (HTTP 402) o modelos de sistema (HTTP 400).
-      if (esCloud && modelos.length > 0) {
-        // Priorizar modelos conocidos y rápidos para agilizar la prueba
-        const prioridad = ['minimax-m3.1-flash', 'gpt-oss:20b', 'gpt-oss:120b', 'nemotron-3-nano:30b'];
-        const ordenados = [
-          ...prioridad.filter((p) => modelos.includes(p)),
-          ...modelos.filter((m) => !prioridad.includes(m))
-        ];
-
-        const verificarModelo = async (id: string): Promise<boolean> => {
-          try {
-            const probe = await http(
-              `${base}/v1/chat/completions`,
-              {
-                method: 'POST',
-                headers: cabecerasBearer(clave),
-                body: JSON.stringify({
-                  model: id,
-                  messages: [{ role: 'user', content: 'ping' }],
-                  max_tokens: 1
-                })
-              },
-              4500
-            );
-            return probe.ok; // Solo pasa si el servidor responde 200 OK
-          } catch {
-            return false;
-          }
-        };
-
-        const validos: string[] = [];
-        // Verificamos en lotes de 3 para evitar saturar la tasa concurrente
-        for (let i = 0; i < ordenados.length; i += 3) {
-          const lote = ordenados.slice(i, i + 3);
-          const estados = await Promise.all(lote.map(verificarModelo));
-          for (let j = 0; j < lote.length; j++) {
-            if (estados[j]) validos.push(lote[j]);
-          }
-        }
-
-        if (validos.length > 0) {
-          modelos = validos;
-        } else {
-          throw new Error(
-            'Ningún modelo de Ollama Cloud respondió exitosamente. Los modelos de tu cuenta alcanzaron el límite de cuota (HTTP 429) o requieren suscripción Pro (HTTP 402).'
-          );
-        }
-      }
-    }
-
-    if (proveedor === 'opencode') {
-      const resp = await http('https://opencode.ai/zen/v1/models', { headers: cabecerasOpenCode(clave) });
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      const todos = (data.data ?? []).map((m: { id: string }) => m.id).filter(opencodeCompatible);
-
-      // Ordenar: primero los modelos -free, luego los demás en orden alfabético
-      modelos = todos.sort((a: string, b: string) => {
-        const aFree = a.endsWith('-free');
-        const bFree = b.endsWith('-free');
-        if (aFree && !bFree) return -1;
-        if (!aFree && bFree) return 1;
-        return a.localeCompare(b);
-      });
-    }
-
-    if (proveedor === 'groq') {
-      const resp = await http('https://api.groq.com/openai/v1/models', { headers: cabecerasBearer(clave) });
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      modelos = (data.data ?? [])
-        .filter((m: { active?: boolean }) => m.active !== false)
-        .map((m: { id: string }) => m.id)
-        .filter((id: string) => !/whisper|tts|guard|orpheus|distil-whisper/i.test(id));
-    }
-
-    if (proveedor === 'gemini') {
-      const resp = await http(
-        `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${encodeURIComponent(clave)}`
+    } else if (proveedor === 'opencode') {
+      const d = await pedir<Lista>('https://opencode.ai/zen/v1/models', cabecerasBearer(clave));
+      modelos = (d.data ?? []).map((m) => m.id).filter(opencodeCompatible)
+        .sort((a, b) => Number(b.endsWith('-free')) - Number(a.endsWith('-free')) || a.localeCompare(b));
+    } else if (proveedor === 'groq') {
+      const d = await pedir<Lista>('https://api.groq.com/openai/v1/models', cabecerasBearer(clave));
+      modelos = (d.data ?? []).filter((m) => m.active !== false).map((m) => m.id).filter((id) => !/whisper|tts|guard|orpheus/i.test(id));
+    } else if (proveedor === 'gemini') {
+      const d = await pedir<{ models?: { name: string; supportedGenerationMethods?: string[] }[] }>(
+        'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', cabecerasGemini(clave),
       );
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      modelos = (data.models ?? [])
-        .filter((m: { supportedGenerationMethods?: string[] }) =>
-          m.supportedGenerationMethods?.includes('generateContent')
-        )
-        .map((m: { name: string }) => m.name.replace(/^models\//, ''))
-        .filter((id: string) => !/embedding|aqa|imagen|tts|image/i.test(id));
+      modelos = (d.models ?? []).filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+        .map((m) => m.name.replace(/^models\//, '')).filter((id) => !/embedding|aqa|imagen|tts|image/i.test(id));
+    } else {
+      const d = await pedir<Lista>('https://api.anthropic.com/v1/models?limit=100', cabecerasClaude(clave));
+      modelos = (d.data ?? []).map((m) => m.id);
     }
-
-    if (proveedor === 'claude') {
-      const resp = await http('https://api.anthropic.com/v1/models?limit=100', { headers: cabecerasClaude(clave) });
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      modelos = (data.data ?? []).map((m: { id: string }) => m.id);
-    }
-
-    modelos = Array.from(new Set(modelos.filter(Boolean)));
+    modelos = [...new Set(modelos.filter(Boolean))];
     if (modelos.length === 0) throw new Error('El servidor respondió, pero no devolvió modelos.');
     return modelos;
   } catch (err) {
@@ -358,229 +265,216 @@ export async function listarModelos(proveedor: ProveedorIaId, cfg: ConfigIa): Pr
   }
 }
 
-// ───────────────────────── Generación ─────────────────────────
+const CLAVE_CACHE = 'legalhub_ia_modelos';
+const VIGENCIA_CACHE_MS = 6 * 60 * 60 * 1000;
+const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36);
 
-interface Mensajes {
-  sistema: string;
-  usuario: string;
-  maxTokens: number;
+/** Lista con caché de 6 h: cambiar de pestaña o salir de un campo ya no dispara peticiones. */
+export async function listarModelosCacheado(proveedor: ProveedorIaId, cfg: ConfigIa, forzar = false): Promise<string[]> {
+  const k = `${proveedor}|${proveedor === 'ollama' ? normalizarUrlOllama(cfg.ollamaUrl) : ''}|${hash(cfg[CAMPOS_IA[proveedor].clave] as string)}`;
+  let cache: Record<string, { ts: number; modelos: string[] }> = {};
+  try { cache = JSON.parse(localStorage.getItem(CLAVE_CACHE) ?? '{}'); } catch { /* sin caché */ }
+  const hit = cache[k];
+  if (!forzar && hit && Date.now() - hit.ts < VIGENCIA_CACHE_MS) return hit.modelos;
+  const modelos = await listarModelos(proveedor, cfg);
+  try { localStorage.setItem(CLAVE_CACHE, JSON.stringify({ ...cache, [k]: { ts: Date.now(), modelos } })); } catch { /* sin caché */ }
+  return modelos;
 }
 
-async function generarTexto(proveedor: ProveedorIaId, cfg: ConfigIa, m: Mensajes): Promise<string> {
+/** OPCIONAL (botón manual): en Ollama Cloud descarta los modelos que responden 402/429. Hace 1 petición por modelo. */
+export async function verificarModelosOllama(cfg: ConfigIa, candidatos: readonly string[], signal?: AbortSignal): Promise<string[]> {
+  const base = normalizarUrlOllama(cfg.ollamaUrl);
+  const responde = async (id: string) => {
+    try {
+      const r = await http(`${base}/v1/chat/completions`, {
+        method: 'POST',
+        headers: cabecerasBearer(cfg.ollamaApiKey),
+        body: JSON.stringify({ model: id, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+      }, { timeoutMs: 6000, signal });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  };
+  const validos: string[] = [];
+  for (let i = 0; i < candidatos.length; i += 3) {
+    const lote = candidatos.slice(i, i + 3);
+    const ok = await Promise.all(lote.map(responde));
+    lote.forEach((m, k) => { if (ok[k]) validos.push(m); });
+  }
+  if (validos.length === 0) throw new Error('Ningún modelo respondió: cuota agotada (429) o requieren plan de pago (402).');
+  return validos;
+}
+
+// ───────────────────────── Generación con streaming ─────────────────────────
+
+export interface OpcionesGeneracion {
+  signal?: AbortSignal;
+  /** Recibe el texto acumulado cada vez que llega un fragmento. */
+  onTexto?: (acumulado: string) => void;
+}
+interface Mensajes { sistema: string; usuario: string; maxTokens?: number }
+export interface SalidaIa { texto: string; truncado: boolean }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Json = Record<string, any>;
+interface Delta { texto?: string; fin?: string; error?: string; bloqueo?: string }
+type Formato = 'ollama' | 'openai' | 'gemini' | 'claude';
+
+const DECODIFICAR: Record<Formato, (o: Json) => Delta> = {
+  ollama: (o) => ({ texto: o.message?.content, fin: o.done ? (o.done_reason ?? 'stop') : undefined, error: o.error }),
+  openai: (o) => ({
+    texto: o.choices?.[0]?.delta?.content,
+    fin: o.choices?.[0]?.finish_reason ?? undefined,
+    error: o.error?.message ?? (typeof o.error === 'string' ? o.error : undefined),
+  }),
+  gemini: (o) => ({
+    texto: (o.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join(''),
+    fin: o.candidates?.[0]?.finishReason,
+    error: o.error?.message,
+    bloqueo: o.promptFeedback?.blockReason,
+  }),
+  claude: (o) => (o.type === 'content_block_delta' ? { texto: o.delta?.text }
+    : o.type === 'message_delta' ? { fin: o.delta?.stop_reason }
+    : o.type === 'error' ? { error: o.error?.message } : {}),
+};
+
+async function* lineas(resp: Response): AsyncGenerator<string> {
+  const lector = resp.body?.getReader();
+  if (!lector) {
+    for (const l of (await resp.text()).split('\n')) yield l;
+    return;
+  }
+  const dec = new TextDecoder();
+  let resto = '';
+  for (;;) {
+    const { done, value } = await lector.read();
+    if (done) break;
+    resto += dec.decode(value, { stream: true });
+    const partes = resto.split('\n');
+    resto = partes.pop() ?? '';
+    for (const l of partes) yield l.replace(/\r$/, '');
+  }
+  if (resto.trim()) yield resto;
+}
+
+function jsonDeLinea(l: string): Json | null {
+  const t = (l.startsWith('data:') ? l.slice(5) : l).trim();
+  if (!t.startsWith('{')) return null;
+  try { return JSON.parse(t) as Json; } catch { return null; }
+}
+
+const SEGURIDAD_GEMINI = ['HARASSMENT', 'HATE_SPEECH', 'SEXUALLY_EXPLICIT', 'DANGEROUS_CONTENT']
+  .map((c) => ({ category: `HARM_CATEGORY_${c}`, threshold: 'BLOCK_ONLY_HIGH' }));
+
+function armarPeticion(p: ProveedorIaId, cfg: ConfigIa, clave: string, modelo: string, m: Mensajes, ollamaV1 = false) {
+  const temperature = cfg.temperatura ?? 0.2;
+  const max = m.maxTokens ?? cfg.maxTokens;
+  const chat = [{ role: 'system', content: m.sistema }, { role: 'user', content: m.usuario }];
+  const post = (headers: Record<string, string>, cuerpo: unknown): RequestInit => ({ method: 'POST', headers, body: JSON.stringify(cuerpo) });
+  const openai = (url: string) => ({
+    url, formato: 'openai' as Formato,
+    init: post(cabecerasBearer(clave), { model: modelo, messages: chat, temperature, max_tokens: max, stream: true }),
+  });
+
+  switch (p) {
+    case 'ollama': {
+      const base = normalizarUrlOllama(cfg.ollamaUrl);
+      if (ollamaV1) return openai(`${base}/v1/chat/completions`);
+      return {
+        url: `${base}/api/chat`, formato: 'ollama' as Formato,
+        init: post(cabecerasBearer(clave), { model: modelo, messages: chat, stream: true, options: { temperature, num_predict: max } }),
+      };
+    }
+    case 'opencode': return openai('https://opencode.ai/zen/v1/chat/completions');
+    case 'groq': return openai('https://api.groq.com/openai/v1/chat/completions');
+    case 'gemini':
+      return {
+        url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:streamGenerateContent?alt=sse`,
+        formato: 'gemini' as Formato,
+        init: post(cabecerasGemini(clave), {
+          systemInstruction: { parts: [{ text: m.sistema }] },
+          contents: [{ role: 'user', parts: [{ text: m.usuario }] }],
+          generationConfig: { temperature, maxOutputTokens: max },
+          safetySettings: SEGURIDAD_GEMINI,
+        }),
+      };
+    default:
+      return {
+        url: 'https://api.anthropic.com/v1/messages', formato: 'claude' as Formato,
+        init: post(cabecerasClaude(clave), {
+          model: modelo, max_tokens: max, temperature, system: m.sistema, stream: true,
+          messages: [{ role: 'user', content: m.usuario }],
+        }),
+      };
+  }
+}
+
+async function generarTexto(proveedor: ProveedorIaId, cfg: ConfigIa, m: Mensajes, opc: OpcionesGeneracion = {}): Promise<SalidaIa> {
   const clave = (cfg[CAMPOS_IA[proveedor].clave] as string).trim();
   const modelo = (cfg[CAMPOS_IA[proveedor].modelo] as string).trim();
-  const temperatura = cfg.temperatura ?? 0.2;
   const nombre = PROVEEDORES_IA[proveedor].nombre;
-
-  if (!modelo) throw new Error(`Elige un modelo de ${nombre} en la configuración de IA.`);
-  const necesitaClave =
-    proveedor !== 'ollama' || normalizarUrlOllama(cfg.ollamaUrl).includes('ollama.com');
-  if (necesitaClave && !clave) throw new Error(`Falta la API key de ${nombre}.`);
-
-  const chatOpenAi = async (url: string) => {
-    const resp = await http(
-      url,
-      {
-        method: 'POST',
-        headers: cabecerasBearer(clave),
-        body: JSON.stringify({
-          model: modelo,
-          messages: [
-            { role: 'system', content: m.sistema },
-            { role: 'user', content: m.usuario }
-          ],
-          temperature: temperatura,
-          max_tokens: m.maxTokens
-        })
-      },
-      120000
-    );
-    if (!resp.ok) throw new Error(await leerError(resp));
-    const data = await resp.json();
-    return (data.choices?.[0]?.message?.content as string) ?? '';
-  };
+  const problema = motorListo({ ...cfg, proveedorActivo: proveedor });
+  if (problema) throw new Error(problema);
 
   try {
+    let p = armarPeticion(proveedor, cfg, clave, modelo, m);
+    let resp = await http(p.url, p.init, { timeoutMs: 300000, signal: opc.signal });
+    if (!resp.ok && proveedor === 'ollama' && (resp.status === 404 || resp.status === 405)) {
+      p = armarPeticion(proveedor, cfg, clave, modelo, m, true);
+      resp = await http(p.url, p.init, { timeoutMs: 300000, signal: opc.signal });
+    }
+    if (!resp.ok) throw new Error(await leerError(resp));
+
     let texto = '';
-
-    if (proveedor === 'ollama') {
-      const base = normalizarUrlOllama(cfg.ollamaUrl);
-      // Para modelos con razonamiento profundo (deepseek, gpt-oss, qwen, minimax),
-      // num_predict no debe ser inferior a 150 para no cortar el bloque de pensamiento
-      const minPredict = Math.max(m.maxTokens, 150);
-
-      const resp = await http(
-        `${base}/api/chat`,
-        {
-          method: 'POST',
-          headers: cabecerasBearer(clave),
-          body: JSON.stringify({
-            model: modelo,
-            messages: [
-              { role: 'system', content: m.sistema },
-              { role: 'user', content: m.usuario }
-            ],
-            stream: false,
-            options: { temperature: temperatura, num_predict: minPredict }
-          })
-        },
-        180000
-      );
-
-      if (!resp.ok) {
-        // En Ollama Cloud, intentar /v1/chat/completions si /api/chat responde error
-        const respV1 = await http(
-          `${base}/v1/chat/completions`,
-          {
-            method: 'POST',
-            headers: cabecerasBearer(clave),
-            body: JSON.stringify({
-              model: modelo,
-              messages: [
-                { role: 'system', content: m.sistema },
-                { role: 'user', content: m.usuario }
-              ],
-              temperature: temperatura,
-              max_tokens: minPredict
-            })
-          },
-          180000
-        );
-
-        if (respV1.ok) {
-          const dataV1 = await respV1.json();
-          texto =
-            (dataV1.choices?.[0]?.message?.content as string) ||
-            (dataV1.choices?.[0]?.message?.reasoning_content as string) ||
-            '';
-        } else {
-          throw new Error(await leerError(resp));
-        }
-      } else {
-        const data = await resp.json();
-        // Modelos de razonamiento pueden responder en content, thinking o reasoning
-        texto =
-          (data.message?.content as string) ||
-          (data.message?.thinking as string) ||
-          (data.message?.reasoning as string) ||
-          (data.response as string) ||
-          (data.choices?.[0]?.message?.content as string) ||
-          '';
+    let fin = '';
+    for await (const linea of lineas(resp)) {
+      const o = jsonDeLinea(linea);
+      if (!o) continue;
+      const d = DECODIFICAR[p.formato](o);
+      if (d.error) throw new Error(d.error);
+      if (d.bloqueo) throw new Error(`${nombre} bloqueó la consulta (${d.bloqueo}).`);
+      if (d.texto) {
+        texto += d.texto;
+        opc.onTexto?.(texto);
       }
+      if (d.fin) fin = d.fin;
     }
-
-    if (proveedor === 'opencode') {
-      const resp = await http(
-        'https://opencode.ai/zen/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: cabecerasOpenCode(clave),
-          body: JSON.stringify({
-            model: modelo,
-            messages: [
-              { role: 'system', content: m.sistema },
-              { role: 'user', content: m.usuario }
-            ],
-            temperature: temperatura,
-            max_tokens: m.maxTokens
-          })
-        },
-        120000
-      );
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      texto = (data.choices?.[0]?.message?.content as string) ?? '';
+    if (!texto.trim()) {
+      throw new Error(/SAFETY|content_filter/i.test(fin)
+        ? `${nombre} filtró la respuesta por seguridad (${fin}).`
+        : 'respondió sin texto: el modelo pudo gastar todo el límite razonando. Sube «Longitud máxima» o elige otro modelo.');
     }
-
-    if (proveedor === 'groq') {
-      texto = await chatOpenAi('https://api.groq.com/openai/v1/chat/completions');
-    }
-
-    if (proveedor === 'gemini') {
-      const resp = await http(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent?key=${encodeURIComponent(clave)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: m.sistema }] },
-            contents: [{ role: 'user', parts: [{ text: m.usuario }] }],
-            generationConfig: { temperature: temperatura, maxOutputTokens: m.maxTokens }
-          })
-        },
-        120000
-      );
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      texto = (data.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('');
-    }
-
-    if (proveedor === 'claude') {
-      const resp = await http(
-        'https://api.anthropic.com/v1/messages',
-        {
-          method: 'POST',
-          headers: cabecerasClaude(clave),
-          body: JSON.stringify({
-            model: modelo,
-            max_tokens: m.maxTokens,
-            temperature: temperatura,
-            system: m.sistema,
-            messages: [{ role: 'user', content: m.usuario }]
-          })
-        },
-        120000
-      );
-      if (!resp.ok) throw new Error(await leerError(resp));
-      const data = await resp.json();
-      texto = (data.content ?? [])
-        .filter((b: { type: string }) => b.type === 'text')
-        .map((b: { text: string }) => b.text)
-        .join('');
-    }
-
-    if (!texto.trim()) throw new Error(`${nombre} respondió sin texto.`);
-    return texto;
+    return { texto, truncado: /length|max_tokens/i.test(fin) };
   } catch (err) {
+    if (opc.signal?.aborted) throw err;
     throw new Error(`${nombre} (${modelo}): ${describirFallo(err)}`);
   }
 }
 
-/** Prueba real: lista modelos y, si hay modelo elegido, hace una generación mínima (valida la API key). */
 export async function probarConexionProveedor(
   proveedor: ProveedorIaId,
-  cfg: ConfigIa
+  cfg: ConfigIa,
 ): Promise<{ ok: boolean; mensaje: string; modelos?: string[] }> {
   let modelos: string[];
   try {
-    modelos = await listarModelos(proveedor, cfg);
+    modelos = await listarModelosCacheado(proveedor, cfg, true);
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : String(err) };
   }
-
   const modelo = (cfg[CAMPOS_IA[proveedor].modelo] as string).trim();
-  if (!modelo) {
-    return { ok: true, mensaje: `${modelos.length} modelos disponibles. Elige uno y vuelve a probar.`, modelos };
-  }
-
+  if (!modelo) return { ok: true, mensaje: `${modelos.length} modelos disponibles. Elige uno y vuelve a probar.`, modelos };
   try {
-    const salida = await generarTexto(proveedor, cfg, {
-      sistema: 'Responde de forma muy concisa.',
-      usuario: 'Responde únicamente con la palabra OK.',
-      maxTokens: 150
+    const { texto } = await generarTexto(proveedor, cfg, {
+      sistema: 'Responde de forma muy concisa.', usuario: 'Responde únicamente con la palabra OK.', maxTokens: 300,
     });
-    const detalle = salida.trim().slice(0, 30);
-    return {
-      ok: true,
-      mensaje: `Conectado: ${modelo} respondió exitosamente${detalle ? ` ("${detalle}")` : ''}.`,
-      modelos
-    };
+    return { ok: true, mensaje: `Conectado: ${modelo} respondió («${texto.trim().slice(0, 30)}»).`, modelos };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : String(err), modelos };
   }
 }
 
-// ───────────────────────── Redacción Lex AI ─────────────────────────
+// ───────────────────────── Lex AI ─────────────────────────
 
 export interface ArticuloContexto {
   leyNombre: string;
@@ -589,93 +483,18 @@ export interface ArticuloContexto {
   texto: string;
 }
 
-export interface ParametrosRedaccion {
-  tipoEscrito: string;
-  tono: string;
-  tribunal?: string;
-  instrucciones: string;
-  articulosContexto: ArticuloContexto[];
-  leyesSeleccionadasNombres: string[];
-}
+export type ModoUsuario = 'consulta' | 'redaccion' | 'revision';
+export type ModoLex = ModoUsuario | 'continuar';
+
+export interface CitaDetectada { texto: string; verificada: boolean }
 
 export interface ResultadoRedaccion {
   texto: string;
-  citasDetectadas: string[];
+  citas: CitaDetectada[];
   proveedorUsado: string;
   modeloUsado: string;
   tiempoMs: number;
-}
-
-/** Construye el prompt legal procesal con el grounding de NotebookLM */
-function construirPromptLegal(params: ParametrosRedaccion): { systemPrompt: string; userPrompt: string } {
-  const { tipoEscrito, tono, tribunal, instrucciones, articulosContexto, leyesSeleccionadasNombres } = params;
-
-  let bloqueLeyes = '';
-  if (articulosContexto.length > 0) {
-    bloqueLeyes = articulosContexto
-      .map(
-        (a, idx) =>
-          `[FUENTE JURÍDICA ${idx + 1}]: ${a.leyNombre} · Artículo ${a.numero}${a.titulo ? ` (${a.titulo})` : ''}:\n«${a.texto}»`
-      )
-      .join('\n\n');
-  } else if (leyesSeleccionadasNombres.length > 0) {
-    bloqueLeyes = `Leyes seleccionadas por el despacho: ${leyesSeleccionadasNombres.join(', ')}. (Fundamenta con base en estas normas sustantivas y adjetivas).`;
-  } else {
-    bloqueLeyes = 'Utiliza la legislación y códigos procesales pertinentes con fundamentación doctrinal estricta.';
-  }
-
-  const systemPrompt = `Eres "Lex AI", un Asistente Senior de Redacción Procesal y Doctrina Jurídica de alto prestigio para despachos de abogados (estilo Harvey AI y Clio).
-Tu objetivo es redactar un documento jurídico formal, pulcro, persuasivo y procesalmente impecable.
-
-REGLAS DE REDACCIÓN GROUNDED (Estilo NotebookLM Jurídico):
-1. DEBES FUNDAMENTAR el escrito usando ESTRICTAMENTE las leyes y artículos proporcionados en las fuentes.
-2. Cada vez que invoques un precepto normativo, indícalo expresamente (ejemplo: «conforme prescribe el Art. 568 del Código Civil...»).
-3. Estructura el escrito según la técnica procesal correspondiente:
-   - SUMA / EPÍGRAFE: Identificación del tipo de escrito.
-   - AUTORIDAD: Designación del juzgado o tribunal (${tribunal || 'Señor Juez Público en Materia Civil y Comercial'}).
-   - GENERALES DE LEY: Identificación procesal de las partes.
-   - HECHOS / ANTECEDENTES: Relación cronológica y circunstanciada.
-   - FUNDAMENTACIÓN JURÍDICA: Subsunción de los hechos en el derecho invocando las fuentes citadas.
-   - PETITORIO: Pretensiones claras, precisas y congruentes.
-   - OTROSÍES: Domicilio procesal, prueba documental, patrocinios.
-4. Tono procesal solicitado: ${tono}.
-5. No inventes artículos ni leyes no existentes. Respeta la literalidad y el espíritu de las fuentes.
-6. No inventes nombres, cédulas ni domicilios de las partes: si no se proporcionan, deja marcadores como [NOMBRE DEL DEMANDANTE].
-7. FORMATO LIMPIO Y PRESENTACIÓN PROCESAL (IMPRESCINDIBLE):
-   - ESTRICTAMENTE PROHIBIDO usar etiquetas HTML (<br>, &nbsp;, <p>, <div>, etc.) ni entidades web.
-   - Utiliza saltos de línea estándar (\n\n) para separar párrafos o cláusulas.
-   - Para las líneas de firmas al final, utiliza texto limpio (ej: ______________________) sin etiquetas html.`;
-
-  const userPrompt = `TIPO DE ESCRITO SOLICITADO: ${tipoEscrito.toUpperCase()}
-${tribunal ? `DIRIGIDO A: ${tribunal}` : ''}
-
-FUENTES DE DERECHO SELECCIONADAS (GROUNDING):
-${bloqueLeyes}
-
-HECHOS E INSTRUCCIONES ESPECÍFICAS DEL CASO:
-${instrucciones}
-
-Por favor, redacta el escrito legal íntegro, listo para impresión y firma.`;
-
-  return { systemPrompt, userPrompt };
-}
-
-/** Redacta con el proveedor activo. Si falla, lanza el error real (no se genera texto de relleno). */
-export async function redactarConLexAi(params: ParametrosRedaccion): Promise<ResultadoRedaccion> {
-  const inicio = Date.now();
-  const cfg = obtenerConfigIa();
-  const proveedor = cfg.proveedorActivo;
-  const { systemPrompt, userPrompt } = construirPromptLegal(params);
-
-  const texto = await generarTexto(proveedor, cfg, { sistema: systemPrompt, usuario: userPrompt, maxTokens: 4096 });
-
-  return {
-    texto,
-    citasDetectadas: extraerCitas(texto, params.articulosContexto),
-    proveedorUsado: PROVEEDORES_IA[proveedor].nombre,
-    modeloUsado: (cfg[CAMPOS_IA[proveedor].modelo] as string) || 'defecto',
-    tiempoMs: Date.now() - inicio
-  };
+  truncado: boolean;
 }
 
 export interface MensajeChatLex {
@@ -685,11 +504,14 @@ export interface MensajeChatLex {
   tiempoMs?: number;
   modeloUsado?: string;
   proveedorUsado?: string;
-  citasDetectadas?: string[];
+  citas?: CitaDetectada[];
   fuentesConsultadas?: ArticuloContexto[];
   fuentesWeb?: FuenteWebJuridica[];
   ambitoUsado?: AmbitoJuridico;
   terminoWebBuscado?: string;
+  esError?: boolean;
+  /** Respuesta cortada por el límite de longitud o interrumpida por el usuario. */
+  truncado?: boolean;
   creadoEn: string;
 }
 
@@ -700,132 +522,97 @@ export interface ParametrosChatLexAi {
   leyesSeleccionadasNombres: string[];
   fuentesWeb?: FuenteWebJuridica[];
   ambito?: AmbitoJuridico;
+  modo?: ModoLex;
+  datosProtegidos?: boolean;
 }
 
-/** Interacción directa con Lex AI guiada por prompts, con investigación de leyes y jurisprudencia web */
-export async function consultarLexAi(params: ParametrosChatLexAi): Promise<ResultadoRedaccion> {
+const INSTRUCCION_MODO: Record<ModoLex, string> = {
+  consulta: 'MODO CONSULTA: responde directo y conciso, con fundamento y citas; no redactes un escrito completo salvo que se pida.',
+  redaccion: 'MODO REDACCIÓN: entrega el escrito completo, formal y listo para firma (suma, autoridad, generales de ley, hechos, fundamento de derecho, petitorio, otrosíes). Todo dato que no se te dio va en MAYÚSCULAS entre corchetes, p. ej. [NOMBRE DEL DEMANDANTE].',
+  revision: 'MODO REVISIÓN: el abogado pega un borrador. NO lo reescribas entero: lista observaciones numeradas (errores de forma, fundamentación faltante, riesgos procesales, plazos) y propone redacciones alternativas solo de los pasajes problemáticos.',
+  continuar: 'MODO CONTINUACIÓN: continúa exactamente donde termina el texto previo. No repitas nada, no saludes, no resumas.',
+};
+
+function sistemaLex(modo: ModoLex, datosProtegidos: boolean): string {
+  return `Eres "Lex AI", asistente senior de investigación y redacción jurídica para abogados litigantes.
+Fecha actual: ${hoyISO()}.
+
+REGLAS DE RIGOR (prioritarias):
+1. Fundamenta SOLO con las fuentes del contexto: [L1], [L2]… son artículos de las leyes del despacho y [W1], [W2]… fuentes web. Al usarlas, cita su marca (ej. «conforme al Art. 568 del Código Civil [L2]»).
+2. NO inventes artículos, números de Auto Supremo o Sentencia Constitucional, fechas ni textos. Si algo no está en las fuentes y no lo sabes con certeza, escríbelo como [VERIFICAR: detalle] en vez de afirmarlo.
+3. Si el contexto dice que no hay artículos de las leyes cargadas para la consulta, indícalo y no reproduzcas de memoria el texto de ningún artículo.
+4. Ordenamiento por defecto: Estado Plurinacional de Bolivia (CPE, Código Civil, Código Procesal Civil Ley 439, Código Penal, Código Procesal Penal, etc.). Si no se indica país, aclara al final: «(Fundamentado conforme a la legislación boliviana; indícame si requieres otro país)». Si el usuario indica otro país, aplica solo ese derecho.
+5. Aplica el bloque de constitucionalidad (arts. 13, 256 y 410 CPE) y el control de convencionalidad cuando corresponda (CADH, Corte IDH, convenios OIT).
+6. No inventes datos de las partes: usa marcadores [NOMBRE DEL DEMANDANTE], [C.I.], [DOMICILIO]…
+${datosProtegidos ? '7. Los marcadores [DOC_n], [TEL_n] y [CORREO_n] son datos reservados: consérvalos literalmente.\n' : ''}
+${INSTRUCCION_MODO[modo]}
+
+FORMATO: Markdown simple (#, ##, **negrita**, listas, tablas con |). PROHIBIDO usar HTML o entidades (&nbsp;, <br>). Separa párrafos con una línea en blanco. Líneas de firma con guiones bajos (______________________). No abuses de la negrita.`;
+}
+
+const recorte = (t: string, max = 3000) => (t.length > max ? `${t.slice(0, 1200)} […] ${t.slice(-(max - 1200))}` : t);
+
+export async function consultarLexAi(params: ParametrosChatLexAi, opc: OpcionesGeneracion = {}): Promise<ResultadoRedaccion> {
   const inicio = Date.now();
   const cfg = obtenerConfigIa();
   const proveedor = cfg.proveedorActivo;
-
   const {
-    prompt,
-    historial = [],
-    articulosContexto,
-    leyesSeleccionadasNombres,
-    fuentesWeb = [],
-    ambito = 'bolivia'
+    prompt, historial = [], articulosContexto: arts, leyesSeleccionadasNombres: nombres,
+    fuentesWeb = [], ambito = 'bolivia', modo = 'consulta', datosProtegidos = false,
   } = params;
 
-  let bloqueLeyes = '';
-  if (articulosContexto.length > 0) {
-    bloqueLeyes = articulosContexto
-      .map(
-        (a, idx) =>
-          `[FUENTE JURÍDICA ${idx + 1}]: ${a.leyNombre} · Artículo ${a.numero}${a.titulo ? ` (${a.titulo})` : ''}:\n«${a.texto}»`
-      )
-      .join('\n\n');
-  } else if (leyesSeleccionadasNombres.length > 0) {
-    bloqueLeyes = `Leyes activas en el contexto: ${leyesSeleccionadasNombres.join(', ')}.`;
-  }
+  const bloqueLeyes = arts.length > 0
+    ? arts.map((a, i) => `[L${i + 1}] ${a.leyNombre} · Art. ${a.numero}${a.titulo ? ` (${a.titulo})` : ''}:\n«${a.texto}»`).join('\n\n')
+    : nombres.length > 0
+      ? `Leyes activas: ${nombres.join(', ')}. NO se encontraron en ellas artículos relacionados con esta consulta.`
+      : '';
 
-  const systemPrompt = `Eres "Lex AI", Asistente Senior de Inteligencia, Jurisprudencia y Redacción Jurídica para despachos y abogados litigantes.
-Tu objetivo es responder, consultar doctrina, investigar jurisprudencia y redactar directamente según las instrucciones del usuario mediante prompts, con fundamentación legal estricta y rigor procesal.
-
-DIRECTRICES DE INVESTIGACIÓN JURÍDICA Y ORDENAMIENTO:
-1. ORDENAMIENTO JURÍDICO APLICABLE:
-   - El ordenamiento jurídico preferente por defecto es el del Estado Plurinacional de Bolivia (Constitución Política del Estado, Código Civil, Código Procesal Civil, Código Penal, Código Procesal Penal, etc.).
-   - Si el usuario te hace una pregunta general sobre una institución legal o procesal sin especificar país (ej: "¿Cuáles son los plazos para contestar una demanda?"), responde y fundamenta conforme al ordenamiento jurídico boliviano y aclara de forma elegante: «(Fundamentado conforme a la legislación procesal boliviana. Si requiere el análisis para otro país como Argentina, España, México o Colombia, indíquemelo con gusto)».
-   - Si el usuario te especifica un país o legislación comparada, subsume el análisis estrictamente en el derecho de ese país.
-2. JURISPRUDENCIA VINCULANTE:
-   - Si dispones de fuentes web o de jurisprudencia en el contexto, cita expresamente los precedentes vinculantes (ej: Auto Supremo N° ..., Sala Civil del TSJ, o Sentencia Constitucional Plurinacional SCP ...).
-3. TRATADOS INTERNACIONALES Y CONTROL DE CONVENCIONALIDAD:
-   - Aplica el Bloque de Constitucionalidad (Art. 410.II y Art. 256 de la CPE de Bolivia).
-   - Invoca los instrumentos internacionales de derechos humanos pertinentes (Pacto de San José de Costa Rica - CADH, sentencias u opiniones consultivas de la Corte Interamericana de Derechos Humanos - Corte IDH, Convenios OIT, etc.).
-4. REDACCIÓN Y CONSULTAS:
-   - Si el usuario te pide redactar un escrito procesal (demanda, memorial, contestación, recurso, contrato, etc.), redáctalo completo, formal, estructurado y listo para firma.
-   - Si el usuario te hace una consulta de doctrina o jurisprudencia, sé directo, conciso, riguroso y cita las fuentes con precisión.
-5. FORMATO LIMPIO Y PRESENTACIÓN JURÍDICA:
-   - ESTRICTAMENTE PROHIBIDO usar etiquetas HTML (<br>, &nbsp;, <p>, <div>, etc.) ni entidades web.
-   - Utiliza saltos de línea estándar (\n\n) para separar párrafos o cláusulas.
-   - Para las líneas de firmas, usa líneas de texto limpio (ej: ______________________) sin tags HTML ni &nbsp;.
-   - No satures con asteriscos innecesarios; usa negrita solo para títulos o nombres de cláusulas.`;
-
-  let promptUsuarioConContexto = '';
-  if (bloqueLeyes) {
-    promptUsuarioConContexto += `--- FUENTES DE DERECHO EN CONTEXTO (LEYES) ---\n${bloqueLeyes}\n-----------------------------------------------\n\n`;
-  }
-
+  let usuario = '';
+  if (bloqueLeyes) usuario += `--- LEYES DEL DESPACHO (contexto) ---\n${bloqueLeyes}\n\n`;
   if (fuentesWeb.length > 0) {
-    promptUsuarioConContexto += `--- JURISPRUDENCIA, TRATADOS Y FUENTES WEB EN VIVO (${ambito.toUpperCase()}) ---\n`;
-    for (const [idx, f] of fuentesWeb.entries()) {
-      promptUsuarioConContexto += `[DOC WEB ${idx + 1} - ${f.tipo.toUpperCase()}]: ${f.titulo}\nEnlace / URL: ${f.url}\nExtracto / Fundamento:\n«${f.resumen}»\n\n`;
-    }
-    promptUsuarioConContexto += `--------------------------------------------------------------------\n\n`;
+    usuario += `--- FUENTES WEB (${ambito.toUpperCase()}) · extractos breves, NO texto íntegro ---\n`
+      + fuentesWeb.map((f, i) => `[W${i + 1}] (${f.tipo}) ${f.titulo}\nURL: ${f.url}\nExtracto: «${f.resumen}»`).join('\n\n')
+      + '\n\n';
   }
-
   if (historial.length > 0) {
-    promptUsuarioConContexto += '--- CONVERSACIÓN PREVIA ---\n';
-    for (const h of historial.slice(-6)) {
-      promptUsuarioConContexto += `${h.rol === 'usuario' ? 'Abogado' : 'Lex AI'}: ${h.texto}\n\n`;
-    }
-    promptUsuarioConContexto += '---------------------------\n\n';
+    usuario += `--- CONVERSACIÓN PREVIA ---\n${historial.slice(-6).map((h) => `${h.rol === 'usuario' ? 'Abogado' : 'Lex AI'}: ${recorte(h.texto)}`).join('\n\n')}\n\n`;
   }
+  usuario += `INSTRUCCIÓN DEL ABOGADO:\n${prompt}`;
 
-  promptUsuarioConContexto += `INSTRUCCIÓN / PROMPT DEL ABOGADO:\n${prompt}`;
-
-  const texto = await generarTexto(proveedor, cfg, {
-    sistema: systemPrompt,
-    usuario: promptUsuarioConContexto,
-    maxTokens: 4096
-  });
-
+  const { texto, truncado } = await generarTexto(proveedor, cfg, { sistema: sistemaLex(modo, datosProtegidos), usuario }, opc);
   return {
-    texto,
-    citasDetectadas: extraerCitas(texto, articulosContexto),
+    texto, truncado,
+    citas: extraerCitas(texto, arts, fuentesWeb),
     proveedorUsado: PROVEEDORES_IA[proveedor].nombre,
     modeloUsado: (cfg[CAMPOS_IA[proveedor].modelo] as string) || 'defecto',
-    tiempoMs: Date.now() - inicio
+    tiempoMs: Date.now() - inicio,
   };
 }
 
-/** Extrae citas legales, jurisprudencia y tratados encontrados en el texto */
-function extraerCitas(texto: string, fuentes: ArticuloContexto[]): string[] {
-  const citas = new Set<string>();
+const normNum = (n: string) => n.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ').trim();
 
-  // Citas extraídas de las fuentes provistas
-  for (const f of fuentes) {
-    if (texto.toLowerCase().includes(`art. ${f.numero}`) || texto.toLowerCase().includes(`artículo ${f.numero}`)) {
-      citas.add(`Art. ${f.numero} ${f.leyNombre}`);
-    }
+/** Citas del texto. `verificada` = aparece en los artículos o fuentes web que se le dieron al modelo. */
+export function extraerCitas(texto: string, articulos: ArticuloContexto[], fuentesWeb: FuenteWebJuridica[]): CitaDetectada[] {
+  const salida = new Map<string, CitaDetectada>();
+  const poner = (t: string, verificada: boolean) => {
+    if (salida.size < 14 && !salida.has(t)) salida.set(t, { texto: t, verificada });
+  };
+  const enContexto = new Map<string, ArticuloContexto>();
+  for (const a of articulos) if (!enContexto.has(normNum(a.numero))) enContexto.set(normNum(a.numero), a);
+
+  for (const m of texto.matchAll(/\b(?:arts?\.?|art[íi]culos?)\s*(\d{1,5}(?:\s*(?:bis|ter|qu[aá]ter))?)/gi)) {
+    const a = enContexto.get(normNum(m[1]));
+    poner(a ? `Art. ${a.numero} ${a.leyNombre}` : `Art. ${normNum(m[1])}`, !!a);
   }
-
-  // Preceptos jurisprudenciales bolivianos (Autos Supremos, SCPs)
-  const regexAs = /(?:Auto\s+Supremo|A\.?S\.?)\s*(?:N[°º.]*\s*)?(\d+[\/\-]\d+)/gi;
-  let matchAs;
-  while ((matchAs = regexAs.exec(texto)) !== null) {
-    if (citas.size < 10) citas.add(`Auto Supremo ${matchAs[1]}`);
+  const web = fuentesWeb.map((f) => `${f.titulo} ${f.resumen} ${f.url}`).join(' ').toLowerCase();
+  for (const m of texto.matchAll(/\b(?:Auto\s+Supremo|A\.?S\.?)\s*(?:N[°º.]*\s*)?(\d+[/\-]\d{2,4})/gi)) {
+    poner(`Auto Supremo ${m[1]}`, web.includes(m[1].toLowerCase()));
   }
-
-  const regexScp = /(?:Sentencia\s+Constitucional(?:\s+Plurinacional)?|SCP)\s*(?:N[°º.]*\s*)?(\d+[\/\-]\d+(?:-[A-Z0-9]+)?)/gi;
-  let matchScp;
-  while ((matchScp = regexScp.exec(texto)) !== null) {
-    if (citas.size < 10) citas.add(`SCP ${matchScp[1]}`);
+  for (const m of texto.matchAll(/\b(?:Sentencia\s+Constitucional(?:\s+Plurinacional)?|SCP)\s*(?:N[°º.]*\s*)?(\d+[/\-]\d{2,4}(?:-[A-Z0-9]+)?)/gi)) {
+    poner(`SCP ${m[1]}`, web.includes(m[1].toLowerCase()));
   }
-
-  // Tratados y cortes comunes
-  if (/pacto\s+de\s+san\s+jos[eé]|cadh/i.test(texto)) citas.add('Pacto de San José (CADH)');
-  if (/corte\s+interamericana|corte\s+idh/i.test(texto)) citas.add('Corte IDH');
-  if (/cpe|constituci[oó]n\s+pol[íi]tica\s+del\s+estado/i.test(texto)) citas.add('CPE Bolivia');
-
-  // Expresiones regulares para artículos comunes
-  const regex = /(?:Arts?\.?|Art[íi]culos?)\s*(\d{1,5}(?:\s*(?:bis|ter))?)/gi;
-  let match;
-  while ((match = regex.exec(texto)) !== null) {
-    if (citas.size < 12) {
-      citas.add(`Art. ${match[1]}`);
-    }
-  }
-
-  return Array.from(citas);
+  if (/pacto\s+de\s+san\s+jos[eé]|\bcadh\b/i.test(texto)) poner('Pacto de San José (CADH)', true);
+  if (/corte\s+interamericana|corte\s+idh/i.test(texto)) poner('Corte IDH', true);
+  if (/\bCPE\b|constituci[oó]n\s+pol[ií]tica\s+del\s+estado/i.test(texto)) poner('CPE Bolivia', true);
+  return [...salida.values()];
 }
