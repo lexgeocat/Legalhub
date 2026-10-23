@@ -24,7 +24,7 @@ const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
   { id: 'procedimientos', etiqueta: 'Procedimientos', icono: 'flujo' },
-  { id: 'leyes', etiqueta: 'Leyes', icono: 'libro' },
+  { id: 'leyes', etiqueta: 'Normativa', icono: 'libro' },
   { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
 ];
 

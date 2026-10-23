@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { citaParaEditor, citar, etiquetaNodo, type ModoCita } from '../../domain/leyes/leyes';
 import { Aviso, Insignia, avisar, copiarTexto } from '../_core/comunes';
 import { useCargar, useServicios } from '../_core/servicios';
@@ -47,14 +47,14 @@ export function BuscadorLeyes({ onInsertar }: { onInsertar: Insertar }) {
             <Aviso error={busqueda.error ?? detalle.error ?? leyes.error} />
 
             {leyes.datos && lista.length === 0 ? (
-                <p className="pc-ayuda">Aún no hay leyes. Sube un PDF en la sección «Leyes» y vuelve aquí.</p>
+                <p className="pc-ayuda">Aún no hay normativa. Sube un PDF en la sección «Normativa» y vuelve aquí.</p>
             ) : (
                 <div className="cb-edicion">
-                    <select aria-label="Ley" value={leyId} onChange={(e) => { setLeyId(e.target.value); setSelId(null); }}>
-                        <option value="">Todas las leyes</option>
+                    <select aria-label="Normativa" value={leyId} onChange={(e) => { setLeyId(e.target.value); setSelId(null); }}>
+                        <option value="">Toda la normativa</option>
                         {lista.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
                     </select>
-                    <input type="search" aria-label="Buscar en las leyes" placeholder="1283 · art. 45 · prescripción…"
+                    <input type="search" aria-label="Buscar en la normativa" placeholder="1283 · art. 45 · prescripción…"
                         value={q} onChange={(e) => setQ(e.target.value)} />
                     {!consultaValida(q) && (
                         <p className="pc-nota">Busca por número de artículo (1283, art. 45) o por texto (mínimo 2 letras).</p>
@@ -111,10 +111,10 @@ export function BuscadorLeyes({ onInsertar }: { onInsertar: Insertar }) {
 export function PanelLeyes({ onInsertar }: { onInsertar: Insertar }) {
     return (
         <div className="pc">
-            <div className="pc-cab"><h3>Citar una ley</h3></div>
+            <div className="pc-cab"><h3>Citar normativa</h3></div>
             <div className="pc-cuerpo"><BuscadorLeyes onInsertar={onInsertar} /></div>
             <div className="pc-pie">
-                <p className="pc-ayuda">Se inserta donde está el cursor. Las leyes se suben en la sección «Leyes».</p>
+                <p className="pc-ayuda">Se inserta donde está el cursor. La normativa se sube en la sección «Normativa».</p>
             </div>
         </div>
     );

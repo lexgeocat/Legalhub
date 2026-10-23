@@ -939,7 +939,7 @@ export function PanelCampos({
         { id: 'datos', etiqueta: `Datos${nDatos ? ` (${nDatos})` : ''}` },
         { id: 'partes', etiqueta: `Partes${partes.length ? ` (${partes.length})` : ''}` },
         { id: 'genero', etiqueta: 'Género' },
-        { id: 'leyes', etiqueta: 'Leyes' },
+        { id: 'leyes', etiqueta: 'Normativa' },
     ];
 
     return (

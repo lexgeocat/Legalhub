@@ -506,3 +506,447 @@
         flex: none;
     }
 }
+
+/* ===== Selector de Modos de Vista (Organigrama / Esquema / PDF) ===== */
+.ley-modos-vista {
+    display: inline-flex;
+    align-items: center;
+    background: var(--superficie-2, #f1f5f9);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 3px;
+}
+
+.ley-btn-modo {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--texto-2);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ley-btn-modo:hover {
+    color: var(--texto);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.ley-btn-modo.activo {
+    background: #ffffff;
+    color: var(--primario);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+    font-weight: 700;
+}
+
+[data-tema="slate"] .ley-modos-vista {
+    background: #101622;
+    border-color: #232d3f;
+}
+
+[data-tema="slate"] .ley-btn-modo:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+[data-tema="slate"] .ley-btn-modo.activo {
+    background: #1e293b;
+    color: #38bdf8;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* ===== Organigrama de Normativa: Distribución ===== */
+.org-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+    gap: 14px;
+    height: calc(100vh - 230px);
+    min-height: 520px;
+    transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.org-layout.sin-panel {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* Pantalla completa para el Organigrama */
+.org-layout.org-pantalla-completa {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px 20px;
+    box-sizing: border-box;
+    background: var(--bg);
+    animation: orgEntradaPantalla 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.org-layout.org-pantalla-completa.sin-panel {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@keyframes orgEntradaPantalla {
+    from {
+        opacity: 0;
+        transform: scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.org-escena {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    min-width: 0;
+    height: 100%;
+}
+
+/* Barra de herramientas del organigrama */
+.org-barra {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    box-shadow: var(--sombra-xs);
+}
+
+.org-barra-titulo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 13.5px;
+    color: var(--texto);
+    margin-right: 4px;
+}
+
+.org-filtros-grupo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px;
+    background: var(--superficie-2, #f1f5f9);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+}
+
+.org-select-nivel {
+    padding: 3px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--texto);
+    cursor: pointer;
+}
+
+.org-buscar-caja {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--superficie-2, #f1f5f9);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    min-width: 220px;
+}
+
+.org-buscar-caja input {
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--texto);
+    width: 100%;
+    outline: none;
+}
+
+.org-buscar-cuenta {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primario);
+    white-space: nowrap;
+}
+
+.org-acciones-arbol {
+    display: flex;
+    gap: 4px;
+}
+
+.org-zoom-grupo {
+    display: inline-flex;
+    align-items: center;
+    background: var(--superficie-2, #f1f5f9);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 2px 4px;
+    gap: 3px;
+}
+
+.org-zoom-grupo .btn-zoom {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    background: transparent;
+    border-radius: 5px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--texto);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.org-zoom-grupo .btn-zoom:hover {
+    background: var(--superficie);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.org-zoom-badge {
+    min-width: 48px;
+    text-align: center;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--primario);
+    padding: 3px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    transition: all 0.15s ease;
+}
+
+.org-zoom-badge:hover {
+    background: var(--superficie);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Lienzo con matriz de puntos */
+.org-lienzo {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+    background-color: var(--superficie-2, #f8fafc);
+    background-image: radial-gradient(circle, var(--borde-fuerte, #cbd5e1) 1.2px, transparent 1.2px);
+    background-size: 24px 24px;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    box-shadow: inset 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.org-lienzo.arrastrando {
+    cursor: grabbing !important;
+}
+
+.org-lienzo.arrastrando * {
+    pointer-events: none !important;
+}
+
+.org-lienzo-capa {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    transform-origin: 0 0;
+}
+
+.org-lienzo-capa > svg {
+    display: block;
+    box-shadow: 0 16px 40px -6px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+/* Nodos SVG en el organigrama */
+.org-svg-nodo {
+    transition: transform 0.15s ease, opacity 0.18s ease;
+    outline: none;
+}
+
+.org-svg-nodo:hover rect:first-of-type {
+    stroke-width: 2.4;
+}
+
+.org-nodo-btn-plegar:hover rect {
+    filter: brightness(0.92);
+}
+
+.org-art-fila-svg {
+    transition: filter 0.12s ease;
+}
+
+.org-art-fila-svg:hover rect {
+    stroke: var(--primario);
+    filter: brightness(0.96);
+}
+
+[data-tema="slate"] .org-art-fila-svg:hover rect {
+    stroke: #38bdf8;
+    filter: brightness(1.22);
+}
+
+/* Leyenda flotante */
+.org-leyenda {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--texto-2);
+    pointer-events: none;
+}
+
+.org-leyenda-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.org-leyenda-item::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--col);
+}
+
+/* Panel lateral Inspector de nodo */
+.org-inspector {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    background: #ffffff;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    padding: 16px 18px 20px;
+    overflow-y: auto;
+    box-shadow: var(--sombra-sm);
+}
+
+.org-inspector-cab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.org-inspector-titulo-bloque h3 {
+    margin: 4px 0 2px;
+    font-size: 19px;
+    line-height: 1.3;
+    color: var(--texto);
+}
+
+.org-inspector-rubro {
+    margin: 2px 0 0;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--texto-2);
+}
+
+.org-inspector-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.org-inspector-cuerpo {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.org-inspector-subelementos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+/* Adaptación a Slate (Modo Oscuro) */
+[data-tema="slate"] .org-lienzo,
+[data-tema="oscuro"] .org-lienzo {
+    background-color: #0c111a;
+    background-image: radial-gradient(circle, rgba(96, 165, 250, 0.22) 1.2px, transparent 1.2px);
+    border-color: #242e40;
+    box-shadow: inset 0 2px 14px rgba(0, 0, 0, 0.6);
+}
+
+[data-tema="slate"] .org-lienzo-capa > svg,
+[data-tema="oscuro"] .org-lienzo-capa > svg {
+    background: #141923;
+    box-shadow: 0 16px 44px -6px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+[data-tema="slate"] .org-barra,
+[data-tema="slate"] .org-inspector {
+    background: #141923;
+    border-color: #242e40;
+}
+
+[data-tema="slate"] .org-filtros-grupo,
+[data-tema="slate"] .org-buscar-caja,
+[data-tema="slate"] .org-zoom-grupo {
+    background: #1c2433;
+    border-color: #2d394e;
+}
+
+[data-tema="slate"] .org-leyenda {
+    background: rgba(20, 25, 35, 0.88);
+    border-color: #242e40;
+    color: #cbd5e1;
+}
+
+@media (max-width: 1024px) {
+    .org-layout {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+    }
+    .org-escena {
+        height: 60vh;
+    }
+    .org-inspector {
+        max-height: 50vh;
+    }
+}

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { Ley, NodoConLey } from '../../application/casosDeUso/leyes';
 import {
     ETIQUETA_NIVEL, NIVELES_LEY, TIPOS_LEY, citar, construirOrg, etiquetaNodo, rangoArticulos, rutaDe,
@@ -8,6 +8,7 @@ import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar, copiar
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { useBuscarLeyes } from './useBuscarLeyes';
 import { VisorPdf, type ControlVisor } from '../pdf/VisorPdf';
+import { OrganigramaNormativa } from './OrganigramaNormativa';
 import './leyes.css';
 
 type Dlg = { n: 'nodo'; nodo?: NodoLey } | { n: 'ley' } | null;
@@ -114,7 +115,7 @@ function Contenido({ lista, elegir }: { lista: NodoOrg[]; elegir: Elegir }) {
 }
 
 /* ================= Lector: texto del marcador elegido ================= */
-function Lector({ ley, selId, nodo, orgNodo, raices, ruta, anterior, siguiente, elegir, verPdf, copiar, editar, quitar }: {
+function Lector({ ley, selId, nodo, orgNodo, raices, ruta, anterior, siguiente, elegir, verPdf, verOrganigrama, copiar, editar, quitar }: {
     ley: Ley;
     selId: string | null;
     nodo: NodoConLey | null;
@@ -125,6 +126,7 @@ function Lector({ ley, selId, nodo, orgNodo, raices, ruta, anterior, siguiente, 
     siguiente: NodoArbol | null;
     elegir: Elegir;
     verPdf: (pagina: number) => void;
+    verOrganigrama: () => void;
     copiar: (modo: ModoCita) => void;
     editar: (n: NodoLey) => void;
     quitar: () => void;
@@ -135,8 +137,13 @@ function Lector({ ley, selId, nodo, orgNodo, raices, ruta, anterior, siguiente, 
                 <div>
                     <h2>{ley.nombre}</h2>
                     <p className="suave">
-                        {ley.numArticulos} artículos · {ley.numPaginas} págs. Elige un libro, título, capítulo o artículo para leerlo aquí.
+                        {ley.numArticulos} artículos · {ley.numPaginas} págs. Elige un libro, título, capítulo o artículo para leerlo aquí, o abre el Organigrama interactivo.
                     </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
+                    <button type="button" className="btn btn-sec btn-sm" onClick={verOrganigrama}>
+                        <Icono n="flujo" tam={15} /> Ver Organigrama Completo
+                    </button>
                 </div>
                 {raices.length === 0
                     ? <p className="suave">No hay marcadores todavía.</p>
@@ -181,6 +188,9 @@ function Lector({ ley, selId, nodo, orgNodo, raices, ruta, anterior, siguiente, 
                 <button type="button" className="btn btn-sec btn-sm" onClick={() => copiar('titulo')}>Con título</button>
                 <button type="button" className="btn btn-sec btn-sm" disabled={!nodo.texto} onClick={() => copiar('texto')}>Texto citado</button>
                 <span className="espacio" />
+                <button type="button" className="btn btn-fan btn-sm" onClick={verOrganigrama} title="Ver este marcador en el diagrama organigrama">
+                    <Icono n="flujo" tam={14} /> Organigrama
+                </button>
                 <button type="button" className="btn btn-fan btn-sm" onClick={() => verPdf(nodo.pagina)}>Ver en el PDF</button>
                 <button type="button" className="btn btn-fan btn-sm" onClick={() => editar(nodo)}>Editar</button>
                 <button type="button" className="btn btn-fan btn-icono btn-sm" aria-label="Quitar marcador" onClick={quitar}>
@@ -259,6 +269,7 @@ export function VisorLey({ leyId, nodoInicial, volver }: { leyId: string; nodoIn
     const [pagina, setPagina] = useState(1);
     const [selId, setSelId] = useState<string | null>(nodoInicial ?? null);
     const detalle = useCargar(() => (selId ? s.leyes.obtenerNodo(selId) : Promise.resolve(null)), [selId]);
+    const [modoVista, setModoVista] = useState<'organigrama' | 'esquema' | 'pdf'>('organigrama');
     const [q, setQ] = useState('');
     const busqueda = useBuscarLeyes(q, leyId);
     const [plegados, setPlegados] = useState<Set<string>>(() => new Set());
@@ -379,15 +390,15 @@ export function VisorLey({ leyId, nodoInicial, volver }: { leyId: string; nodoIn
     }
 
     async function eliminarLey() {
-        if (!l || !(await confirmar(`¿Quitar «${l.nombre}» de la biblioteca? El PDF no se borra del disco.`, 'Quitar ley'))) return;
+        if (!l || !(await confirmar(`¿Quitar «${l.nombre}» de la normativa? El PDF no se borra del disco.`, 'Quitar normativa'))) return;
         await correr(async () => {
             await s.leyes.eliminar(l.id);
-            avisar('Ley quitada');
+            avisar('Normativa quitada');
             volver();
         });
     }
 
-    const atras = <button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Leyes</button>;
+    const atras = <button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Normativa</button>;
     if (ley.error) return <div className="pagina">{atras}<Aviso error={ley.error} /></div>;
     if (!l) return <div className="pagina">{atras}<p className="suave">Cargando…</p></div>;
 
@@ -407,9 +418,42 @@ export function VisorLey({ leyId, nodoInicial, volver }: { leyId: string; nodoIn
                     <h1>{l.nombre}</h1>
                     {l.norma && <p className="subtitulo">{l.norma}</p>}
                 </div>
-                <div className="acciones">
+                <div className="acciones" style={{ alignItems: 'center' }}>
+                    <div className="ley-modos-vista">
+                        <button
+                            type="button"
+                            className={`ley-btn-modo${modoVista === 'organigrama' && !pdf ? ' activo' : ''}`}
+                            onClick={() => { setModoVista('organigrama'); setPdf(null); }}
+                            title="Ver estructura en diagrama organigrama interactivo"
+                        >
+                            <Icono n="flujo" tam={16} />
+                            <span>Organigrama</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`ley-btn-modo${modoVista === 'esquema' && !pdf ? ' activo' : ''}`}
+                            onClick={() => { setModoVista('esquema'); setPdf(null); }}
+                            title="Ver en árbol esquemático y texto del lector"
+                        >
+                            <Icono n="documento" tam={16} />
+                            <span>Esquema y Lector</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`ley-btn-modo${modoVista === 'pdf' || !!pdf ? ' activo' : ''}`}
+                            onClick={() => {
+                                setModoVista('pdf');
+                                if (!pdf) verPdf(nodo?.pagina ?? 1);
+                            }}
+                            title="Ver documento original en PDF"
+                        >
+                            <Icono n="libro" tam={16} />
+                            <span>PDF Original</span>
+                        </button>
+                    </div>
+                    <span className="espacio" />
                     <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => setDlg({ n: 'ley' })}>Datos</button>
-                    <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void s.archivos.abrir(l.rutaPdf).catch((e) => setError(mensajeError(e)))}>Abrir PDF original</button>
+                    <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void s.archivos.abrir(l.rutaPdf).catch((e) => setError(mensajeError(e)))}>Abrir PDF</button>
                     <button type="button" className="btn btn-sec" disabled={ocupado} onClick={() => void reanalizar()}>{ocupado ? 'Analizando…' : 'Volver a analizar'}</button>
                     <button type="button" className="btn btn-peligro" disabled={ocupado} onClick={() => void eliminarLey()}>Quitar</button>
                 </div>
@@ -422,66 +466,102 @@ export function VisorLey({ leyId, nodoInicial, volver }: { leyId: string; nodoIn
                 </Alerta>
             )}
 
-            <div className="ley-layout">
-                <section className="ley-panel">
-                    <input type="search" placeholder="Buscar: 1283 · art. 45 · prescripción…" value={q} onChange={(e) => setQ(e.target.value)} />
-                    <div className="acciones">
-                        <button type="button" className="btn btn-sec btn-sm" onClick={marcar}>＋ Marcador</button>
-                        <button type="button" className="btn btn-sec btn-sm"
-                            onClick={() => (pdf ? setPdf(null) : verPdf(nodo?.pagina ?? 1))}>
-                            {pdf ? 'Ocultar PDF' : 'Ver PDF'}
-                        </button>
-                        <span className="espacio" />
-                        <button type="button" className="btn btn-fan btn-sm" onClick={() => setPlegados(new Set(conHijos))}>Plegar</button>
-                        <button type="button" className="btn btn-fan btn-sm" onClick={() => setPlegados(new Set())}>Desplegar</button>
-                    </div>
-                    <label className="casilla">
-                        <input type="checkbox" checked={verArt} onChange={(e) => setVerArt(e.target.checked)} />
-                        Con artículos en el árbol
-                    </label>
+            {modoVista === 'organigrama' && !pdf ? (
+                <OrganigramaNormativa
+                    ley={l}
+                    raices={org.raices}
+                    todosNodos={nodos}
+                    selId={selId}
+                    nodoSeleccionado={nodo}
+                    onElegir={elegir}
+                    onVerPdf={(pag) => {
+                        setModoVista('pdf');
+                        verPdf(pag);
+                    }}
+                    onCopiar={(m) => void copiar(m)}
+                    onEditarNodo={(n) => setDlg({ n: 'nodo', nodo: n })}
+                    onVerLector={() => {
+                        setModoVista('esquema');
+                        setPdf(null);
+                    }}
+                />
+            ) : (
+                <div className="ley-layout">
+                    <section className="ley-panel">
+                        <input type="search" placeholder="Buscar: 1283 · art. 45 · prescripción…" value={q} onChange={(e) => setQ(e.target.value)} />
+                        <div className="acciones">
+                            <button type="button" className="btn btn-sec btn-sm" onClick={marcar}>＋ Marcador</button>
+                            <button type="button" className="btn btn-sec btn-sm"
+                                onClick={() => {
+                                    if (pdf) {
+                                        setPdf(null);
+                                        setModoVista('esquema');
+                                    } else {
+                                        verPdf(nodo?.pagina ?? 1);
+                                    }
+                                }}>
+                                {pdf ? 'Ocultar PDF' : 'Ver PDF'}
+                            </button>
+                            <span className="espacio" />
+                            <button type="button" className="btn btn-fan btn-sm" onClick={() => setPlegados(new Set(conHijos))}>Plegar</button>
+                            <button type="button" className="btn btn-fan btn-sm" onClick={() => setPlegados(new Set())}>Desplegar</button>
+                        </div>
+                        <label className="casilla">
+                            <input type="checkbox" checked={verArt} onChange={(e) => setVerArt(e.target.checked)} />
+                            Con artículos en el árbol
+                        </label>
 
-                    <div className="ley-arbol">
-                        {buscando ? (
-                            busqueda.res.length === 0
-                                ? <p className="suave" style={{ padding: 10 }}>Sin resultados.</p>
-                                : busqueda.res.map((r) => (
-                                    <button key={r.id} type="button" className="opcion" style={{ marginBottom: 6 }} onClick={() => elegir(r.id, r.pagina)}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <b>{etiquetaNodo(r)}</b>
-                                            <span className="suave">Pág. {r.pagina}{r.extracto ? ` · ${r.extracto}` : ''}</span>
-                                        </div>
-                                    </button>
-                                ))
-                        ) : !hayVisibles ? (
-                            <p className="suave" style={{ padding: 10 }}>
-                                {org.raices.length === 0 ? 'Sin marcadores.' : 'Esta ley no tiene divisiones: activa «Con artículos en el árbol».'}
-                            </p>
+                        <div className="ley-arbol">
+                            {buscando ? (
+                                busqueda.res.length === 0
+                                    ? <p className="suave" style={{ padding: 10 }}>Sin resultados.</p>
+                                    : busqueda.res.map((r) => (
+                                        <button key={r.id} type="button" className="opcion" style={{ marginBottom: 6 }} onClick={() => elegir(r.id, r.pagina)}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <b>{etiquetaNodo(r)}</b>
+                                                <span className="suave">Pág. {r.pagina}{r.extracto ? ` · ${r.extracto}` : ''}</span>
+                                            </div>
+                                        </button>
+                                    ))
+                            ) : !hayVisibles ? (
+                                <p className="suave" style={{ padding: 10 }}>
+                                    {org.raices.length === 0 ? 'Sin marcadores.' : 'Esta ley no tiene divisiones: activa «Con artículos en el árbol».'}
+                                </p>
+                            ) : (
+                                <Rama lista={org.raices} selId={selId} enRuta={enRuta} plegados={plegados} verArt={verArt}
+                                    alternar={alternar} elegir={elegir} />
+                            )}
+                        </div>
+                    </section>
+
+                    <div className="ley-centro">
+                        {pdf ? (
+                            <PanelPdf
+                                ley={l} visor={visor} inicial={pdf.inicial} marcando={pdf.marcando} pagina={pagina} aqui={aqui}
+                                onPagina={setPagina}
+                                marcar={() => setDlg({ n: 'nodo' })}
+                                cerrar={() => {
+                                    setPdf(null);
+                                    if (modoVista === 'pdf') setModoVista('organigrama');
+                                }}
+                            />
                         ) : (
-                            <Rama lista={org.raices} selId={selId} enRuta={enRuta} plegados={plegados} verArt={verArt}
-                                alternar={alternar} elegir={elegir} />
+                            <Lector
+                                ley={l} selId={selId} nodo={nodo} orgNodo={selId ? org.porId.get(selId) : undefined}
+                                raices={org.raices} ruta={rutaSel} anterior={anterior} siguiente={siguiente}
+                                elegir={elegir} verPdf={verPdf}
+                                verOrganigrama={() => {
+                                    setModoVista('organigrama');
+                                    setPdf(null);
+                                }}
+                                copiar={(m) => void copiar(m)}
+                                editar={(n) => setDlg({ n: 'nodo', nodo: n })}
+                                quitar={() => void eliminarNodo()}
+                            />
                         )}
                     </div>
-                </section>
-
-                <div className="ley-centro">
-                    {pdf ? (
-                        <PanelPdf
-                            ley={l} visor={visor} inicial={pdf.inicial} marcando={pdf.marcando} pagina={pagina} aqui={aqui}
-                            onPagina={setPagina}
-                            marcar={() => setDlg({ n: 'nodo' })}
-                            cerrar={() => setPdf(null)}
-                        />
-                    ) : (
-                        <Lector
-                            ley={l} selId={selId} nodo={nodo} orgNodo={selId ? org.porId.get(selId) : undefined}
-                            raices={org.raices} ruta={rutaSel} anterior={anterior} siguiente={siguiente}
-                            elegir={elegir} verPdf={verPdf} copiar={(m) => void copiar(m)}
-                            editar={(n) => setDlg({ n: 'nodo', nodo: n })}
-                            quitar={() => void eliminarNodo()}
-                        />
-                    )}
                 </div>
-            </div>
+            )}
 
             {dlg?.n === 'nodo' && (
                 <ModalNodo
@@ -586,7 +666,7 @@ function ModalLey({ ley, cerrar, guardado }: {
 
     return (
         <Modal
-            titulo="Datos de la ley"
+            titulo="Datos de la normativa"
             cerrar={cerrar}
             pie={<><span className="espacio" /><button type="button" className="btn btn-sec" onClick={cerrar}>Cancelar</button><button type="submit" form="form-ley" className="btn btn-pri" disabled={trabajando}>Guardar</button></>}
         >

@@ -442,7 +442,7 @@ export default function LexAi() {
             title="Mostrar u ocultar panel de fuentes jurídicas"
           >
             <Icono n="libro" tam={15} />
-            <span>Leyes ({leyesSeleccionadas.size})</span>
+            <span>Normativa ({leyesSeleccionadas.size})</span>
           </button>
 
           {mensajes.length > 0 && (
@@ -475,25 +475,25 @@ export default function LexAi() {
 
       {/* Workspace Principal */}
       <div className={`lexai-grid-workspace${panelFuentesVisible ? ' con-fuentes' : ' sin-fuentes'}`}>
-        {/* Panel Lateral: Fuentes de Leyes (Grounding) */}
+        {/* Panel Lateral: Fuentes de Normativa (Grounding) */}
         {panelFuentesVisible && (
-          <aside className="lexai-panel-fuentes" aria-label="Fuentes de leyes">
+          <aside className="lexai-panel-fuentes" aria-label="Fuentes de normativa">
             <div className="lexai-fuentes-cab">
               <h3>
                 <Icono n="libro" tam={17} />
-                <span>Fuentes de Leyes</span>
+                <span>Fuentes de Normativa</span>
               </h3>
               <Insignia tono="azul">{leyesSeleccionadas.size} en memoria</Insignia>
             </div>
             <p className="lexai-fuentes-sub">
-              Lex AI cotejará los artículos de estas leyes para citar y fundamentar cada escrito.
+              Lex AI cotejará los artículos de esta normativa para citar y fundamentar cada escrito.
             </p>
 
             <div className="lexai-fuentes-buscar">
               <Icono n="buscar" tam={14} />
               <input
                 type="search"
-                placeholder="Filtrar leyes..."
+                placeholder="Filtrar normativa..."
                 value={filtroLeyes}
                 onChange={(e) => setFiltroLeyes(e.target.value)}
               />
@@ -513,9 +513,9 @@ export default function LexAi() {
                 <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--texto-3)', fontSize: '12px' }}>
                   <Icono n="libro" tam={26} />
                   <p style={{ margin: '8px 0 4px', fontWeight: 650, color: 'var(--texto-2)' }}>
-                    Sin leyes en el módulo
+                    Sin normativa en el módulo
                   </p>
-                  <span>Carga tus códigos o leyes en la sección "Leyes" para investigarlos aquí.</span>
+                  <span>Carga tus códigos o leyes en la sección "Normativa" para investigarlos aquí.</span>
                 </div>
               ) : leyesFiltradas.length === 0 ? (
                 <div style={{ padding: '16px', textAlign: 'center', color: 'var(--texto-3)', fontSize: '12px' }}>
@@ -921,7 +921,7 @@ export default function LexAi() {
                 </div>
 
                 <div className="lexai-prompt-toolbar-der">
-                  <span className="lexai-contador-fuentes" title="Leyes seleccionadas activas en memoria">
+                  <span className="lexai-contador-fuentes" title="Normativa seleccionada activa en memoria">
                     {leyesSeleccionadas.size} leyes activas
                   </span>
                 </div>
