@@ -162,18 +162,19 @@ export function parsearBloques(raw: string): BloqueLegal[] {
 
 /** Construye un Uint8Array .docx usando el GeneradorDocxFflate del sistema */
 export function construirDocx(generador: GeneradorDocx, texto: string): Uint8Array {
-  const limpio = limpiarParaPortapapeles(texto);
+  const limpio = limpiarEntidadesYHtml(texto)
+    .replace(/^#{3,6}\s+/gm, '## ')        // el editor solo tiene # y ##
+    .replace(/__([^_\n]+)__/g, '**$1**')    // __x__ → negrita del editor
+    .replace(/^\s*\*\s+/gm, '• ')           // viñeta "* " activaría cursiva en el editor
+    .replace(/^[*\-_]{3,}$/gm, '')          // separadores
+    .replace(/\n{2,}/g, '\n')               // el espaciado ya lo da espacioDespues
+    .trim();
   const fuente: FuenteModelo = {
     version: 1,
-    config: {
-      ...CONFIG_POR_DEFECTO,
-      tamano: 'carta',
-      fuente: 'Times New Roman',
-      tamanoPt: 12,
-      interlineado: 1.5,
-    },
+    config: { ...CONFIG_POR_DEFECTO, tamano: 'carta', fuente: 'Times New Roman', tamanoPt: 12, interlineado: 1.5 },
     texto: limpio,
     campos: [],
   };
   return generador.generar(fuente);
 }
+

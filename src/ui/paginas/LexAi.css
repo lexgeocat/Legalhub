@@ -1001,6 +1001,46 @@
   cursor: not-allowed;
 }
 
+.lexai-prompt-input-fila {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.lexai-prompt-input-fila .lexai-prompt-textarea {
+  flex: 1;
+}
+
+.lexai-prompt-botones {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.lexai-prompt-toolbar-der {
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.lexai-contador-fuentes {
+  font-weight: 600;
+}
+
+.lexai-select-ambito {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  color: var(--texto);
+  font-size: 11.5px;
+  padding: 3px 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+.lexai-select-ambito:focus {
+  border-color: var(--primario);
+}
+
 /* Modal de Configuración de IAs */
 .lexai-modal-tabs {
   display: grid;

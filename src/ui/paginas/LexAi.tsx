@@ -19,7 +19,7 @@ import {
   type ModoUsuario,
 } from '../../application/ai/proveedoresIa';
 import { crearProtector } from '../../application/ai/textoConsulta';
-import { Icono, Insignia, avisar } from '../_core/comunes';
+import { Icono, Insignia, avisar, confirmar } from '../_core/comunes';
 import { useCargar, useServicios } from '../_core/servicios';
 import { ModalConfiguracionIa } from '../lexai/ModalConfiguracionIa';
 import { ModalGuardarEnExpediente } from '../lexai/ModalGuardarEnExpediente';
@@ -215,7 +215,7 @@ export default function LexAi() {
   };
 
   // Enviar Prompt a Lex AI con Streaming y Protección de Datos
-  const handleEnviarPrompt = async (textoAEnviar?: string, modoContinuar = false) => {
+  const handleEnviarPrompt = async (textoAEnviar?: string, modoContinuar = false, esReintento = false) => {
     const promptCrudo = (textoAEnviar ?? promptInput).trim();
     if (!promptCrudo && !modoContinuar) return;
     if (generando) return;
@@ -227,7 +227,7 @@ export default function LexAi() {
     const protector = crearProtector(configIa.protegerDatos);
     const promptProtegido = protector.proteger(promptCrudo);
 
-    if (!modoContinuar) {
+    if (!modoContinuar && !esReintento) {
       const mensajeUsuario: MensajeChatLex = {
         id: `usr-${Date.now()}`,
         rol: 'usuario',
@@ -255,7 +255,7 @@ export default function LexAi() {
       const { articulos, leyesNombres } = await recopilarGroundingLeyes(
         s,
         leyesSeleccionadas,
-        promptProtegido,
+        promptCrudo,
         leyesDisponibles
       );
 
@@ -402,9 +402,10 @@ export default function LexAi() {
     }
   };
 
-  const limpiarConversacion = () => {
+  const limpiarConversacion = async () => {
     if (mensajes.length === 0) return;
-    if (window.confirm('¿Deseas iniciar una nueva consulta y limpiar el historial actual?')) {
+    const ok = await confirmar('¿Deseas iniciar una nueva consulta y limpiar el historial actual?', 'Reiniciar consulta');
+    if (ok) {
       setMensajes([]);
       sessionStorage.removeItem('lexai_chat_mensajes');
       avisar('Conversación reiniciada');
@@ -825,7 +826,10 @@ export default function LexAi() {
                               className="btn btn-sec btn-sm"
                               onClick={() => {
                                 const anteriorUsuario = mensajes.slice(0, idx).reverse().find((m) => m.rol === 'usuario');
-                                if (anteriorUsuario) void handleEnviarPrompt(anteriorUsuario.texto);
+                                if (anteriorUsuario) {
+                                  setMensajes((prev) => prev.filter((m) => m.id !== msg.id));
+                                  void handleEnviarPrompt(anteriorUsuario.texto, false, true);
+                                }
                               }}
                             >
                               🔄 Reintentar consulta
@@ -906,7 +910,7 @@ export default function LexAi() {
                   {busquedaWebActiva && (
                     <div className="lexai-selector-ambito-wrap">
                       <select
-                        className="lexai-selector-ambito"
+                        className="lexai-select-ambito"
                         value={ambitoSeleccionado}
                         onChange={(e) => setAmbitoSeleccionado(e.target.value as AmbitoJuridico)}
                         title="Jurisdicción de búsqueda web"
@@ -964,7 +968,7 @@ export default function LexAi() {
                   ) : (
                     <button
                       type="button"
-                      className="lexai-btn-enviar"
+                      className="lexai-btn-enviar-prompt"
                       onClick={() => void handleEnviarPrompt()}
                       disabled={!promptInput.trim()}
                       title="Enviar consulta (Enter)"

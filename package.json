@@ -21,7 +21,6 @@
     "decimal.js": "^10.6.0",
     "easy-template-x": "^8.0.0",
     "fflate": "^0.8.3",
-    "lucide-react": "^1.60.0",
     "n2words": "^6.3.0",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.1.0",
