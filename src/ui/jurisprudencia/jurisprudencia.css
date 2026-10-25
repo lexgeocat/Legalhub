@@ -1,0 +1,397 @@
+/* ===== Módulo de Jurisprudencia Legal-Hub ===== */
+
+.juris-filtros-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.juris-busqueda-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.juris-busqueda-input-group .buscar {
+  flex: 1;
+  font-size: 1rem;
+  padding: 10px 14px;
+}
+
+.juris-pills-fuente {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.juris-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--borde);
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.juris-pill-btn:hover {
+  background: var(--superficie-3);
+  border-color: var(--borde-fuerte);
+}
+
+.juris-pill-btn.activa {
+  background: var(--primario);
+  color: #ffffff;
+  border-color: var(--primario);
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
+}
+
+.juris-filtros-avanzados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--borde);
+}
+
+.juris-filtros-avanzados select,
+.juris-filtros-avanzados input {
+  width: 100%;
+}
+
+.juris-lista-resultados {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.juris-tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 18px;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.juris-tarjeta:hover {
+  border-color: var(--primario-borde);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.juris-tarjeta-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.juris-tarjeta-titulo {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--texto);
+  margin: 0;
+  cursor: pointer;
+}
+
+.juris-tarjeta-titulo:hover {
+  color: var(--primario);
+}
+
+.juris-tarjeta-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--texto-3);
+  flex-wrap: wrap;
+}
+
+.juris-tarjeta-extracto {
+  font-size: 0.92rem;
+  color: var(--texto-2);
+  line-height: 1.55;
+  background: var(--superficie-2);
+  padding: 10px 14px;
+  border-radius: var(--radio-sm);
+  border-left: 3px solid var(--primario);
+}
+
+.juris-tarjeta-extracto mark {
+  background-color: #fef08a;
+  color: #854d0e;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.juris-tarjeta-acciones {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+  flex-wrap: wrap;
+}
+
+.juris-paginacion {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding-bottom: 24px;
+}
+
+/* Detalle Modal */
+.detalle-jurisprudencia {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.juris-meta-box {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  padding: 14px;
+}
+
+.juris-grid-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--texto-2);
+}
+
+.juris-etiq {
+  color: var(--texto-3);
+  font-size: 0.8rem;
+  display: block;
+}
+
+.juris-lector-html {
+  font-family: 'Crimson Pro', 'Source Serif 4', 'Merriweather', Georgia, serif;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: var(--texto);
+  text-align: justify;
+  background: var(--superficie);
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.juris-lector-html p {
+  margin-bottom: 1rem;
+}
+
+.juris-lector-html strong,
+.juris-lector-html b {
+  font-weight: 700;
+}
+
+.juris-resumen-box {
+  background: var(--superficie-2);
+  padding: 14px;
+  border-radius: var(--radio-sm);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* ===== 4 Modalidades TSJ Génesis ===== */
+.juris-tsj-modalidades-nav {
+  display: flex;
+  gap: 6px;
+  background: var(--superficie-2);
+  padding: 4px;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  overflow-x: auto;
+}
+
+.juris-tsj-mod-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: calc(var(--radio) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.juris-tsj-mod-btn:hover {
+  color: var(--texto);
+  background: var(--superficie-3);
+}
+
+.juris-tsj-mod-btn.activo {
+  background: var(--superficie);
+  color: var(--primario);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.juris-tsj-mod-badge {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--superficie-3);
+  color: var(--texto-3);
+}
+
+.juris-tsj-mod-btn.activo .juris-tsj-mod-badge {
+  background: var(--primario-suave, #e0e7ff);
+  color: var(--primario);
+}
+
+/* Segmentador de Subcampos (Resolución, Expediente, Partes) */
+.juris-subcampos-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 0 4px;
+}
+
+.juris-subcampo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--borde);
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.juris-subcampo-btn:hover {
+  background: var(--superficie-3);
+  border-color: var(--borde-fuerte);
+}
+
+.juris-subcampo-btn.activo {
+  background: var(--primario);
+  color: #ffffff;
+  border-color: var(--primario);
+}
+
+/* Banner de ayuda / tip contextual */
+.juris-tip-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--superficie-2);
+  border-left: 3px solid var(--primario);
+  padding: 10px 14px;
+  border-radius: 0 var(--radio-sm) var(--radio-sm) 0;
+  font-size: 0.85rem;
+  color: var(--texto-2);
+}
+
+.juris-operadores-chips {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--texto-3);
+  margin-top: 4px;
+}
+
+.juris-chip-operador {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.78rem;
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--primario);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.juris-chip-operador:hover {
+  background: var(--superficie-3);
+}
+
+/* Grid Búsqueda Avanzada */
+.juris-grid-avanzada {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px;
+}
+
+.juris-campo-avanzado {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.juris-campo-avanzado label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--texto);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.juris-campo-avanzado span.sub {
+  font-size: 0.75rem;
+  font-weight: normal;
+  color: var(--texto-3);
+}
+
+.juris-campo-avanzado input {
+  font-size: 0.92rem;
+  padding: 8px 12px;
+}
+
+/* Grid Consulta por Gestión */
+.juris-grid-gestion {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px;
+}

@@ -34,6 +34,10 @@ import { LectorPdfPdfjs } from './pdf/lectorPdf';
 import type { GeneradorDocx, LectorDocx } from '../application/puertos/modelos';
 import { GuardarEscritoIa } from '../application/casosDeUso/guardarEscritoIa';
 import { Procedimientos } from '../application/casosDeUso/procedimientos';
+import { JurisprudenciaCasosDeUso } from '../application/casosDeUso/jurisprudencia';
+import { ClienteTsj } from './jurisprudencia/clienteTsj';
+import { ClienteTcp } from './jurisprudencia/clienteTcp';
+import { RepositorioJurisprudenciaSqlite } from './jurisprudencia/repositorioJurisprudenciaSqlite';
 
 
 export interface Servicios {
@@ -73,6 +77,7 @@ export interface Servicios {
     eliminarModelo: EliminarModelo;
     leyes: Leyes;
     procedimientos: Procedimientos;
+    jurisprudencia: JurisprudenciaCasosDeUso;
 }
 
 export async function crearServicios(): Promise<Servicios> {
@@ -90,6 +95,10 @@ export async function crearServicios(): Promise<Servicios> {
     const contexto = new ConstructorContextoDb(db, config);
     const incrustador = new IncrustadorFuentesDocx(new CargadorFuentesWeb());
     const importarModelo = new ImportarModelo({ db, archivos, motor, formato, modelos, generador });
+    const repoJuris = new RepositorioJurisprudenciaSqlite(db, archivos);
+    const clienteTsj = new ClienteTsj();
+    const clienteTcp = new ClienteTcp();
+    const jurisprudencia = new JurisprudenciaCasosDeUso({ clienteTsj, clienteTcp, repositorio: repoJuris });
 
     return {
         raiz, db, archivos, config, contexto, lector, generador,
@@ -122,5 +131,6 @@ export async function crearServicios(): Promise<Servicios> {
         leyes: new Leyes({ db, archivos, lector: new LectorPdfPdfjs() }),
         procedimientos: new Procedimientos(db),
         guardarEscritoIa: new GuardarEscritoIa({ db, archivos, motor }),
+        jurisprudencia,
     };
 }

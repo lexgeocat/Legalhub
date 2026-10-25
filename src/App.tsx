@@ -11,11 +11,12 @@ import { useCargar, useServicios } from './ui/_core/servicios';
 import { Personas } from './ui/paginas/Personas';
 import { Leyes } from './ui/paginas/Leyes';
 import { Procedimientos } from './ui/paginas/Procedimientos';
+import { Jurisprudencia } from './ui/paginas/Jurisprudencia';
 
 import { useTema } from './ui/_core/tema';
 import LexAi from './ui/paginas/LexAi';
 
-type Item = 'expedientes' | 'lex-ai' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'config';
+type Item = 'expedientes' | 'lex-ai' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'jurisprudencia' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
 
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
@@ -25,6 +26,7 @@ const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
   { id: 'procedimientos', etiqueta: 'Procedimientos', icono: 'flujo' },
   { id: 'leyes', etiqueta: 'Normativa', icono: 'libro' },
+  { id: 'jurisprudencia', etiqueta: 'Jurisprudencia', icono: 'tribunal' },
   { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
 ];
 
@@ -285,6 +287,7 @@ export default function App() {
         {vista.n === 'modelos' && <Modelos />}
         {vista.n === 'procedimientos' && <Procedimientos />}
         {vista.n === 'leyes' && <Leyes />}
+        {vista.n === 'jurisprudencia' && <Jurisprudencia />}
         {vista.n === 'config' && <Configuracion />}
       </main>
 

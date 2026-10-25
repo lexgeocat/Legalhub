@@ -23,5 +23,16 @@ export default defineConfig(() => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+    proxy: {
+      '/api-tsj': {
+        target: 'https://apigenesis.tsj.bo',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-tsj/, ''),
+        headers: {
+          Origin: 'https://genesis.tsj.bo',
+          Referer: 'https://genesis.tsj.bo/',
+        },
+      },
+    },
   },
 }));
