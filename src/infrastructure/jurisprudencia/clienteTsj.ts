@@ -52,6 +52,7 @@ interface TsjSearchResponse {
 
 interface TsjDetailResponse {
   success: boolean;
+  message?: string;
   data: {
     id: number | string;
     nro_resolucion: string;
@@ -103,15 +104,14 @@ export class ClienteTsj implements IClienteTsj {
       });
       if (res.ok) {
         const json = await res.json();
-        if (Array.isArray(json.data) && json.data.length > 0) {
+        if (json.success !== false && Array.isArray(json.data) && json.data.length > 0) {
           this.salasCache = json.data;
           return json.data;
         }
       }
     } catch {
-      // Si falla la red, usar catálogo de respaldo oficial
+      // Si falla la red, usar catálogo de respaldo temporal sin guardar en salasCache (Q17)
     }
-    this.salasCache = SALAS_FALLBACK;
     return SALAS_FALLBACK;
   }
 
@@ -128,7 +128,7 @@ export class ClienteTsj implements IClienteTsj {
       const res = await fetchHttp(url, { method: 'GET', headers: HEADERS });
       if (res.ok) {
         const json = await res.json();
-        if (Array.isArray(json.data) && json.data.length > 0) {
+        if (json.success !== false && Array.isArray(json.data) && json.data.length > 0) {
           this.tiposResCache.set(clave, json.data);
           return json.data;
         }
@@ -142,7 +142,6 @@ export class ClienteTsj implements IClienteTsj {
       { id: 2, nombre: 'Sentencia' },
       { id: 3, nombre: 'Resolución' },
     ];
-    this.tiposResCache.set(clave, fallback);
     return fallback;
   }
 
@@ -171,7 +170,6 @@ export class ClienteTsj implements IClienteTsj {
           paginate: { page, limit },
         };
       } else {
-        // N° de resolución: ej '0554/2026-FF' o 'AS/0554/2026-FF'
         endpointUrl = `${BASE_URL}/resoluciones/busqueda_por_nro_resolucion`;
         payload = {
           nroResolucion: (filtro.nroResolucion || filtro.texto).trim(),
@@ -192,7 +190,6 @@ export class ClienteTsj implements IClienteTsj {
       };
     } else if (modalidad === 'avanzada') {
       endpointUrl = `${BASE_URL}/resoluciones/busqueda_avanzada`;
-      // TSJ Génesis valida que solo uno de los tres campos principales tenga valor
       let todas: string | null = null;
       let exacta: string | null = null;
       let cualquiera: string | null = null;
@@ -222,7 +219,6 @@ export class ClienteTsj implements IClienteTsj {
         paginate: { page, limit },
       };
     } else {
-      // Modalidad 'simple'
       endpointUrl = `${BASE_URL}/resoluciones/busqueda_simple`;
       payload = {
         searchText: filtro.texto.trim(),
@@ -247,8 +243,13 @@ export class ClienteTsj implements IClienteTsj {
     }
 
     const json: TsjSearchResponse = await res.json();
+    if (json.success === false) {
+      throw new Error(json.message || 'Error en la respuesta del TSJ');
+    }
+
     const items: ResolucionJurisprudencia[] = (json.data?.data ?? []).map((item) => ({
       id: String(item.id),
+      idRemoto: String(item.id),
       origen: 'TSJ',
       tipoResolucion: item.tipo_resolucion || 'Auto Supremo',
       numeroResolucion: item.nro_resolucion,
@@ -280,10 +281,15 @@ export class ClienteTsj implements IClienteTsj {
     }
 
     const json: TsjDetailResponse = await res.json();
+    if (json.success === false) {
+      throw new Error(json.message || 'No se pudo obtener el detalle de la resolución');
+    }
+
     const d = json.data;
 
     return {
       id: String(d.id),
+      idRemoto: String(d.id),
       origen: 'TSJ',
       tipoResolucion: d.tipo_resolucion || 'Auto Supremo',
       subtipoResolucion: d.subtipo_resolucion,
@@ -310,19 +316,10 @@ export class ClienteTsj implements IClienteTsj {
       throw new Error(`No se pudo descargar el PDF de la resolución TSJ (${res.status})`);
     }
 
-    const dispo = res.headers.get('content-disposition');
-    let nombreArchivo = `AS_${id}.pdf`;
-    if (dispo) {
-      const match = dispo.match(/filename=["']?([^"']+)["']?/);
-      if (match && match[1]) {
-        nombreArchivo = match[1];
-      }
-    }
-
     const arrayBuf = await res.arrayBuffer();
     return {
       buffer: new Uint8Array(arrayBuf),
-      nombreArchivo,
+      nombreArchivo: `TSJ_${id}.pdf`,
     };
   }
 }

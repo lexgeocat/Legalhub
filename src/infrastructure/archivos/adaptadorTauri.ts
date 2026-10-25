@@ -25,7 +25,8 @@ export class ArchivosTauri implements ArchivosPuerto {
     rutaJurisprudencia(nombreArchivo: string): Promise<string> {
         return join(this.raiz, 'Jurisprudencia', nombreArchivo);
     }
-    escribir(ruta: string, contenido: Uint8Array): Promise<void> {
+    async escribir(ruta: string, contenido: Uint8Array): Promise<void> {
+        await mkdir(await dirname(ruta), { recursive: true });
         return writeFile(ruta, contenido);
     }
     leer(ruta: string): Promise<Uint8Array> {

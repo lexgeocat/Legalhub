@@ -26,8 +26,10 @@ export interface IRepositorioJurisprudencia {
   eliminar(id: string): Promise<void>;
   buscarLocal(filtro: FiltroBusquedaJurisprudencia): Promise<ResultadoPaginadoJurisprudencia>;
   obtenerPorId(id: string): Promise<ResolucionJurisprudencia | null>;
+  obtenerPorNumeroYOrigen(numeroResolucion: string, origen: OrigenJurisprudencia): Promise<ResolucionJurisprudencia | null>;
   vincularAExpediente(jurisprudenciaId: string, expedienteId: string, notas?: string): Promise<void>;
   desvincularDeExpediente(jurisprudenciaId: string, expedienteId: string): Promise<void>;
   listarPorExpediente(expedienteId: string): Promise<ResolucionJurisprudencia[]>;
   esGuardada(numeroResolucion: string, origen: OrigenJurisprudencia): Promise<boolean>;
+  obtenerMapaGuardadas(items: { numero: string; origen: OrigenJurisprudencia }[]): Promise<Map<string, string>>;
 }

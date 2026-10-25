@@ -3,6 +3,7 @@ import type {
   ResolucionJurisprudencia,
   ResultadoPaginadoJurisprudencia,
 } from '../../domain/jurisprudencia/jurisprudencia';
+import { formatearFechaIsoBolivia } from '../../domain/jurisprudencia/jurisprudencia';
 import type { IClienteTcp } from '../../application/puertos/jurisprudencia';
 import { fetchHttp } from './httpHelper';
 
@@ -30,19 +31,9 @@ function ordenarClavesObjeto(obj: unknown): unknown {
     }, {} as Record<string, unknown>);
 }
 
-async function firmarPeticionTcp(metodo: string, cuerpo?: unknown): Promise<{ timestamp: string; hash: string }> {
+async function firmarPeticionTcp(metodo: string, cuerpoSerializado?: string): Promise<{ timestamp: string; hash: string }> {
   const timestamp = Date.now().toString();
-  let strCuerpo = '';
-
-  if (cuerpo) {
-    if (metodo.toUpperCase() === 'GET') {
-      const rec = cuerpo as Record<string, string>;
-      strCuerpo = Object.keys(rec).sort().map(k => `${k}=${rec[k]}`).join('&');
-    } else {
-      strCuerpo = typeof cuerpo === 'string' ? cuerpo : JSON.stringify(ordenarClavesObjeto(cuerpo));
-    }
-  }
-
+  const strCuerpo = cuerpoSerializado ?? '';
   const cadenaFirma = `${metodo.toUpperCase()}|${strCuerpo}|${timestamp}`;
   const encoder = new TextEncoder();
   const claveBin = encoder.encode(SECRET_KEY);
@@ -63,66 +54,87 @@ async function firmarPeticionTcp(metodo: string, cuerpo?: unknown): Promise<{ ti
   return { timestamp, hash };
 }
 
+interface CacheEntrada {
+  items: TcpItem[];
+  expira: number;
+}
+
 export class ClienteTcp implements IClienteTcp {
+  private cache = new Map<string, CacheEntrada>();
+
   async buscar(filtro: FiltroBusquedaJurisprudencia): Promise<ResultadoPaginadoJurisprudencia> {
-    const url = `${BASE_URL}/buscador-jurisprudencia/buscarResolucionJurisprudencia`;
-    const payload = {
-      texto: filtro.texto,
-      tipoBusqueda: 'todos',
-      seccionId: 0,
-    };
+    const texto = filtro.texto.trim();
+    const cacheKey = `${texto.toLowerCase()}`;
+    const ahora = Date.now();
 
-    const { timestamp, hash } = await firmarPeticionTcp('POST', payload);
+    let itemsRaw: TcpItem[];
 
-    const res = await fetchHttp(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Client-ID': 'angular-app',
-        'X-Timestamp': timestamp,
-        'X-Hash': hash,
-      },
-      body: JSON.stringify(payload),
-    });
+    // Caché de 5 minutos para búsquedas idénticas evitando red repetida (Q13)
+    const enCache = this.cache.get(cacheKey);
+    if (enCache && enCache.expira > ahora) {
+      itemsRaw = enCache.items;
+    } else {
+      const url = `${BASE_URL}/buscador-jurisprudencia/buscarResolucionJurisprudencia`;
+      const payload = {
+        seccionId: 0,
+        texto,
+        tipoBusqueda: 'todos',
+      };
 
-    if (!res.ok) {
-      throw new Error(`Error en el buscador del TCP (${res.status}): ${res.statusText}`);
-    }
+      // Enviar exactamente la misma cadena serializada y ordenada que se firma (Q14)
+      const cuerpoSerializado = JSON.stringify(ordenarClavesObjeto(payload));
+      const { timestamp, hash } = await firmarPeticionTcp('POST', cuerpoSerializado);
 
-    const itemsRaw: TcpItem[] = await res.json();
-    if (!Array.isArray(itemsRaw)) {
-      return { items: [], total: 0, pagina: 1, totalPaginas: 0 };
-    }
+      const res = await fetchHttp(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-ID': 'angular-app',
+          'X-Timestamp': timestamp,
+          'X-Hash': hash,
+        },
+        body: cuerpoSerializado,
+      });
 
-    const total = itemsRaw.length;
-    const page = filtro.pagina ?? 1;
-    const limit = filtro.limite ?? 20;
-    const inicio = (page - 1) * limit;
-    const paginaItems = itemsRaw.slice(inicio, inicio + limit);
-
-    const items: ResolucionJurisprudencia[] = paginaItems.map((item) => {
-      let fechaFormateada = item.fecha;
-      try {
-        if (item.fecha) {
-          const d = new Date(item.fecha);
-          fechaFormateada = d.toLocaleDateString('es-BO', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          });
-        }
-      } catch {
-        // mantener fecha original si falla el formateo
+      if (!res.ok) {
+        throw new Error(`Error en el buscador del TCP (${res.status}): ${res.statusText}`);
       }
 
+      const resJson = await res.json();
+      itemsRaw = Array.isArray(resJson) ? resJson : [];
+      this.cache.set(cacheKey, { items: itemsRaw, expira: ahora + 5 * 60 * 1000 });
+    }
+
+    // Filtrar localmente por gestión (año) o materia si se especificaron
+    let filtrados = itemsRaw;
+    if (filtro.gestion) {
+      const g = filtro.gestion.trim();
+      filtrados = filtrados.filter((it) => it.fecha?.startsWith(g) || it.resolucion?.includes(g));
+    }
+    if (filtro.materia) {
+      const m = filtro.materia.toLowerCase();
+      filtrados = filtrados.filter(
+        (it) => it.tipoResolucion?.toLowerCase().includes(m) || it.referencia?.toLowerCase().includes(m)
+      );
+    }
+
+    const total = filtrados.length;
+    const page = filtro.pagina ?? 1;
+    const limit = filtro.limite ?? 15;
+    const inicio = (page - 1) * limit;
+    const paginaItems = filtrados.slice(inicio, inicio + limit);
+
+    const items: ResolucionJurisprudencia[] = paginaItems.map((item) => {
+      const tipoReal = item.tipoResolucion?.trim() || 'Sentencia Constitucional Plurinacional';
       return {
         id: String(item.resolucionId),
+        idRemoto: String(item.resolucionId),
         origen: 'TCP',
-        tipoResolucion: item.tipoResolucion ? `Sentencia Constitucional Plurinacional` : 'Sentencia Constitucional',
+        tipoResolucion: tipoReal,
         subtipoResolucion: item.tipoResolucion,
         numeroResolucion: item.resolucion,
         numeroExpediente: item.numeroExpediente,
-        fechaEmision: fechaFormateada,
+        fechaEmision: formatearFechaIsoBolivia(item.fecha),
         resumen: item.referencia,
       };
     });
@@ -181,7 +193,7 @@ export class ClienteTcp implements IClienteTcp {
     const buffer = new Uint8Array(json.PDF.data);
     return {
       buffer,
-      nombreArchivo: `SCP_${resolucionId}.pdf`,
+      nombreArchivo: `TCP_${resolucionId}.pdf`,
     };
   }
 }

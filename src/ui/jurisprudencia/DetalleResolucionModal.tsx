@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ResolucionJurisprudencia } from '../../domain/jurisprudencia/jurisprudencia';
-import { formatearCitaJurisprudencial } from '../../domain/jurisprudencia/jurisprudencia';
+import {
+  formatearCitaJurisprudencial,
+  sanearContenidoHtml,
+  sanearTextoExtracto,
+} from '../../domain/jurisprudencia/jurisprudencia';
 import { Aviso, Icono, Insignia, Modal, avisar } from '../_core/comunes';
 import { mensajeError, useServicios } from '../_core/servicios';
 
@@ -45,12 +49,12 @@ export function DetalleResolucionModal({ resolucion, cerrar, alCambiarGuardado, 
     setGuardando(true);
     try {
       if (detalle.guardadaLocal) {
-        await s.jurisprudencia.eliminarDeBiblioteca(detalle.id);
-        setDetalle((prev) => ({ ...prev, guardadaLocal: false }));
+        await s.jurisprudencia.eliminarDeBiblioteca(detalle);
+        setDetalle((prev) => ({ ...prev, guardadaLocal: false, idLocal: undefined }));
         avisar('Eliminada de tu biblioteca local');
       } else {
-        const idLocal = await s.jurisprudencia.guardarEnBiblioteca(detalle);
-        setDetalle((prev) => ({ ...prev, id: idLocal, guardadaLocal: true }));
+        const guardada = await s.jurisprudencia.guardarEnBiblioteca(detalle);
+        setDetalle(guardada);
         avisar('Guardada en tu biblioteca local (disponible sin conexión)');
       }
       alCambiarGuardado?.();
@@ -74,12 +78,18 @@ export function DetalleResolucionModal({ resolucion, cerrar, alCambiarGuardado, 
   async function descargarPdf() {
     setDescargandoPdf(true);
     try {
+      // Si ya tiene ruta local guardada en disco, abrirla directamente (F2)
+      if (detalle.rutaPdf) {
+        await s.archivos.abrir(detalle.rutaPdf);
+        avisar('Abriendo PDF oficial guardado en disco');
+        return;
+      }
+
       const { buffer, nombreArchivo } = await s.jurisprudencia.descargarPdf(detalle);
-      // Guardar en la carpeta de Jurisprudencia de la app
       const ruta = await s.archivos.rutaJurisprudencia(nombreArchivo);
       await s.archivos.escribir(ruta, buffer);
+      setDetalle((prev) => ({ ...prev, rutaPdf: ruta }));
       avisar(`PDF guardado en disco: ${nombreArchivo}`);
-      // Abrir en el lector predeterminado del sistema
       await s.archivos.abrir(ruta);
     } catch (err) {
       avisar(`No se pudo descargar el PDF: ${mensajeError(err)}`);
@@ -122,7 +132,8 @@ export function DetalleResolucionModal({ resolucion, cerrar, alCambiarGuardado, 
               onClick={descargarPdf}
               disabled={descargandoPdf}
             >
-              <Icono n="documento" tam={15} /> {descargandoPdf ? 'Descargando...' : 'Descargar PDF'}
+              <Icono n="documento" tam={15} />{' '}
+              {descargandoPdf ? 'Descargando...' : detalle.rutaPdf ? 'Abrir PDF' : 'Descargar PDF'}
             </button>
             <button
               type="button"
@@ -142,7 +153,7 @@ export function DetalleResolucionModal({ resolucion, cerrar, alCambiarGuardado, 
         <div className="juris-meta-box">
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
             <Insignia tono={detalle.origen === 'TSJ' ? 'ambar' : 'azul'}>
-              {detalle.origen === 'TSJ' ? 'Tribunal Supremo (TSJ)' : 'Tribunal Constitucional (TCP)'}
+              {detalle.origen === 'TSJ' ? 'TSJ' : 'TCP'} · {detalle.tipoResolucion}
             </Insignia>
             {detalle.sala && <Insignia tono="gris">{detalle.sala}</Insignia>}
             {detalle.fechaEmision && <Insignia tono="gris">{detalle.fechaEmision}</Insignia>}
@@ -186,24 +197,24 @@ export function DetalleResolucionModal({ resolucion, cerrar, alCambiarGuardado, 
         {error && <Aviso error={error} />}
 
         {cargando ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-texto-apagado)' }}>
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--texto-3)' }}>
             <p>Cargando texto completo de la resolución...</p>
           </div>
         ) : detalle.contenidoHtml ? (
           <div
             className="juris-lector-html"
-            dangerouslySetInnerHTML={{ __html: detalle.contenidoHtml }}
+            dangerouslySetInnerHTML={{ __html: sanearContenidoHtml(detalle.contenidoHtml) }}
           />
         ) : detalle.resumen ? (
           <div style={{ marginTop: '16px' }}>
             <h4 style={{ marginBottom: '8px' }}>Extracto Jurisprudencial:</h4>
             <div
               className="juris-resumen-box"
-              dangerouslySetInnerHTML={{ __html: detalle.resumen }}
+              dangerouslySetInnerHTML={{ __html: sanearTextoExtracto(detalle.resumen) }}
             />
           </div>
         ) : (
-          <p style={{ marginTop: '20px', color: 'var(--color-texto-apagado)' }}>
+          <p style={{ marginTop: '20px', color: 'var(--texto-3)' }}>
             No se encontró contenido de texto para esta resolución. Puedes descargar el PDF oficial con el botón inferior.
           </p>
         )}

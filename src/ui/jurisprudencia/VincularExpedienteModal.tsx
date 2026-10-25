@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import type { ResolucionJurisprudencia } from '../../domain/jurisprudencia/jurisprudencia';
 import { Campo, Icono, Modal, avisar } from '../_core/comunes';
-import { useCargar, useServicios } from '../_core/servicios';
+import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 interface Props {
   resolucion: ResolucionJurisprudencia;
   cerrar: () => void;
+  alVincular?: () => void;
 }
 
-export function VincularExpedienteModal({ resolucion, cerrar }: Props) {
+export function VincularExpedienteModal({ resolucion, cerrar, alVincular }: Props) {
   const s = useServicios();
   const lista = useCargar(() => s.consultas.listarExpedientes(), []);
   const [expedienteId, setExpedienteId] = useState('');
@@ -19,21 +20,17 @@ export function VincularExpedienteModal({ resolucion, cerrar }: Props) {
 
   async function vincular() {
     if (!expedienteId) {
-      avisar('Por favor selecciona un expediente');
+      avisar('Por favor selecciona un expediente', 'error');
       return;
     }
     setGuardando(true);
     try {
-      // Si la resolución aún no está guardada en la base de datos local, la guardamos primero
-      let idLocal = resolucion.id;
-      if (!resolucion.guardadaLocal) {
-        idLocal = await s.jurisprudencia.guardarEnBiblioteca(resolucion);
-      }
-      await s.jurisprudencia.vincularAExpediente(idLocal, expedienteId, notas.trim() || undefined);
+      await s.jurisprudencia.vincularAExpediente(resolucion, expedienteId, notas.trim() || undefined);
       avisar('Jurisprudencia vinculada exitosamente al expediente');
+      alVincular?.();
       cerrar();
-    } catch {
-      avisar('No se pudo vincular la resolución al expediente');
+    } catch (err) {
+      avisar(`No se pudo vincular la resolución al expediente: ${mensajeError(err)}`, 'error');
     } finally {
       setGuardando(false);
     }
@@ -56,7 +53,7 @@ export function VincularExpedienteModal({ resolucion, cerrar }: Props) {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <p style={{ margin: 0, color: 'var(--color-texto-apagado)', fontSize: '0.9rem' }}>
+        <p style={{ margin: 0, color: 'var(--texto-3)', fontSize: '0.9rem' }}>
           Asocia este precedente judicial a un caso activo de tu despacho para consultarlo o citarlo fácilmente desde el expediente.
         </p>
 

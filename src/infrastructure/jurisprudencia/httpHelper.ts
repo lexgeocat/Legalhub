@@ -3,10 +3,10 @@ import { fetch as fetchTauri } from '@tauri-apps/plugin-http';
 const EN_TAURI = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const EN_NAVEGADOR = typeof window !== 'undefined';
 
-export async function fetchHttp(url: string, init?: RequestInit): Promise<Response> {
+export async function fetchHttp(url: string, init?: RequestInit, timeoutMs = 25000): Promise<Response> {
   const headers = new Headers(init?.headers);
 
-  // El servidor de TSJ Génesis valida que la petición provenga del dominio oficial https://genesis.tsj.bo
+  // Inyectar cabeceras requeridas para TSJ Génesis
   if (url.includes('apigenesis.tsj.bo')) {
     headers.set('Origin', 'https://genesis.tsj.bo');
     headers.set('Referer', 'https://genesis.tsj.bo/');
@@ -16,27 +16,27 @@ export async function fetchHttp(url: string, init?: RequestInit): Promise<Respon
     );
   }
 
+  // Controlador de timeout para evitar peticiones colgadas indefinidas (Q11)
+  const signal = init?.signal ?? (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+    ? AbortSignal.timeout(timeoutMs)
+    : undefined);
+
   const opciones: RequestInit = {
     ...init,
     headers,
+    signal,
   };
 
-  // En Tauri usamos el cliente de red nativo (Rust reqwest) que no está atado a las restricciones CORS del navegador
+  // En Tauri usamos el cliente Rust nativo (reqwest) con unsafe-headers
   if (EN_TAURI) {
     try {
-      const respuesta = await fetchTauri(url, opciones);
-      // Si por alguna razón la petición en Tauri devolviese 403 de origen, intentamos por proxy local si está disponible
-      if (respuesta.status === 403 && url.includes('apigenesis.tsj.bo')) {
-        const proxyUrl = url.replace('https://apigenesis.tsj.bo', '/api-tsj');
-        return await fetch(proxyUrl, opciones);
-      }
-      return respuesta;
-    } catch {
-      // Fallback a fetch si ocurre error IPC
+      return await fetchTauri(url, opciones);
+    } catch (err) {
+      throw new Error(`Error de conexión con el servidor judicial: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  // En modo desarrollo en navegador web (Vite), usamos el proxy para saltar CORS del navegador
+  // En modo desarrollo en navegador web Vite (sin Tauri), usar proxy dev para evitar CORS
   if (EN_NAVEGADOR && url.includes('apigenesis.tsj.bo')) {
     const proxyUrl = url.replace('https://apigenesis.tsj.bo', '/api-tsj');
     return await fetch(proxyUrl, opciones);

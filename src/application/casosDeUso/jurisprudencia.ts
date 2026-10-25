@@ -5,6 +5,11 @@ import type {
   SalaTsjCatalogo,
   TipoResolucionTsjCatalogo,
 } from '../../domain/jurisprudencia/jurisprudencia';
+import {
+  esPdfValido,
+  generarNombreArchivoPdf,
+  mezclarDetalle,
+} from '../../domain/jurisprudencia/jurisprudencia';
 import type {
   IClienteTcp,
   IClienteTsj,
@@ -29,15 +34,15 @@ export class JurisprudenciaCasosDeUso {
   }
 
   private tieneCriterioBusqueda(filtro: FiltroBusquedaJurisprudencia): boolean {
-    if (filtro.texto && filtro.texto.trim()) return true;
     if (filtro.origen === 'TSJ') {
-      if (filtro.modalidadTsj === 'campos') {
+      const mod = filtro.modalidadTsj ?? 'simple';
+      if (mod === 'campos') {
         return !!(filtro.nroResolucion?.trim() || filtro.nroExpediente?.trim() || filtro.partes?.trim());
       }
-      if (filtro.modalidadTsj === 'gestion') {
-        return !!(filtro.idSalaTsj && filtro.gestion);
+      if (mod === 'gestion') {
+        return !!filtro.idSalaTsj;
       }
-      if (filtro.modalidadTsj === 'avanzada') {
+      if (mod === 'avanzada') {
         return !!(
           filtro.palabrasTodas?.trim() ||
           filtro.fraseExacta?.trim() ||
@@ -45,8 +50,9 @@ export class JurisprudenciaCasosDeUso {
           filtro.palabrasExcluir?.trim()
         );
       }
+      return !!filtro.texto?.trim();
     }
-    return false;
+    return !!filtro.texto?.trim();
   }
 
   /**
@@ -112,37 +118,54 @@ export class JurisprudenciaCasosDeUso {
       return resolucion;
     }
 
+    // Si ya está guardada localmente, buscar en SQLite primero (F2)
+    if (resolucion.guardadaLocal || resolucion.idLocal) {
+      const local = resolucion.idLocal
+        ? await this.repo.obtenerPorId(resolucion.idLocal)
+        : await this.repo.obtenerPorNumeroYOrigen(resolucion.numeroResolucion, resolucion.origen);
+      if (local && local.contenidoHtml) {
+        return mezclarDetalle(resolucion, local);
+      }
+    }
+
+    const idRemoto = resolucion.idRemoto ?? resolucion.id;
+
     if (resolucion.origen === 'TSJ') {
-      const detalle = await this.tsj.obtenerDetalle(resolucion.id);
-      return {
-        ...resolucion,
-        ...detalle,
-        guardadaLocal: resolucion.guardadaLocal,
-      };
+      const detalle = await this.tsj.obtenerDetalle(idRemoto);
+      return mezclarDetalle(resolucion, detalle);
     }
 
     if (resolucion.origen === 'TCP') {
-      const html = await this.tcp.obtenerDocumentoHtml(resolucion.id);
-      return {
-        ...resolucion,
-        contenidoHtml: html,
-      };
+      const html = await this.tcp.obtenerDocumentoHtml(idRemoto);
+      return mezclarDetalle(resolucion, { contenidoHtml: html });
     }
 
     return resolucion;
   }
 
-  /** Descarga el binario PDF desde la fuente original */
+  /** Descarga el binario PDF desde la fuente original validando integridad (%PDF) (D14) */
   async descargarPdf(resolucion: ResolucionJurisprudencia): Promise<{ buffer: Uint8Array; nombreArchivo: string }> {
+    const idRemoto = resolucion.idRemoto ?? resolucion.id;
+    let res: { buffer: Uint8Array; nombreArchivo: string };
+
     if (resolucion.origen === 'TSJ') {
-      return this.tsj.descargarPdf(resolucion.id);
+      res = await this.tsj.descargarPdf(idRemoto);
+    } else {
+      res = await this.tcp.descargarPdf(idRemoto);
     }
-    return this.tcp.descargarPdf(resolucion.id);
+
+    if (!esPdfValido(res.buffer)) {
+      throw new Error('El archivo devuelto por el servidor no tiene una cabecera PDF válida');
+    }
+
+    return {
+      buffer: res.buffer,
+      nombreArchivo: generarNombreArchivoPdf(resolucion.origen, resolucion.numeroResolucion),
+    };
   }
 
   /** Guarda la resolución en la biblioteca local y descarga su PDF si está disponible */
-  async guardarEnBiblioteca(resolucion: ResolucionJurisprudencia): Promise<string> {
-    // Asegurar que tenemos el contenido completo
+  async guardarEnBiblioteca(resolucion: ResolucionJurisprudencia): Promise<ResolucionJurisprudencia> {
     const completa = await this.obtenerDetalle(resolucion);
 
     let pdfBuffer: Uint8Array | undefined;
@@ -153,18 +176,54 @@ export class JurisprudenciaCasosDeUso {
       // Si la descarga del PDF falla o no tiene PDF escaneado, se guarda con su HTML
     }
 
-    const id = await this.repo.guardar(completa, pdfBuffer);
-    return id;
+    const idLocal = await this.repo.guardar(completa, pdfBuffer);
+    completa.idLocal = idLocal;
+    completa.guardadaLocal = true;
+    return completa;
   }
 
-  /** Elimina una resolución de la biblioteca local */
-  async eliminarDeBiblioteca(id: string): Promise<void> {
-    return this.repo.eliminar(id);
+  /** Elimina una resolución de la biblioteca local admitiendo idLocal o resolución remota (D1) */
+  async eliminarDeBiblioteca(resolucionOId: ResolucionJurisprudencia | string): Promise<void> {
+    if (typeof resolucionOId === 'string') {
+      await this.repo.eliminar(resolucionOId);
+      return;
+    }
+
+    if (resolucionOId.idLocal) {
+      await this.repo.eliminar(resolucionOId.idLocal);
+      resolucionOId.guardadaLocal = false;
+      resolucionOId.idLocal = undefined;
+      return;
+    }
+
+    const existente = await this.repo.obtenerPorNumeroYOrigen(
+      resolucionOId.numeroResolucion,
+      resolucionOId.origen
+    );
+    if (existente?.id) {
+      await this.repo.eliminar(existente.id);
+      resolucionOId.guardadaLocal = false;
+      resolucionOId.idLocal = undefined;
+    }
   }
 
-  /** Vincula una jurisprudencia guardada a un expediente del despacho */
-  async vincularAExpediente(jurisprudenciaId: string, expedienteId: string, notas?: string): Promise<void> {
-    return this.repo.vincularAExpediente(jurisprudenciaId, expedienteId, notas);
+  /** Vincula una jurisprudencia a un expediente asegurando persistencia previa (D3) */
+  async vincularAExpediente(resolucionOId: ResolucionJurisprudencia | string, expedienteId: string, notas?: string): Promise<void> {
+    let idLocal: string | undefined;
+    if (typeof resolucionOId === 'string') {
+      idLocal = resolucionOId;
+    } else {
+      if (!resolucionOId.idLocal || !resolucionOId.guardadaLocal) {
+        const guardada = await this.guardarEnBiblioteca(resolucionOId);
+        idLocal = guardada.idLocal;
+      } else {
+        idLocal = resolucionOId.idLocal;
+      }
+    }
+    if (!idLocal) {
+      throw new Error('No se pudo determinar el identificador local de la resolución para vincularla al expediente');
+    }
+    await this.repo.vincularAExpediente(idLocal, expedienteId, notas);
   }
 
   /** Desvincula una jurisprudencia de un expediente */
@@ -188,10 +247,19 @@ export class JurisprudenciaCasosDeUso {
   }
 
   private async marcarGuardadas(items: ResolucionJurisprudencia[]): Promise<void> {
-    await Promise.all(
-      items.map(async (item) => {
-        item.guardadaLocal = await this.repo.esGuardada(item.numeroResolucion, item.origen);
-      })
+    if (items.length === 0) return;
+    const mapa = await this.repo.obtenerMapaGuardadas(
+      items.map((it) => ({ numero: it.numeroResolucion, origen: it.origen }))
     );
+    for (const item of items) {
+      const clave = `${item.origen}:${item.numeroResolucion}`;
+      const idLocal = mapa.get(clave);
+      if (idLocal) {
+        item.guardadaLocal = true;
+        item.idLocal = idLocal;
+      } else {
+        item.guardadaLocal = false;
+      }
+    }
   }
 }

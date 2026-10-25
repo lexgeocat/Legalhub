@@ -1,4 +1,4 @@
-﻿import { open } from '@tauri-apps/plugin-dialog';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { fichaDeModelo, seccionesDeModelo, type FichaModelo } from '../../application/camposModelo';
 import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
@@ -16,8 +16,11 @@ import { Hoja } from '../editor/Hoja';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { esMateriaRecomendada } from '../../domain/modelos/fuenteModelo';
 import { contextoDeFuente } from '../../domain/modelos/marcadores';
+import type { ResolucionJurisprudencia } from '../../domain/jurisprudencia/jurisprudencia';
+import { formatearCitaJurisprudencial } from '../../domain/jurisprudencia/jurisprudencia';
+import { DetalleResolucionModal } from '../jurisprudencia/DetalleResolucionModal';
 
-type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos';
+type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos' | 'jurisprudencia';
 
 const sinValor = (v: string | undefined) => !v || v.trim() === '';
 
@@ -26,6 +29,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
     const exp = useCargar(() => s.consultas.obtenerExpediente(id), [id]);
     const partes = useCargar(() => s.consultas.listarPartes(id), [id]);
     const docs = useCargar(() => s.consultas.listarDocumentos(id), [id]);
+    const jurisList = useCargar(() => s.jurisprudencia.listarPorExpediente(id), [id]);
     const personas = useCargar(() => s.consultas.listarPersonas(), []);
     const modelos = useCargar(() => s.consultas.listarModelos(), []);
     const [pestana, setPestana] = useState<PestanaExp | null>(null);
@@ -148,6 +152,7 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                     { id: 'modelo', etiqueta: '2 · Modelo' },
                     { id: 'datos', etiqueta: '3 · Datos' },
                     { id: 'documentos', etiqueta: '4 · Documentos', contador: docs.datos?.length },
+                    { id: 'jurisprudencia', etiqueta: '5 · Jurisprudencia', contador: jurisList.datos?.length },
                 ]}
             />
 
@@ -178,6 +183,13 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
             )}
             {activa === 'documentos' && (
                 <TabDocumentos docs={docs.datos ?? []} nuevo={() => setAsistente(true)} recargar={docs.recargar} setError={setError} />
+            )}
+            {activa === 'jurisprudencia' && (
+                <TabJurisprudenciaExpediente
+                    expedienteId={id}
+                    juris={jurisList.datos ?? []}
+                    recargar={jurisList.recargar}
+                />
             )}
 
             {editando && (
@@ -458,5 +470,125 @@ function EditarExpediente({ e, personas, cerrar, guardado }: {
                 )}
             </form>
         </Modal>
+    );
+}
+
+/* ================= 5 · Jurisprudencia vinculada ================= */
+function TabJurisprudenciaExpediente({
+    expedienteId,
+    juris,
+    recargar,
+}: {
+    expedienteId: string;
+    juris: ResolucionJurisprudencia[];
+    recargar: () => void;
+}) {
+    const s = useServicios();
+    const [detalle, setDetalle] = useState<ResolucionJurisprudencia | null>(null);
+
+    async function desvincular(r: ResolucionJurisprudencia) {
+        const ok = await confirmar(
+            `¿Desvincular la resolución «${r.tipoResolucion} ${r.numeroResolucion}» de este expediente? Continuará disponible en tu biblioteca general.`,
+            'Desvincular jurisprudencia'
+        );
+        if (!ok) return;
+        try {
+            await s.jurisprudencia.desvincularDeExpediente(r.id, expedienteId);
+            avisar('Jurisprudencia desvinculada del expediente');
+            recargar();
+        } catch (err) {
+            avisar(`Error: ${mensajeError(err)}`, 'error');
+        }
+    }
+
+    async function copiarCita(r: ResolucionJurisprudencia) {
+        const cita = formatearCitaJurisprudencial(r);
+        try {
+            await navigator.clipboard.writeText(cita);
+            avisar('Cita jurídica formal copiada al portapapeles');
+        } catch {
+            avisar('No se pudo copiar automáticamente', 'error');
+        }
+    }
+
+    async function abrirPdf(r: ResolucionJurisprudencia) {
+        try {
+            if (r.rutaPdf) {
+                await s.archivos.abrir(r.rutaPdf);
+                return;
+            }
+            const { buffer, nombreArchivo } = await s.jurisprudencia.descargarPdf(r);
+            const ruta = await s.archivos.rutaJurisprudencia(nombreArchivo);
+            await s.archivos.escribir(ruta, buffer);
+            r.rutaPdf = ruta;
+            await s.archivos.abrir(ruta);
+        } catch (err) {
+            avisar(`No se pudo abrir el PDF: ${mensajeError(err)}`, 'error');
+        }
+    }
+
+    return (
+        <>
+            {juris.length === 0 ? (
+                <Vacio
+                    icono="tribunal"
+                    titulo="Sin jurisprudencia vinculada"
+                    texto="No hay resoluciones o autos supremos vinculados a este expediente. Puedes buscar precedentes en el módulo de Jurisprudencia y presionar «Vincular a Caso»."
+                />
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {juris.map((r) => (
+                        <div key={r.id} className="tarjeta">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                                <div>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                                        <Insignia tono={r.origen === 'TSJ' ? 'ambar' : 'azul'}>
+                                            {r.origen} · {r.tipoResolucion}
+                                        </Insignia>
+                                        {r.sala && <Insignia tono="gris">{r.sala}</Insignia>}
+                                        {r.fechaEmision && <span className="suave" style={{ fontSize: '0.82rem' }}>{r.fechaEmision}</span>}
+                                    </div>
+                                    <h3 style={{ margin: '4px 0', fontSize: '1.05rem' }}>
+                                        {r.tipoResolucion} {r.numeroResolucion}
+                                        {r.numeroExpediente && ` (Exp. ${r.numeroExpediente})`}
+                                    </h3>
+                                </div>
+                                <div className="acciones">
+                                    <button type="button" className="btn btn-sec btn-sm" onClick={() => setDetalle(r)}>
+                                        <Icono n="libro" tam={14} /> Ver resolución
+                                    </button>
+                                    <button type="button" className="btn btn-sec btn-sm" onClick={() => void copiarCita(r)}>
+                                        <Icono n="documento" tam={14} /> Copiar cita
+                                    </button>
+                                    <button type="button" className="btn btn-sec btn-sm" onClick={() => void abrirPdf(r)}>
+                                        <Icono n="documento" tam={14} /> Abrir PDF
+                                    </button>
+                                    <button type="button" className="btn btn-peligro btn-sm" onClick={() => void desvincular(r)}>
+                                        <Icono n="papelera" tam={14} /> Desvincular
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Mostrar nota / justificación si se ingresó al vincular (F3) */}
+                            {r.resumen && (
+                                <div style={{ marginTop: '8px', fontSize: '0.88rem', background: 'var(--superficie-2)', padding: '8px 12px', borderRadius: 'var(--radio-sm)', borderLeft: '3px solid var(--primario)' }}>
+                                    <strong style={{ display: 'block', fontSize: '0.78rem', color: 'var(--texto-3)', marginBottom: '2px' }}>
+                                        Nota de vinculación / Justificación:
+                                    </strong>
+                                    <span>{r.resumen}</span>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {detalle && (
+                <DetalleResolucionModal
+                    resolucion={detalle}
+                    cerrar={() => setDetalle(null)}
+                    alCambiarGuardado={recargar}
+                />
+            )}
+        </>
     );
 }
