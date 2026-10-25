@@ -6,13 +6,13 @@ import type {
   ResultadoPaginadoJurisprudencia,
   SalaTsjCatalogo,
   SubcampoBusquedaTsj,
-  TipoResolucionTsjCatalogo,
 } from '../../domain/jurisprudencia/jurisprudencia';
 import {
+  debeMostrarResumen,
   formatearCitaJurisprudencial,
   sanearTextoExtracto,
 } from '../../domain/jurisprudencia/jurisprudencia';
-import { Aviso, Icono, Insignia, Pestanas, Vacio, avisar } from '../_core/comunes';
+import { Aviso, Icono, Vacio, avisar } from '../_core/comunes';
 import { mensajeError, useServicios } from '../_core/servicios';
 import { DetalleResolucionModal } from '../jurisprudencia/DetalleResolucionModal';
 import { VincularExpedienteModal } from '../jurisprudencia/VincularExpedienteModal';
@@ -20,19 +20,39 @@ import '../jurisprudencia/jurisprudencia.css';
 
 type PestanaPrincipal = 'en_linea' | 'biblioteca';
 
-const PESTANAS: { id: PestanaPrincipal; etiqueta: string }[] = [
-  { id: 'en_linea', etiqueta: 'Búsqueda en Línea (TSJ / TCP)' },
-  { id: 'biblioteca', etiqueta: 'Mi Biblioteca Guardada' },
-];
-
 const ANIOS_GESTION = Array.from({ length: 27 }, (_, i) => 2026 - i);
+
+function clasificarForma(forma?: string): 'exito' | 'error' | 'aviso' | 'azul' | 'gris' {
+  if (!forma) return 'gris';
+  const f = forma.toLowerCase();
+  if (f.includes('concede') || f.includes('legal') || f.includes('procedente') || f.includes('admite')) {
+    return 'exito';
+  }
+  if (
+    f.includes('infundad') ||
+    f.includes('deniega') ||
+    f.includes('improbada') ||
+    f.includes('improcedente') ||
+    f.includes('anula') ||
+    f.includes('inadmisible')
+  ) {
+    return 'error';
+  }
+  if (f.includes('revoca') || f.includes('modifica') || f.includes('parcial')) {
+    return 'aviso';
+  }
+  return 'azul';
+}
 
 export function Jurisprudencia() {
   const s = useServicios();
   const [pestana, setPestana] = useState<PestanaPrincipal>('en_linea');
 
-  // Control de concurrencia y carrera (Q11)
+  // Control de concurrencia y carrera
   const idBusquedaRef = useRef(0);
+
+  // Conteo total en biblioteca para badge
+  const [totalGuardadas, setTotalGuardadas] = useState(0);
 
   // ================= ESTADO DE BÚSQUEDA EN LÍNEA =================
   const [fuente, setFuente] = useState<'TSJ' | 'TCP' | 'TODOS'>('TSJ');
@@ -43,16 +63,13 @@ export function Jurisprudencia() {
   const [nroResolucion, setNroResolucion] = useState('');
   const [nroExpediente, setNroExpediente] = useState('');
   const [partes, setPartes] = useState('');
-
-  // idSalaTsj comienza en null para no filtrar silenciosamente a Sala Penal 1 (Q1)
   const [idSalaTsj, setIdSalaTsj] = useState<number | null>(null);
 
-  // Consulta por gestión: año inicializado con el actual (Q2)
+  // Consulta por gestión TSJ
   const [gestionTsj, setGestionTsj] = useState<string>('2026');
   const [idSalaGestionTsj, setIdSalaGestionTsj] = useState<number | null>(null);
-  const [idTipoResTsj, setIdTipoResTsj] = useState<number | null>(null);
 
-  // Búsqueda avanzada
+  // Búsqueda avanzada TSJ
   const [palabrasTodas, setPalabrasTodas] = useState('');
   const [fraseExacta, setFraseExacta] = useState('');
   const [palabrasCualquiera, setPalabrasCualquiera] = useState('');
@@ -60,7 +77,7 @@ export function Jurisprudencia() {
   const [materiaAvanzada, setMateriaAvanzada] = useState('');
   const [gestionAvanzada, setGestionAvanzada] = useState('');
 
-  // Filtros adicionales en línea
+  // Filtros adicionales colapsables
   const [mostrarFiltrosEnLinea, setMostrarFiltrosEnLinea] = useState(false);
   const [materiaEnLinea, setMateriaEnLinea] = useState('');
   const [gestionEnLinea, setGestionEnLinea] = useState('');
@@ -70,11 +87,10 @@ export function Jurisprudencia() {
   const [buscandoEnLinea, setBuscandoEnLinea] = useState(false);
   const [errorEnLinea, setErrorEnLinea] = useState<string | null>(null);
 
-  // ================= ESTADO DE BIBLIOTECA GUARDADA (Q6, Q7, Q10) =================
+  // ================= ESTADO DE BIBLIOTECA GUARDADA =================
   const [textoBib, setTextoBib] = useState('');
   const [origenBib, setOrigenBib] = useState<'TODOS' | 'TSJ' | 'TCP'>('TODOS');
   const [materiaBib, setMateriaBib] = useState('');
-  const [salaBib, setSalaBib] = useState('');
   const [gestionBib, setGestionBib] = useState('');
   const [paginaBib, setPaginaBib] = useState(1);
   const [resultadosBib, setResultadosBib] = useState<ResultadoPaginadoJurisprudencia | null>(null);
@@ -83,14 +99,13 @@ export function Jurisprudencia() {
 
   // Catálogos
   const [salasTsj, setSalasTsj] = useState<SalaTsjCatalogo[]>([]);
-  const [tiposResTsj, setTiposResTsj] = useState<TipoResolucionTsjCatalogo[]>([]);
 
   // Modales
   const [resolucionDetalle, setResolucionDetalle] = useState<ResolucionJurisprudencia | null>(null);
   const [resolucionVincular, setResolucionVincular] = useState<ResolucionJurisprudencia | null>(null);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
-  // Cargar salas y tipos sin preseleccionar idSalaTsj (Q1)
+  // Cargar salas TSJ al montar
   useEffect(() => {
     s.jurisprudencia
       .obtenerSalasTsj()
@@ -101,11 +116,20 @@ export function Jurisprudencia() {
         }
       })
       .catch(() => {});
+  }, [s]);
 
-    s.jurisprudencia
-      .obtenerTiposResolucionTsj()
-      .then(setTiposResTsj)
-      .catch(() => {});
+  // Actualizar conteo de biblioteca
+  const actualizarConteoBiblioteca = async () => {
+    try {
+      const res = await s.jurisprudencia.buscarLocal({ texto: '', origen: 'TODOS', limite: 1 });
+      setTotalGuardadas(res.total);
+    } catch {
+      // Ignorar
+    }
+  };
+
+  useEffect(() => {
+    actualizarConteoBiblioteca();
   }, [s]);
 
   // Ejecutar búsqueda local al pasar a biblioteca
@@ -124,14 +148,14 @@ export function Jurisprudencia() {
     setErrorEnLinea(null);
     setPaginaEnLinea(pag);
 
-    // Si la fuente no es TSJ, la modalidad siempre es simple (Q4)
-    const modTsj = fuente === 'TSJ' ? (parametrosDirectos?.modalidadTsj ?? modalidadTsj) : 'simple';
+    const origenEfectivo = parametrosDirectos?.origen ?? fuente;
+    const modTsj = origenEfectivo === 'TSJ' ? (parametrosDirectos?.modalidadTsj ?? modalidadTsj) : 'simple';
     const subTsj = parametrosDirectos?.subcampoTsj ?? subcampoTsj;
     const nroResVal = parametrosDirectos?.nroResolucion ?? nroResolucion;
 
     const filtro: FiltroBusquedaJurisprudencia = {
       texto: parametrosDirectos?.texto ?? textoEnLinea.trim(),
-      origen: fuente,
+      origen: origenEfectivo,
       materia: materiaEnLinea || undefined,
       sala: undefined,
       gestion: modTsj === 'gestion' ? gestionTsj : (gestionEnLinea || undefined),
@@ -145,7 +169,6 @@ export function Jurisprudencia() {
       nroExpediente: nroExpediente.trim() || undefined,
       partes: partes.trim() || undefined,
       idSalaTsj: modTsj === 'gestion' ? idSalaGestionTsj : idSalaTsj,
-      idTipoResTsj: modTsj === 'gestion' ? idTipoResTsj : undefined,
       palabrasTodas: palabrasTodas.trim() || undefined,
       fraseExacta: fraseExacta.trim() || undefined,
       palabrasCualquiera: palabrasCualquiera.trim() || undefined,
@@ -169,17 +192,39 @@ export function Jurisprudencia() {
     }
   }
 
-  async function ejecutarBusquedaBiblioteca(pag = 1) {
+  function cambiarFuenteEnLinea(nuevaFuente: 'TSJ' | 'TCP' | 'TODOS') {
+    setFuente(nuevaFuente);
+    const tieneCriterio = !!(
+      textoEnLinea.trim() ||
+      nroResolucion.trim() ||
+      nroExpediente.trim() ||
+      partes.trim() ||
+      palabrasTodas.trim() ||
+      fraseExacta.trim() ||
+      palabrasCualquiera.trim() ||
+      (nuevaFuente === 'TSJ' && modalidadTsj === 'gestion' && idSalaGestionTsj)
+    );
+
+    if (tieneCriterio) {
+      ejecutarBusquedaEnLinea(1, { origen: nuevaFuente });
+    }
+  }
+
+  async function ejecutarBusquedaBiblioteca(
+    pag = 1,
+    parametrosDirectos?: Partial<FiltroBusquedaJurisprudencia>
+  ) {
     const idSecuencia = ++idBusquedaRef.current;
     setBuscandoBib(true);
     setErrorBib(null);
     setPaginaBib(pag);
 
+    const origenVal = parametrosDirectos?.origen ?? origenBib;
+
     const filtro: FiltroBusquedaJurisprudencia = {
-      texto: textoBib.trim(),
-      origen: origenBib,
+      texto: parametrosDirectos?.texto ?? textoBib.trim(),
+      origen: origenVal,
       materia: materiaBib || undefined,
-      sala: salaBib.trim() || undefined, // Búsqueda de sala por texto en biblioteca (Q7)
       gestion: gestionBib.trim() || undefined,
       pagina: pag,
       limite: 15,
@@ -189,6 +234,7 @@ export function Jurisprudencia() {
       const res = await s.jurisprudencia.buscarLocal(filtro);
       if (idSecuencia === idBusquedaRef.current) {
         setResultadosBib(res);
+        setTotalGuardadas(res.total);
       }
     } catch (err) {
       if (idSecuencia === idBusquedaRef.current) {
@@ -211,21 +257,6 @@ export function Jurisprudencia() {
     }
   }
 
-  // Detección de N° de resolución en Búsqueda Simple (Q5)
-  const patronResolucion = /(?:AS\/)?(\d{3,5}\/\d{4}(?:-[A-Za-z0-9]+)?)/i;
-  const matchResolucion = textoEnLinea.match(patronResolucion);
-
-  function cambiarABusquedaPorResolucion(resNum: string) {
-    setModalidadTsj('campos');
-    setSubcampoTsj('resolucion');
-    setNroResolucion(resNum);
-    ejecutarBusquedaEnLinea(1, {
-      modalidadTsj: 'campos',
-      subcampoTsj: 'resolucion',
-      nroResolucion: resNum,
-    });
-  }
-
   async function copiarCita(r: ResolucionJurisprudencia) {
     const cita = formatearCitaJurisprudencial(r);
     try {
@@ -243,15 +274,16 @@ export function Jurisprudencia() {
         await s.jurisprudencia.eliminarDeBiblioteca(r);
         r.guardadaLocal = false;
         r.idLocal = undefined;
+        setTotalGuardadas((prev) => Math.max(0, prev - 1));
         avisar('Eliminada de tu biblioteca local');
       } else {
         const guardada = await s.jurisprudencia.guardarEnBiblioteca(r);
         r.guardadaLocal = true;
         r.idLocal = guardada.idLocal;
+        setTotalGuardadas((prev) => prev + 1);
         avisar('Resolución guardada en tu biblioteca local (offline)');
       }
 
-      // Actualizar vista reactiva
       if (resultadosEnLinea) {
         setResultadosEnLinea({
           ...resultadosEnLinea,
@@ -273,14 +305,14 @@ export function Jurisprudencia() {
     try {
       if (r.rutaPdf) {
         await s.archivos.abrir(r.rutaPdf);
-        avisar('Abriendo archivo PDF oficial guardado');
+        avisar('Abriendo archivo PDF oficial');
         return;
       }
       const { buffer, nombreArchivo } = await s.jurisprudencia.descargarPdf(r);
       const ruta = await s.archivos.rutaJurisprudencia(nombreArchivo);
       await s.archivos.escribir(ruta, buffer);
       r.rutaPdf = ruta;
-      avisar(`PDF guardado en disco: ${nombreArchivo}`);
+      avisar(`PDF guardado: ${nombreArchivo}`);
       await s.archivos.abrir(ruta);
     } catch (err) {
       avisar(`No se pudo descargar el PDF: ${mensajeError(err)}`, 'error');
@@ -295,276 +327,261 @@ export function Jurisprudencia() {
   const paginaActual = pestana === 'en_linea' ? paginaEnLinea : paginaBib;
 
   return (
-    <div className="pagina">
-      {/* Cabecera */}
-      <div className="pagina-cab">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: 'var(--primario)' }}>
-              <Icono n="tribunal" tam={26} />
-            </span>
-            <h1>Jurisprudencia Boliviana</h1>
+    <div className="pagina juris-modulo-rediseñado">
+      {/* Cabecera compacta y moderna */}
+      <div className="juris-cabecera-principal">
+        <div className="juris-titular-area">
+          <div className="juris-icono-titular">
+            <Icono n="tribunal" tam={22} />
           </div>
-          <p className="subtitulo">
-            Consulta jurisprudencial conectada con los servicios públicos del{' '}
-            <strong>Tribunal Supremo de Justicia (Génesis TSJ)</strong> y el{' '}
-            <strong>Tribunal Constitucional Plurinacional (TCP)</strong>. Búsqueda exacta por Auto Supremo, expediente, gestión o términos clave, con almacenamiento local sin conexión.
-          </p>
+          <div>
+            <h1 className="juris-titulo">Jurisprudencia Boliviana</h1>
+            <p className="juris-bajada">
+              Acceso directo a fallos del <strong>TSJ</strong> y <strong>TCP</strong> con orden cronológico actualizado y archivo local sin conexión.
+            </p>
+          </div>
+        </div>
+
+        {/* Selector de Pestaña Principal (En Línea vs Biblioteca) */}
+        <div className="juris-selector-pestanas">
+          <button
+            type="button"
+            className={`juris-pestana-btn ${pestana === 'en_linea' ? 'activa' : ''}`}
+            onClick={() => setPestana('en_linea')}
+          >
+            <Icono n="buscar" tam={15} />
+            <span>Búsqueda en Línea</span>
+          </button>
+          <button
+            type="button"
+            className={`juris-pestana-btn ${pestana === 'biblioteca' ? 'activa' : ''}`}
+            onClick={() => setPestana('biblioteca')}
+          >
+            <Icono n="libro" tam={15} />
+            <span>Mi Biblioteca</span>
+            {totalGuardadas > 0 && <span className="juris-badge-conteo">{totalGuardadas}</span>}
+          </button>
         </div>
       </div>
 
-      {/* Pestañas principales */}
-      <Pestanas items={PESTANAS} activa={pestana} cambiar={(id) => setPestana(id)} />
-
-      {/* Panel de Filtros y Búsqueda */}
-      <div className="juris-filtros-bar">
+      {/* PANEL DE CONTROL COMPACTO */}
+      <div className="juris-panel-busqueda">
         {pestana === 'en_linea' ? (
-          <>
-            {/* Selector de Fuente */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div className="juris-pills-fuente">
-                <span style={{ fontSize: '0.82rem', color: 'var(--texto-3)', marginRight: '4px' }}>
-                  Fuente:
-                </span>
+          <div className="juris-enlinea-flow">
+            {/* Fila superior: Selector de Fuente + Modalidad TSJ */}
+            <div className="juris-toolbar-superior">
+              {/* Selector de Fuente institucional */}
+              <div className="juris-grupo-fuentes">
                 <button
                   type="button"
-                  className={`juris-pill-btn ${fuente === 'TSJ' ? 'activa' : ''}`}
-                  onClick={() => setFuente('TSJ')}
+                  className={`juris-btn-fuente ${fuente === 'TSJ' ? 'activa' : ''}`}
+                  onClick={() => cambiarFuenteEnLinea('TSJ')}
                 >
                   🏛️ TSJ (Autos Supremos)
                 </button>
                 <button
                   type="button"
-                  className={`juris-pill-btn ${fuente === 'TCP' ? 'activa' : ''}`}
-                  onClick={() => setFuente('TCP')}
+                  className={`juris-btn-fuente ${fuente === 'TCP' ? 'activa' : ''}`}
+                  onClick={() => cambiarFuenteEnLinea('TCP')}
                 >
-                  ⚖️ TCP (Sentencias Constitucionales)
+                  ⚖️ TCP (Sentencias Const.)
                 </button>
                 <button
                   type="button"
-                  className={`juris-pill-btn ${fuente === 'TODOS' ? 'activa' : ''}`}
-                  onClick={() => setFuente('TODOS')}
+                  className={`juris-btn-fuente ${fuente === 'TODOS' ? 'activa' : ''}`}
+                  onClick={() => cambiarFuenteEnLinea('TODOS')}
                 >
-                  🌐 Todas las fuentes
+                  🌐 Ambas Fuentes
                 </button>
               </div>
 
+              {/* Selector de modalidades TSJ (compacto en una sola fila) */}
               {fuente === 'TSJ' && (
-                <span style={{ fontSize: '0.8rem', color: 'var(--texto-3)' }}>
-                  Génesis TSJ
-                </span>
+                <div className="juris-grupo-modalidades">
+                  <button
+                    type="button"
+                    className={`juris-btn-mod ${modalidadTsj === 'simple' ? 'activa' : ''}`}
+                    onClick={() => setModalidadTsj('simple')}
+                    title="Búsqueda por palabras clave o términos jurídicos"
+                  >
+                    🔍 General
+                  </button>
+                  <button
+                    type="button"
+                    className={`juris-btn-mod ${modalidadTsj === 'campos' ? 'activa' : ''}`}
+                    onClick={() => setModalidadTsj('campos')}
+                    title="Búsqueda exacta por N° de resolución, expediente o partes procesales"
+                  >
+                    🎯 N° / Exp.
+                  </button>
+                  <button
+                    type="button"
+                    className={`juris-btn-mod ${modalidadTsj === 'gestion' ? 'activa' : ''}`}
+                    onClick={() => setModalidadTsj('gestion')}
+                    title="Resoluciones por sala y año ordenadas por fecha más reciente"
+                  >
+                    📅 Por Gestión
+                  </button>
+                  <button
+                    type="button"
+                    className={`juris-btn-mod ${modalidadTsj === 'avanzada' ? 'activa' : ''}`}
+                    onClick={() => setModalidadTsj('avanzada')}
+                    title="Búsqueda con operadores lógicos y exclusión"
+                  >
+                    ⚡ Avanzada
+                  </button>
+                </div>
               )}
             </div>
 
-            {/* Selector de Modalidades TSJ (visible únicamente cuando fuente es TSJ) */}
-            {fuente === 'TSJ' && (
-              <div className="juris-tsj-modalidades-nav">
-                <button
-                  type="button"
-                  className={`juris-tsj-mod-btn ${modalidadTsj === 'simple' ? 'activo' : ''}`}
-                  onClick={() => setModalidadTsj('simple')}
-                >
-                  <Icono n="buscar" tam={15} />
-                  <span>Búsqueda Simple</span>
-                  <span className="juris-tsj-mod-badge">Palabras clave</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`juris-tsj-mod-btn ${modalidadTsj === 'campos' ? 'activo' : ''}`}
-                  onClick={() => setModalidadTsj('campos')}
-                >
-                  <Icono n="diana" tam={15} />
-                  <span>Consulta por Campos</span>
-                  <span className="juris-tsj-mod-badge">N° Res / Exp / Partes</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`juris-tsj-mod-btn ${modalidadTsj === 'gestion' ? 'activo' : ''}`}
-                  onClick={() => setModalidadTsj('gestion')}
-                >
-                  <Icono n="calendario" tam={15} />
-                  <span>Consulta por Gestión</span>
-                  <span className="juris-tsj-mod-badge">Sala y Gestión</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`juris-tsj-mod-btn ${modalidadTsj === 'avanzada' ? 'activo' : ''}`}
-                  onClick={() => setModalidadTsj('avanzada')}
-                >
-                  <Icono n="rayo" tam={15} />
-                  <span>Búsqueda Avanzada</span>
-                  <span className="juris-tsj-mod-badge">Múltiples filtros</span>
-                </button>
-              </div>
-            )}
-
-            {/* FORMULARIO DINÁMICO EN LÍNEA */}
-            <form onSubmit={alEnviar} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* 1. Modalidad Simple / TCP / Ambos */}
+            {/* FORMULARIO PUNTUAL SEGÚN MODALIDAD */}
+            <form onSubmit={alEnviar} className="juris-formulario-principal">
+              {/* 1. Modalidad General (TSJ simple, TCP o Ambas) */}
               {(modalidadTsj === 'simple' || fuente !== 'TSJ') && (
-                <div>
-                  <div className="juris-busqueda-input-group">
-                    <input
-                      type="search"
-                      className="buscar"
-                      placeholder={
-                        fuente === 'TCP'
-                          ? 'Buscar sentencias del TCP: acción de amparo, debido proceso, 0812/2023-S3...'
-                          : 'Buscar fallos: casación AND nulidad, prescripción adquisitiva, "debido proceso"...'
-                      }
-                      value={textoEnLinea}
-                      onChange={(e) => setTextoEnLinea(e.target.value)}
-                    />
-                    <button type="submit" className="btn btn-pri" disabled={buscandoEnLinea}>
-                      <Icono n="buscar" tam={16} /> {buscandoEnLinea ? 'Buscando...' : 'Buscar'}
+                <div className="juris-input-box">
+                  <div className="juris-input-search-row">
+                    <div className="juris-input-wrapper">
+                      <span className="juris-input-icon">
+                        <Icono n="buscar" tam={16} />
+                      </span>
+                      <input
+                        type="search"
+                        className="juris-input-texto"
+                        placeholder={
+                          fuente === 'TCP'
+                            ? 'Buscar sentencias TCP: debido proceso, acción de amparo, 3593/2026-S1...'
+                            : 'Buscar resoluciones: usucapión, prescripción adquisitiva, difamación, "debido proceso"...'
+                        }
+                        value={textoEnLinea}
+                        onChange={(e) => setTextoEnLinea(e.target.value)}
+                        autoFocus
+                      />
+                      {textoEnLinea && (
+                        <button
+                          type="button"
+                          className="juris-input-clear"
+                          onClick={() => setTextoEnLinea('')}
+                          title="Limpiar"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`juris-btn-filtros-toggle ${mostrarFiltrosEnLinea ? 'activo' : ''}`}
+                      onClick={() => setMostrarFiltrosEnLinea((p) => !p)}
+                      title="Filtros de materia y gestión"
+                    >
+                      <Icono n="ajustes" tam={14} /> Filtros
+                    </button>
+
+                    <button type="submit" className="btn btn-pri juris-btn-submit" disabled={buscandoEnLinea}>
+                      <Icono n="buscar" tam={15} /> {buscandoEnLinea ? 'Consultando...' : 'Buscar'}
                     </button>
                   </div>
 
-                  {/* Sugerencia inteligente si escribió un N° de resolución en búsqueda simple */}
-                  {fuente === 'TSJ' && matchResolucion && matchResolucion[1] && (
-                    <div style={{ marginTop: '8px' }}>
-                      <div className="juris-tip-box" style={{ justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Icono n="diana" tam={16} />
-                          <span>
-                            Detectamos el número <strong>{matchResolucion[1]}</strong>. Puedes buscarlo directamente en «Consulta por Campos» para obtener el fallo exacto.
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-pri btn-sm"
-                          onClick={() => cambiarABusquedaPorResolucion(matchResolucion[1])}
+                  {mostrarFiltrosEnLinea && (
+                    <div className="juris-filtros-inline">
+                      <div>
+                        <label className="juris-mini-label">Materia</label>
+                        <select
+                          value={materiaEnLinea}
+                          onChange={(e) => setMateriaEnLinea(e.target.value)}
+                          className="juris-mini-select"
                         >
-                          Buscar Resolución Exacta →
-                        </button>
+                          <option value="">Todas las materias</option>
+                          <option value="Civil">Civil</option>
+                          <option value="Penal">Penal</option>
+                          <option value="Social">Social / Laboral</option>
+                          <option value="Contencioso">Contencioso Administrativo</option>
+                          <option value="Familia">Familia</option>
+                        </select>
                       </div>
-                    </div>
-                  )}
 
-                  {/* Chips de operadores */}
-                  {fuente === 'TSJ' && (
-                    <div className="juris-operadores-chips">
-                      <span>Operadores:</span>
-                      <button
-                        type="button"
-                        className="juris-chip-operador"
-                        onClick={() => setTextoEnLinea((p) => `${p.trim()} AND `)}
-                      >
-                        + AND
-                      </button>
-                      <button
-                        type="button"
-                        className="juris-chip-operador"
-                        onClick={() => setTextoEnLinea((p) => `${p.trim()} OR `)}
-                      >
-                        + OR
-                      </button>
-                      <button
-                        type="button"
-                        className="juris-chip-operador"
-                        onClick={() => setTextoEnLinea((p) => `${p.trim()} NOT `)}
-                      >
-                        + NOT
-                      </button>
-                      <button
-                        type="button"
-                        className="juris-chip-operador"
-                        onClick={() => setTextoEnLinea((p) => `"${p.replace(/^"|"$/g, '')}"`)}
-                      >
-                        + "Frase Exacta"
-                      </button>
+                      <div>
+                        <label className="juris-mini-label">Gestión (Año)</label>
+                        <select
+                          value={gestionEnLinea}
+                          onChange={(e) => setGestionEnLinea(e.target.value)}
+                          className="juris-mini-select"
+                        >
+                          <option value="">Todas las gestiones</option>
+                          {ANIOS_GESTION.map((y) => (
+                            <option key={y} value={String(y)}>
+                              {y}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* 2. Modalidad Por Campos TSJ */}
+              {/* 2. Modalidad Por Campos TSJ (N° / Exp / Partes) */}
               {fuente === 'TSJ' && modalidadTsj === 'campos' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div className="juris-subcampos-bar">
-                    <span style={{ fontSize: '0.82rem', color: 'var(--texto-3)' }}>Campo:</span>
-                    <button
-                      type="button"
-                      className={`juris-subcampo-btn ${subcampoTsj === 'resolucion' ? 'activo' : ''}`}
-                      onClick={() => setSubcampoTsj('resolucion')}
+                <div className="juris-campos-container">
+                  <div className="juris-campos-row">
+                    <select
+                      className="juris-select-subcampo"
+                      value={subcampoTsj}
+                      onChange={(e) => setSubcampoTsj(e.target.value as SubcampoBusquedaTsj)}
                     >
-                      <Icono n="documento" tam={14} /> N° de Resolución Exacto
-                    </button>
-                    <button
-                      type="button"
-                      className={`juris-subcampo-btn ${subcampoTsj === 'expediente' ? 'activo' : ''}`}
-                      onClick={() => setSubcampoTsj('expediente')}
-                    >
-                      <Icono n="carpeta" tam={14} /> N° de Expediente
-                    </button>
-                    <button
-                      type="button"
-                      className={`juris-subcampo-btn ${subcampoTsj === 'partes' ? 'activo' : ''}`}
-                      onClick={() => setSubcampoTsj('partes')}
-                    >
-                      <Icono n="personas" tam={14} /> Partes Procesales
-                    </button>
-                  </div>
+                      <option value="resolucion">N° de Resolución</option>
+                      <option value="expediente">N° de Expediente</option>
+                      <option value="partes">Partes Procesales</option>
+                    </select>
 
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {subcampoTsj === 'resolucion' && (
-                      <div style={{ flex: 1, minWidth: '280px' }}>
+                    <div className="juris-input-wrapper" style={{ flex: 1 }}>
+                      {subcampoTsj === 'resolucion' && (
                         <input
                           type="search"
-                          className="buscar"
-                          placeholder="Ej: 0554/2026-FF, AS/0554/2026-FF, 0711/2018..."
+                          className="juris-input-texto"
+                          placeholder="Ej: AS/0554/2026-FF, 0711/2018, 0169/2019..."
                           value={nroResolucion}
                           onChange={(e) => setNroResolucion(e.target.value)}
                           autoFocus
                         />
-                      </div>
-                    )}
-
-                    {subcampoTsj === 'expediente' && (
-                      <div style={{ flex: 1, minWidth: '280px' }}>
+                      )}
+                      {subcampoTsj === 'expediente' && (
                         <input
                           type="search"
-                          className="buscar"
-                          placeholder="Ej: 123/2023, 45/2022..."
+                          className="juris-input-texto"
+                          placeholder="Ej: LP-1-24-S, 123/2023..."
                           value={nroExpediente}
                           onChange={(e) => setNroExpediente(e.target.value)}
                           autoFocus
                         />
-                      </div>
-                    )}
-
-                    {subcampoTsj === 'partes' && (
-                      <div style={{ flex: 1, minWidth: '280px' }}>
+                      )}
+                      {subcampoTsj === 'partes' && (
                         <input
                           type="search"
-                          className="buscar"
-                          placeholder="Nombre de demandante, demandado o recurrente..."
+                          className="juris-input-texto"
+                          placeholder="Nombre del demandante, demandado o recurrente..."
                           value={partes}
                           onChange={(e) => setPartes(e.target.value)}
                           autoFocus
                         />
-                      </div>
-                    )}
-
-                    <div style={{ width: '220px' }}>
-                      <select
-                        value={idSalaTsj ?? ''}
-                        onChange={(e) => setIdSalaTsj(e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">Todas las salas TSJ</option>
-                        {salasTsj.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.nombre}
-                          </option>
-                        ))}
-                      </select>
+                      )}
                     </div>
 
-                    <button type="submit" className="btn btn-pri" disabled={buscandoEnLinea}>
-                      <Icono n="buscar" tam={16} /> {buscandoEnLinea ? 'Consultando...' : 'Buscar'}
+                    <select
+                      className="juris-select-sala"
+                      value={idSalaTsj ?? ''}
+                      onChange={(e) => setIdSalaTsj(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">Todas las salas TSJ</option>
+                      {salasTsj.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nombre}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button type="submit" className="btn btn-pri juris-btn-submit" disabled={buscandoEnLinea}>
+                      <Icono n="buscar" tam={15} /> {buscandoEnLinea ? 'Buscando...' : 'Consultar'}
                     </button>
                   </div>
                 </div>
@@ -572,16 +589,15 @@ export function Jurisprudencia() {
 
               {/* 3. Modalidad Consulta por Gestión TSJ */}
               {fuente === 'TSJ' && modalidadTsj === 'gestion' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div className="juris-grid-gestion">
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                        Sala Institucional *
-                      </label>
+                <div className="juris-gestion-container">
+                  <div className="juris-gestion-row">
+                    <div className="juris-gestion-item">
+                      <label className="juris-mini-label">Sala Institucional *</label>
                       <select
                         value={idSalaGestionTsj ?? (salasTsj[0]?.id || '')}
                         onChange={(e) => setIdSalaGestionTsj(Number(e.target.value))}
                         required
+                        className="juris-select-gestion"
                       >
                         {salasTsj.map((s) => (
                           <option key={s.id} value={s.id}>
@@ -591,14 +607,13 @@ export function Jurisprudencia() {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                        Gestión (Año) *
-                      </label>
+                    <div className="juris-gestion-item">
+                      <label className="juris-mini-label">Gestión (Año) *</label>
                       <select
                         value={gestionTsj}
                         onChange={(e) => setGestionTsj(e.target.value)}
                         required
+                        className="juris-select-gestion"
                       >
                         {ANIOS_GESTION.map((y) => (
                           <option key={y} value={String(y)}>
@@ -608,31 +623,13 @@ export function Jurisprudencia() {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                        Tipo de Resolución
-                      </label>
-                      <select
-                        value={idTipoResTsj ?? ''}
-                        onChange={(e) => setIdTipoResTsj(e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">Todos los tipos</option>
-                        {tiposResTsj.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <div className="juris-gestion-item juris-gestion-btn-col">
                       <button
                         type="submit"
-                        className="btn btn-pri"
-                        style={{ width: '100%', height: '38px' }}
+                        className="btn btn-pri juris-btn-submit"
                         disabled={buscandoEnLinea}
                       >
-                        <Icono n="buscar" tam={16} /> {buscandoEnLinea ? 'Consultando...' : 'Consultar Gestión'}
+                        <Icono n="calendario" tam={15} /> {buscandoEnLinea ? 'Consultando...' : 'Consultar Gestión'}
                       </button>
                     </div>
                   </div>
@@ -641,87 +638,60 @@ export function Jurisprudencia() {
 
               {/* 4. Modalidad Búsqueda Avanzada TSJ */}
               {fuente === 'TSJ' && modalidadTsj === 'avanzada' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div className="juris-grid-avanzada">
-                    <div className="juris-campo-avanzado">
-                      <label>
-                        <span style={{ color: 'var(--primario)' }}>●</span> Todas estas palabras
-                        <span className="sub">(Obligatorias · AND)</span>
-                      </label>
+                <div className="juris-avanzada-box">
+                  <div className="juris-avanzada-grid-campos">
+                    <div>
+                      <label className="juris-mini-label">Todas estas palabras (AND)</label>
                       <input
                         type="text"
-                        placeholder="Ej: contrato incumplimiento resolución"
+                        placeholder="Ej: contrato incumplimiento"
                         value={palabrasTodas}
-                        onChange={(e) => {
-                          setPalabrasTodas(e.target.value);
-                          if (e.target.value) {
-                            setFraseExacta('');
-                            setPalabrasCualquiera('');
-                          }
-                        }}
+                        onChange={(e) => setPalabrasTodas(e.target.value)}
+                        className="juris-input-compacto"
                       />
                     </div>
 
-                    <div className="juris-campo-avanzado">
-                      <label>
-                        <span style={{ color: 'var(--exito, #16a34a)' }}>●</span> Esta palabra o frase exacta
-                        <span className="sub">(Coincidencia literal)</span>
-                      </label>
+                    <div>
+                      <label className="juris-mini-label">Frase exacta ("...")</label>
                       <input
                         type="text"
                         placeholder="Ej: falta de legitimación pasiva"
                         value={fraseExacta}
-                        onChange={(e) => {
-                          setFraseExacta(e.target.value);
-                          if (e.target.value) {
-                            setPalabrasTodas('');
-                            setPalabrasCualquiera('');
-                          }
-                        }}
+                        onChange={(e) => setFraseExacta(e.target.value)}
+                        className="juris-input-compacto"
                       />
                     </div>
 
-                    <div className="juris-campo-avanzado">
-                      <label>
-                        <span style={{ color: 'var(--aviso, #d97706)' }}>●</span> Cualquiera de estas palabras
-                        <span className="sub">(Alternativas · OR)</span>
-                      </label>
+                    <div>
+                      <label className="juris-mini-label">Cualquiera de estas palabras (OR)</label>
                       <input
                         type="text"
                         placeholder="Ej: usucapión prescripción posesión"
                         value={palabrasCualquiera}
-                        onChange={(e) => {
-                          setPalabrasCualquiera(e.target.value);
-                          if (e.target.value) {
-                            setPalabrasTodas('');
-                            setFraseExacta('');
-                          }
-                        }}
+                        onChange={(e) => setPalabrasCualquiera(e.target.value)}
+                        className="juris-input-compacto"
                       />
                     </div>
 
-                    <div className="juris-campo-avanzado">
-                      <label>
-                        <span style={{ color: 'var(--error, #dc2626)' }}>●</span> Ninguna de estas palabras
-                        <span className="sub">(Exclusión · NOT)</span>
-                      </label>
+                    <div>
+                      <label className="juris-mini-label">Ninguna de estas palabras (NOT)</label>
                       <input
                         type="text"
                         placeholder="Ej: penal flagrancia detención"
                         value={palabrasExcluir}
                         onChange={(e) => setPalabrasExcluir(e.target.value)}
+                        className="juris-input-compacto"
                       />
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', alignItems: 'flex-end' }}>
+                  <div className="juris-avanzada-filtros-row">
                     <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                        Sala TSJ
-                      </label>
+                      <label className="juris-mini-label">Sala</label>
                       <select
                         value={idSalaTsj ?? ''}
                         onChange={(e) => setIdSalaTsj(e.target.value ? Number(e.target.value) : null)}
+                        className="juris-mini-select"
                       >
                         <option value="">Todas las salas TSJ</option>
                         {salasTsj.map((s) => (
@@ -733,11 +703,13 @@ export function Jurisprudencia() {
                     </div>
 
                     <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                        Gestión (Año)
-                      </label>
-                      <select value={gestionAvanzada} onChange={(e) => setGestionAvanzada(e.target.value)}>
-                        <option value="">Cualquier gestión</option>
+                      <label className="juris-mini-label">Gestión</label>
+                      <select
+                        value={gestionAvanzada}
+                        onChange={(e) => setGestionAvanzada(e.target.value)}
+                        className="juris-mini-select"
+                      >
+                        <option value="">Cualquier año</option>
                         {ANIOS_GESTION.map((y) => (
                           <option key={y} value={String(y)}>
                             {y}
@@ -747,288 +719,336 @@ export function Jurisprudencia() {
                     </div>
 
                     <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                        Materia
-                      </label>
-                      <select value={materiaAvanzada} onChange={(e) => setMateriaAvanzada(e.target.value)}>
+                      <label className="juris-mini-label">Materia</label>
+                      <select
+                        value={materiaAvanzada}
+                        onChange={(e) => setMateriaAvanzada(e.target.value)}
+                        className="juris-mini-select"
+                      >
                         <option value="">Todas las materias</option>
                         <option value="Civil">Civil</option>
                         <option value="Penal">Penal</option>
-                        <option value="Social">Social</option>
+                        <option value="Social">Social / Laboral</option>
                         <option value="Contencioso">Contencioso Administrativo</option>
                       </select>
                     </div>
 
-                    <div>
-                      <button
-                        type="submit"
-                        className="btn btn-pri"
-                        style={{ width: '100%', height: '38px' }}
-                        disabled={buscandoEnLinea}
-                      >
-                        <Icono n="rayo" tam={16} /> {buscandoEnLinea ? 'Buscando...' : 'Búsqueda Avanzada'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Filtros colapsables para Búsqueda Simple */}
-              {modalidadTsj === 'simple' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="btn btn-fan"
-                    onClick={() => setMostrarFiltrosEnLinea((p) => !p)}
-                    style={{ fontSize: '0.85rem' }}
-                  >
-                    <Icono n="ajustes" tam={14} />{' '}
-                    {mostrarFiltrosEnLinea ? 'Ocultar filtros adicionales' : 'Filtros adicionales'}
-                  </button>
-                </div>
-              )}
-
-              {mostrarFiltrosEnLinea && modalidadTsj === 'simple' && (
-                <div className="juris-filtros-avanzados">
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                      Materia
-                    </label>
-                    <select value={materiaEnLinea} onChange={(e) => setMateriaEnLinea(e.target.value)}>
-                      <option value="">Todas las materias</option>
-                      <option value="Civil">Civil</option>
-                      <option value="Penal">Penal</option>
-                      <option value="Social">Social / Laboral</option>
-                      <option value="Contencioso">Contencioso Administrativo</option>
-                      <option value="Familia">Familia</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                      Gestión (Año)
-                    </label>
-                    <select value={gestionEnLinea} onChange={(e) => setGestionEnLinea(e.target.value)}>
-                      <option value="">Todas las gestiones</option>
-                      {ANIOS_GESTION.map((y) => (
-                        <option key={y} value={String(y)}>
-                          {y}
-                        </option>
-                      ))}
-                    </select>
+                    <button
+                      type="submit"
+                      className="btn btn-pri juris-btn-submit"
+                      disabled={buscandoEnLinea}
+                    >
+                      <Icono n="rayo" tam={15} /> {buscandoEnLinea ? 'Buscando...' : 'Buscar'}
+                    </button>
                   </div>
                 </div>
               )}
             </form>
-          </>
+          </div>
         ) : (
-          /* ================= PANEL DE BÚSQUEDA EN BIBLIOTECA (Q6, Q7, Q10) ================= */
-          <form onSubmit={alEnviar} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="juris-busqueda-input-group">
-              <input
-                type="search"
-                className="buscar"
-                placeholder="Buscar en fallos guardados por texto, número de resolución o resumen..."
-                value={textoBib}
-                onChange={(e) => setTextoBib(e.target.value)}
-              />
-              <button type="submit" className="btn btn-pri" disabled={buscandoBib}>
-                <Icono n="buscar" tam={16} /> {buscandoBib ? 'Buscando...' : 'Buscar en Biblioteca'}
-              </button>
-            </div>
+          /* ================= PANEL DE BIBLIOTECA LOCAL ================= */
+          <div className="juris-biblioteca-flow">
+            <form onSubmit={alEnviar} className="juris-bib-form">
+              <div className="juris-bib-topbar">
+                {/* Selector rápido de origen en biblioteca */}
+                <div className="juris-grupo-fuentes">
+                  <button
+                    type="button"
+                    className={`juris-btn-fuente ${origenBib === 'TODOS' ? 'activa' : ''}`}
+                    onClick={() => {
+                      setOrigenBib('TODOS');
+                      ejecutarBusquedaBiblioteca(1, { origen: 'TODOS' });
+                    }}
+                  >
+                    🌐 Todos ({totalGuardadas})
+                  </button>
+                  <button
+                    type="button"
+                    className={`juris-btn-fuente ${origenBib === 'TSJ' ? 'activa' : ''}`}
+                    onClick={() => {
+                      setOrigenBib('TSJ');
+                      ejecutarBusquedaBiblioteca(1, { origen: 'TSJ' });
+                    }}
+                  >
+                    🏛️ TSJ
+                  </button>
+                  <button
+                    type="button"
+                    className={`juris-btn-fuente ${origenBib === 'TCP' ? 'activa' : ''}`}
+                    onClick={() => {
+                      setOrigenBib('TCP');
+                      ejecutarBusquedaBiblioteca(1, { origen: 'TCP' });
+                    }}
+                  >
+                    ⚖️ TCP
+                  </button>
+                </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                  Origen
-                </label>
-                <select value={origenBib} onChange={(e) => setOrigenBib(e.target.value as 'TODOS' | 'TSJ' | 'TCP')}>
-                  <option value="TODOS">Todos los orígenes (TSJ y TCP)</option>
-                  <option value="TSJ">Tribunal Supremo (TSJ)</option>
-                  <option value="TCP">Tribunal Constitucional (TCP)</option>
-                </select>
+                <span className="juris-bib-stats">
+                  💾 Resoluciones guardadas offline en tu disco local
+                </span>
               </div>
 
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                  Sala
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Sala Penal, Civil..."
-                  value={salaBib}
-                  onChange={(e) => setSalaBib(e.target.value)}
-                />
-              </div>
+              <div className="juris-bib-search-row">
+                <div className="juris-input-wrapper" style={{ flex: 1 }}>
+                  <span className="juris-input-icon">
+                    <Icono n="buscar" tam={16} />
+                  </span>
+                  <input
+                    type="search"
+                    className="juris-input-texto"
+                    placeholder="Buscar en tu biblioteca por texto, número de resolución, magistrado o proceso..."
+                    value={textoBib}
+                    onChange={(e) => setTextoBib(e.target.value)}
+                  />
+                  {textoBib && (
+                    <button
+                      type="button"
+                      className="juris-input-clear"
+                      onClick={() => setTextoBib('')}
+                      title="Limpiar"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                  Materia
-                </label>
                 <input
                   type="text"
-                  placeholder="Ej: Civil, Penal, Amparo..."
+                  placeholder="Materia (ej: Civil, Amparo)..."
                   value={materiaBib}
                   onChange={(e) => setMateriaBib(e.target.value)}
+                  className="juris-mini-input"
+                  style={{ width: '180px' }}
                 />
-              </div>
 
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--texto-3)', display: 'block', marginBottom: '4px' }}>
-                  Gestión (Año)
-                </label>
                 <input
                   type="text"
-                  placeholder="Ej: 2024..."
+                  placeholder="Gestión (año)..."
                   value={gestionBib}
                   onChange={(e) => setGestionBib(e.target.value)}
+                  className="juris-mini-input"
+                  style={{ width: '120px' }}
                 />
+
+                <button type="submit" className="btn btn-pri juris-btn-submit" disabled={buscandoBib}>
+                  <Icono n="buscar" tam={15} /> {buscandoBib ? 'Buscando...' : 'Filtrar'}
+                </button>
               </div>
-            </div>
-          </form>
+            </form>
+          </div>
         )}
       </div>
 
       {errorActual && <Aviso error={errorActual} />}
 
-      {/* Resultados de Búsqueda */}
+      {/* ESTADO DE CARGA */}
       {buscandoActual ? (
-        <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--texto-3)' }}>
-          <p style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
-            {pestana === 'en_linea' ? 'Consultando servidores de jurisprudencia...' : 'Buscando en tu base de datos local...'}
+        <div className="juris-cargando-estado">
+          <div className="juris-spinner" />
+          <p className="juris-cargando-texto">
+            {pestana === 'en_linea'
+              ? 'Consultando fuentes jurisprudenciales en tiempo real...'
+              : 'Consultando biblioteca local...'}
           </p>
-          <span style={{ fontSize: '0.88rem' }}>Cargando resultados...</span>
         </div>
       ) : resultadosActuales && resultadosActuales.items.length > 0 ? (
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '14px',
-              color: 'var(--texto-3)',
-              fontSize: '0.9rem',
-            }}
-          >
-            <span>
-              <strong>{resultadosActuales.total.toLocaleString()}</strong> resoluciones encontradas
-            </span>
-            <span>
+        <div className="juris-resultados-contenedor">
+          {/* Cabecera de resultados */}
+          <div className="juris-resultados-header">
+            <div className="juris-resultados-contador">
+              <span className="juris-conteo-num">{resultadosActuales.total.toLocaleString()}</span>
+              <span>resoluciones encontradas</span>
+              <span className="juris-badge-orden">📅 Más recientes primero</span>
+            </div>
+
+            <span className="juris-paginacion-info">
               Página {resultadosActuales.pagina} de {resultadosActuales.totalPaginas}
             </span>
           </div>
 
-          <div className="juris-lista-resultados">
-            {resultadosActuales.items.map((r) => (
-              <div key={`${r.origen}-${r.id}`} className="juris-tarjeta">
-                <div className="juris-tarjeta-cab">
-                  <div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
-                      <Insignia tono={r.origen === 'TSJ' ? 'ambar' : 'azul'}>
-                        {r.origen === 'TSJ' ? 'TSJ' : 'TCP'} · {r.tipoResolucion}
-                      </Insignia>
-                      {r.sala && <Insignia tono="gris">{r.sala}</Insignia>}
-                      {r.departamento && <Insignia tono="gris">{r.departamento}</Insignia>}
-                      {r.guardadaLocal && <Insignia tono="verde">En Biblioteca</Insignia>}
-                      {r.fechaEmision && (
-                        <span style={{ fontSize: '0.82rem', color: 'var(--texto-3)' }}>
-                          {r.fechaEmision}
+          {/* LISTADO DE TARJETAS REDISEÑADAS */}
+          <div className="juris-lista-tarjetas">
+            {resultadosActuales.items.map((r) => {
+              const forma = r.formaResolucion?.trim();
+              const tonoForma = clasificarForma(forma);
+
+              return (
+                <article
+                  key={`${r.origen}-${r.id}`}
+                  className={`juris-tarjeta-item juris-tarjeta-${r.origen.toLowerCase()}`}
+                >
+                  {/* Topbar de la tarjeta: Identificador y FECHA DESTACADA */}
+                  <div className="juris-tarjeta-topbar">
+                    <div className="juris-tarjeta-etiquetas">
+                      <span className={`juris-chip-origen juris-chip-${r.origen.toLowerCase()}`}>
+                        {r.origen === 'TSJ' ? '🏛️ TSJ' : '⚖️ TCP'}
+                      </span>
+                      {r.sala && <span className="juris-chip-sala">{r.sala}</span>}
+                      {r.guardadaLocal && (
+                        <span className="juris-chip-guardada">
+                          <Icono n="ok" tam={12} /> Guardada
                         </span>
                       )}
                     </div>
 
-                    {/* Título de resolución con accesibilidad para teclado */}
+                    {/* FECHA DE EMISIÓN DESTACADA */}
+                    {r.fechaEmision && (
+                      <div className="juris-fecha-destacada" title="Fecha oficial de emisión">
+                        <Icono n="calendario" tam={14} />
+                        <span className="juris-fecha-valor">{r.fechaEmision}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Título: Solo el N° de Resolución (sin repetir 'Auto Supremo') y Expediente */}
+                  <div className="juris-tarjeta-cabecera">
                     <button
                       type="button"
-                      className="juris-tarjeta-titulo"
-                      style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }}
+                      className="juris-tarjeta-titulo-btn"
                       onClick={() => setResolucionDetalle(r)}
-                      title="Ver resolución completa"
+                      title="Abrir resolución completa"
                     >
-                      {r.tipoResolucion} {r.numeroResolucion}
-                      {r.numeroExpediente && ` (Exp. ${r.numeroExpediente})`}
+                      <span className="juris-tarjeta-num">{r.numeroResolucion}</span>
+                      {r.numeroExpediente && (
+                        <span className="juris-expediente-badge">Exp. {r.numeroExpediente}</span>
+                      )}
                     </button>
-                  </div>
-                </div>
 
-                {/* Partes procesales si están presentes */}
-                {(r.demandante || r.demandado) && (
-                  <div style={{ fontSize: '0.85rem', color: 'var(--texto-2)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                    {r.demandante && <span><strong>Demandante:</strong> {r.demandante}</span>}
-                    {r.demandado && <span><strong>Demandado:</strong> {r.demandado}</span>}
-                  </div>
-                )}
-
-                {/* Extracto resumido */}
-                {r.resumen && (
-                  <div
-                    className="juris-tarjeta-extracto"
-                    dangerouslySetInnerHTML={{ __html: sanearTextoExtracto(r.resumen) }}
-                  />
-                )}
-
-                {/* Botonera de acciones rápidas */}
-                <div className="juris-tarjeta-acciones">
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="btn btn-sec btn-sm"
-                      onClick={() => setResolucionDetalle(r)}
-                      title="Leer resolución completa"
-                    >
-                      <Icono n="libro" tam={14} /> Ver Resolución
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sec btn-sm"
-                      onClick={() => copiarCita(r)}
-                      title="Copiar cita formal al portapapeles"
-                    >
-                      <Icono n="documento" tam={14} /> Copiar Cita
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sec btn-sm"
-                      onClick={() => setResolucionVincular(r)}
-                      title="Vincular a un caso del despacho"
-                    >
-                      <Icono n="carpeta" tam={14} /> Vincular a Caso
-                    </button>
+                    {/* Partes procesales compactas */}
+                    {(r.demandante || r.demandado) && (
+                      <div className="juris-partes-fila">
+                        {r.demandante && (
+                          <span className="juris-parte-item">
+                            <strong>Dte:</strong> {r.demandante}
+                          </span>
+                        )}
+                        {r.demandante && r.demandado && <span className="juris-vs">vs</span>}
+                        {r.demandado && (
+                          <span className="juris-parte-item">
+                            <strong>Ddo:</strong> {r.demandado}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      type="button"
-                      className="btn btn-sec btn-sm"
-                      onClick={() => descargarPdf(r)}
-                      disabled={procesandoId === r.id}
-                      title="Descargar archivo PDF oficial"
-                    >
-                      <Icono n="documento" tam={14} /> {r.rutaPdf ? 'Abrir PDF' : 'Descargar PDF'}
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${r.guardadaLocal ? 'btn-sec' : 'btn-pri'}`}
-                      onClick={() => alternarGuardado(r)}
-                      disabled={procesandoId === r.id}
-                      title={r.guardadaLocal ? 'Quitar de mi biblioteca' : 'Guardar en mi biblioteca local'}
-                    >
-                      <Icono n={r.guardadaLocal ? 'ok' : 'mas'} tam={14} />{' '}
-                      {r.guardadaLocal ? 'Guardada' : 'Guardar'}
-                    </button>
+                  {/* ================= FILA COMPACTA DE METADATOS CLAVE ================= */}
+                  {/* Forma de Resolución | Proceso | Departamento | Magistrado */}
+                  <div className="juris-meta-fila-compacta">
+                    {forma && (
+                      <div className="juris-meta-item">
+                        <span className="juris-meta-k">Forma:</span>
+                        <span className={`juris-forma-chip juris-forma-${tonoForma}`}>
+                          {forma}
+                        </span>
+                      </div>
+                    )}
+
+                    {r.proceso && (
+                      <div className="juris-meta-item" title={r.proceso}>
+                        <span className="juris-meta-k">Proceso:</span>
+                        <span className="juris-meta-v">📋 {r.proceso}</span>
+                      </div>
+                    )}
+
+                    {r.departamento && (
+                      <div className="juris-meta-item">
+                        <span className="juris-meta-k">Distrito:</span>
+                        <span className="juris-meta-v">📍 {r.departamento}</span>
+                      </div>
+                    )}
+
+                    {r.magistrado && (
+                      <div className="juris-meta-item" title={r.magistrado}>
+                        <span className="juris-meta-k">Magistrado:</span>
+                        <span className="juris-meta-v">👨‍⚖️ {r.magistrado}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
+
+                  {/* Máxima jurisprudencial o descripción de búsqueda (filtrando duplicados de Proceso) */}
+                  {r.maxima ? (
+                    <div className="juris-tarjeta-maxima-caja">
+                      <strong className="juris-maxima-rotulo">Máxima:</strong>{' '}
+                      <span
+                        className="juris-maxima-cuerpo"
+                        dangerouslySetInnerHTML={{
+                          __html: sanearTextoExtracto(r.maxima, pestana === 'en_linea' ? textoEnLinea : textoBib),
+                        }}
+                      />
+                    </div>
+                  ) : debeMostrarResumen(r.resumen, r.proceso) ? (
+                    <div
+                      className="juris-tarjeta-resumen-caja"
+                      dangerouslySetInnerHTML={{
+                        __html: sanearTextoExtracto(r.resumen!, pestana === 'en_linea' ? textoEnLinea : textoBib),
+                      }}
+                    />
+                  ) : null}
+
+                  {/* Botonera de acciones compacta en una sola fila */}
+                  <div className="juris-tarjeta-acciones-fila">
+                    <div className="juris-acciones-primarias">
+                      <button
+                        type="button"
+                        className="btn btn-pri btn-sm"
+                        onClick={() => setResolucionDetalle(r)}
+                        title="Ver texto completo y ficha de análisis"
+                      >
+                        <Icono n="libro" tam={14} /> Ver Resolución
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sec btn-sm"
+                        onClick={() => copiarCita(r)}
+                        title="Copiar cita formal al portapapeles"
+                      >
+                        <Icono n="documento" tam={14} /> Copiar Cita
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sec btn-sm"
+                        onClick={() => setResolucionVincular(r)}
+                        title="Vincular a un caso del despacho"
+                      >
+                        <Icono n="carpeta" tam={14} /> Vincular
+                      </button>
+                    </div>
+
+                    <div className="juris-acciones-secundarias">
+                      <button
+                        type="button"
+                        className="btn btn-sec btn-sm"
+                        onClick={() => descargarPdf(r)}
+                        disabled={procesandoId === r.id}
+                        title={r.rutaPdf ? 'Abrir archivo PDF oficial guardado' : 'Descargar PDF oficial'}
+                      >
+                        <Icono n="documento" tam={14} /> {r.rutaPdf ? 'Abrir PDF' : 'Descargar PDF'}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${r.guardadaLocal ? 'btn-sec juris-btn-guardada-activa' : 'btn-pri'}`}
+                        onClick={() => alternarGuardado(r)}
+                        disabled={procesandoId === r.id}
+                        title={r.guardadaLocal ? 'Quitar de la biblioteca' : 'Guardar offline en la biblioteca'}
+                      >
+                        <Icono n={r.guardadaLocal ? 'ok' : 'mas'} tam={14} />
+                        {r.guardadaLocal ? 'Guardada' : 'Guardar'}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
 
-          {/* Paginación */}
+          {/* Paginación limpia */}
           {resultadosActuales.totalPaginas > 1 && (
-            <div className="juris-paginacion">
+            <div className="juris-paginador-barra">
               <button
                 type="button"
-                className="btn btn-sec"
+                className="btn btn-sec btn-sm"
                 disabled={paginaActual <= 1}
                 onClick={() =>
                   pestana === 'en_linea'
@@ -1038,12 +1058,12 @@ export function Jurisprudencia() {
               >
                 ← Anterior
               </button>
-              <span style={{ fontSize: '0.9rem', color: 'var(--texto-2)', padding: '0 8px' }}>
-                Página {paginaActual} de {resultadosActuales.totalPaginas}
+              <span className="juris-paginador-texto">
+                Página <strong>{paginaActual}</strong> de {resultadosActuales.totalPaginas}
               </span>
               <button
                 type="button"
-                className="btn btn-sec"
+                className="btn btn-sec btn-sm"
                 disabled={paginaActual >= resultadosActuales.totalPaginas}
                 onClick={() =>
                   pestana === 'en_linea'
@@ -1059,19 +1079,19 @@ export function Jurisprudencia() {
       ) : resultadosActuales ? (
         <Vacio
           titulo="Sin resultados coincidentes"
-          texto="No se encontraron fallos o autos supremos con los criterios indicados. Prueba ampliando la búsqueda o verificando los filtros."
+          texto="No se encontraron fallos o autos supremos con los criterios indicados. Intenta ampliar el término o revisar los filtros."
           icono="buscar"
         />
       ) : pestana === 'biblioteca' ? (
         <Vacio
           titulo="Tu biblioteca de jurisprudencia está vacía"
-          texto="Busca sentencias constitucionales o autos supremos en la pestaña «Búsqueda en Línea» y presiona «Guardar» para tenerlos disponibles sin conexión."
+          texto="Busca autos supremos o sentencias constitucionales en la pestaña «Búsqueda en Línea» y presiona «Guardar» para disponer de ellos offline."
           icono="libro"
         />
       ) : (
         <Vacio
-          titulo="Buscador de Jurisprudencia"
-          texto="Ingresa términos jurídicos o selecciona una modalidad de consulta arriba para explorar resoluciones de los tribunales bolivianos."
+          titulo="Buscador de Jurisprudencia Boliviana"
+          texto="Escribe términos jurídicos, selecciona una sala o introduce un número de resolución para explorar fallos oficiales."
           icono="tribunal"
         />
       )}
@@ -1084,39 +1104,25 @@ export function Jurisprudencia() {
           alCambiarGuardado={() => {
             if (pestana === 'biblioteca') {
               ejecutarBusquedaBiblioteca(paginaBib);
-            } else {
-              ejecutarBusquedaEnLinea(paginaEnLinea);
+            } else if (resultadosEnLinea) {
+              setResultadosEnLinea({
+                ...resultadosEnLinea,
+                items: resultadosEnLinea.items.map((it) =>
+                  it.id === resolucionDetalle.id ? { ...it, guardadaLocal: !it.guardadaLocal } : it
+                ),
+              });
             }
-          }}
-          abrirVincular={() => {
-            const r = resolucionDetalle;
-            setResolucionDetalle(null);
-            setResolucionVincular(r);
           }}
         />
       )}
 
-      {/* Modal para Vincular a Expediente */}
+      {/* Modal de Vincular a Caso */}
       {resolucionVincular && (
         <VincularExpedienteModal
           resolucion={resolucionVincular}
           cerrar={() => setResolucionVincular(null)}
           alVincular={() => {
-            if (pestana === 'biblioteca') {
-              ejecutarBusquedaBiblioteca(paginaBib);
-            } else {
-              setResultadosEnLinea((prev) => {
-                if (!prev) return null;
-                return {
-                  ...prev,
-                  items: prev.items.map((it) =>
-                    it.numeroResolucion === resolucionVincular.numeroResolucion && it.origen === resolucionVincular.origen
-                      ? { ...it, guardadaLocal: true }
-                      : it
-                  ),
-                };
-              });
-            }
+            avisar('Resolución vinculada al caso con éxito');
           }}
         />
       )}

@@ -1,9 +1,11 @@
-import type {
-  FiltroBusquedaJurisprudencia,
-  ResolucionJurisprudencia,
-  ResultadoPaginadoJurisprudencia,
+import {
+  deducirMetadatosTcp,
+  formatearFechaIsoBolivia,
+  parsearFechaEmision,
+  type FiltroBusquedaJurisprudencia,
+  type ResolucionJurisprudencia,
+  type ResultadoPaginadoJurisprudencia,
 } from '../../domain/jurisprudencia/jurisprudencia';
-import { formatearFechaIsoBolivia } from '../../domain/jurisprudencia/jurisprudencia';
 import type { IClienteTcp } from '../../application/puertos/jurisprudencia';
 import { fetchHttp } from './httpHelper';
 
@@ -118,6 +120,14 @@ export class ClienteTcp implements IClienteTcp {
       );
     }
 
+    // Ordenar resultados según la fecha de emisión en orden más reciente primero
+    filtrados.sort((a, b) => {
+      const tA = parsearFechaEmision(a.fecha);
+      const tB = parsearFechaEmision(b.fecha);
+      if (tB !== tA) return tB - tA;
+      return (Number(b.resolucionId) || 0) - (Number(a.resolucionId) || 0);
+    });
+
     const total = filtrados.length;
     const page = filtro.pagina ?? 1;
     const limit = filtro.limite ?? 15;
@@ -126,6 +136,7 @@ export class ClienteTcp implements IClienteTcp {
 
     const items: ResolucionJurisprudencia[] = paginaItems.map((item) => {
       const tipoReal = item.tipoResolucion?.trim() || 'Sentencia Constitucional Plurinacional';
+      const meta = deducirMetadatosTcp(item.numeroExpediente, item.referencia);
       return {
         id: String(item.resolucionId),
         idRemoto: String(item.resolucionId),
@@ -135,6 +146,9 @@ export class ClienteTcp implements IClienteTcp {
         numeroResolucion: item.resolucion,
         numeroExpediente: item.numeroExpediente,
         fechaEmision: formatearFechaIsoBolivia(item.fecha),
+        departamento: meta.departamento,
+        proceso: meta.proceso,
+        formaResolucion: meta.formaResolucion,
         resumen: item.referencia,
       };
     });

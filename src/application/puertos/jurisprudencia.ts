@@ -10,7 +10,7 @@ import type {
 export interface IClienteTsj {
   buscar(filtro: FiltroBusquedaJurisprudencia): Promise<ResultadoPaginadoJurisprudencia>;
   obtenerDetalle(id: string): Promise<ResolucionJurisprudencia>;
-  descargarPdf(id: string): Promise<{ buffer: Uint8Array; nombreArchivo: string }>;
+  descargarPdf(id: string, urlPdf?: string): Promise<{ buffer: Uint8Array; nombreArchivo: string }>;
   obtenerSalas(): Promise<SalaTsjCatalogo[]>;
   obtenerTiposResolucion(idSala?: number): Promise<TipoResolucionTsjCatalogo[]>;
 }

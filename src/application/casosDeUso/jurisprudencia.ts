@@ -7,6 +7,7 @@ import type {
 } from '../../domain/jurisprudencia/jurisprudencia';
 import {
   esPdfValido,
+  extraerMetadatosHtmlTcp,
   generarNombreArchivoPdf,
   mezclarDetalle,
 } from '../../domain/jurisprudencia/jurisprudencia';
@@ -137,7 +138,8 @@ export class JurisprudenciaCasosDeUso {
 
     if (resolucion.origen === 'TCP') {
       const html = await this.tcp.obtenerDocumentoHtml(idRemoto);
-      return mezclarDetalle(resolucion, { contenidoHtml: html });
+      const metadatosTcp = extraerMetadatosHtmlTcp(html);
+      return mezclarDetalle(resolucion, { ...metadatosTcp, contenidoHtml: html });
     }
 
     return resolucion;
@@ -149,7 +151,7 @@ export class JurisprudenciaCasosDeUso {
     let res: { buffer: Uint8Array; nombreArchivo: string };
 
     if (resolucion.origen === 'TSJ') {
-      res = await this.tsj.descargarPdf(idRemoto);
+      res = await this.tsj.descargarPdf(idRemoto, resolucion.urlPdf);
     } else {
       res = await this.tcp.descargarPdf(idRemoto);
     }

@@ -1,9 +1,10 @@
-import type {
-  FiltroBusquedaJurisprudencia,
-  ResolucionJurisprudencia,
-  ResultadoPaginadoJurisprudencia,
-  SalaTsjCatalogo,
-  TipoResolucionTsjCatalogo,
+import {
+  ordenarResolucionesPorFechaDesc,
+  type FiltroBusquedaJurisprudencia,
+  type ResolucionJurisprudencia,
+  type ResultadoPaginadoJurisprudencia,
+  type SalaTsjCatalogo,
+  type TipoResolucionTsjCatalogo,
 } from '../../domain/jurisprudencia/jurisprudencia';
 import type { IClienteTsj } from '../../application/puertos/jurisprudencia';
 import { fetchHttp } from './httpHelper';
@@ -28,12 +29,17 @@ interface TsjItem {
   fecha_emision: string;
   sala?: string;
   tipo_resolucion?: string;
+  subtipo_resolucion?: string;
   formas_resoluciones?: string;
+  forma_resolucion?: string;
+  magistrado?: string;
+  materia?: string;
   resumen?: string;
   departamento?: string;
   demandante?: string;
   demandado?: string;
   procesos?: string;
+  proceso?: string;
 }
 
 interface TsjSearchResponse {
@@ -47,29 +53,6 @@ interface TsjSearchResponse {
       totalPages: number;
     };
     data: TsjItem[];
-  };
-}
-
-interface TsjDetailResponse {
-  success: boolean;
-  message?: string;
-  data: {
-    id: number | string;
-    nro_resolucion: string;
-    nro_expediente?: string;
-    fecha_emision: string;
-    demandante?: string;
-    demandado?: string;
-    departamento?: string;
-    sala?: string;
-    tipo_resolucion: string;
-    subtipo_resolucion?: string;
-    magistrado?: string;
-    materia?: string;
-    formas_resoluciones?: string;
-    contenido?: string;
-    tiene_html?: boolean;
-    url_pdf_escaneado?: string;
   };
 }
 
@@ -94,6 +77,7 @@ const SALAS_FALLBACK: SalaTsjCatalogo[] = [
 export class ClienteTsj implements IClienteTsj {
   private salasCache: SalaTsjCatalogo[] | null = null;
   private tiposResCache = new Map<number | string, TipoResolucionTsjCatalogo[]>();
+  private cacheGestion = new Map<string, { items: ResolucionJurisprudencia[]; timestamp: number }>();
 
   async obtenerSalas(): Promise<SalaTsjCatalogo[]> {
     if (this.salasCache) return this.salasCache;
@@ -150,6 +134,20 @@ export class ClienteTsj implements IClienteTsj {
     const limit = filtro.limite ?? 15;
     const modalidad = filtro.modalidadTsj ?? 'simple';
 
+    // 1. Modalidad Consulta por Gestión: descarga los registros de la gestión, los ordena
+    // por fecha de emisión en el más reciente (descendente) y pagina en memoria.
+    if (modalidad === 'gestion') {
+      if (!filtro.idSalaTsj) {
+        throw new Error('Para la consulta por gestión del TSJ debes seleccionar una Sala institucional.');
+      }
+      return await this.buscarPorGestion(
+        filtro.idSalaTsj,
+        filtro.gestion ? Number(filtro.gestion) : new Date().getFullYear(),
+        page,
+        limit
+      );
+    }
+
     let endpointUrl: string;
     let payload: Record<string, unknown>;
 
@@ -160,34 +158,23 @@ export class ClienteTsj implements IClienteTsj {
         payload = {
           nroExpediente: (filtro.nroExpediente || filtro.texto).trim(),
           idSala: filtro.idSalaTsj ?? null,
-          paginate: { page, limit },
+          paginate: { page, limit, sortBy: 'fecha_emision', order: 'desc' },
         };
       } else if (subcampo === 'partes') {
         endpointUrl = `${BASE_URL}/resoluciones/busqueda_por_partes`;
         payload = {
           searchText: (filtro.partes || filtro.texto).trim(),
           idSala: filtro.idSalaTsj ?? null,
-          paginate: { page, limit },
+          paginate: { page, limit, sortBy: 'fecha_emision', order: 'desc' },
         };
       } else {
         endpointUrl = `${BASE_URL}/resoluciones/busqueda_por_nro_resolucion`;
         payload = {
           nroResolucion: (filtro.nroResolucion || filtro.texto).trim(),
           idSala: filtro.idSalaTsj ?? null,
-          paginate: { page, limit },
+          paginate: { page, limit, sortBy: 'fecha_emision', order: 'desc' },
         };
       }
-    } else if (modalidad === 'gestion') {
-      if (!filtro.idSalaTsj) {
-        throw new Error('Para la consulta por gestión del TSJ debes seleccionar una Sala institucional.');
-      }
-      endpointUrl = `${BASE_URL}/resoluciones/busqueda_por_gestion`;
-      payload = {
-        idSala: filtro.idSalaTsj,
-        gestion: Number(filtro.gestion || new Date().getFullYear()),
-        idTipoRes: filtro.idTipoResTsj ?? null,
-        paginate: { page, limit },
-      };
     } else if (modalidad === 'avanzada') {
       endpointUrl = `${BASE_URL}/resoluciones/busqueda_avanzada`;
       let todas: string | null = null;
@@ -216,7 +203,7 @@ export class ClienteTsj implements IClienteTsj {
           ...(filtro.gestion ? { gestion: Number(filtro.gestion) } : {}),
           ...(filtro.materia ? { materia: filtro.materia } : {}),
         },
-        paginate: { page, limit },
+        paginate: { page, limit, sortBy: 'fecha_emision', order: 'desc' },
       };
     } else {
       endpointUrl = `${BASE_URL}/resoluciones/busqueda_simple`;
@@ -228,7 +215,7 @@ export class ClienteTsj implements IClienteTsj {
           ...(filtro.sala ? { sala: filtro.sala } : {}),
           ...(filtro.gestion ? { gestion: filtro.gestion } : {}),
         },
-        paginate: { page, limit },
+        paginate: { page, limit, sortBy: 'fecha_emision', order: 'desc' },
       };
     }
 
@@ -247,20 +234,28 @@ export class ClienteTsj implements IClienteTsj {
       throw new Error(json.message || 'Error en la respuesta del TSJ');
     }
 
-    const items: ResolucionJurisprudencia[] = (json.data?.data ?? []).map((item) => ({
+    const rawItems: ResolucionJurisprudencia[] = (json.data?.data ?? []).map((item) => ({
       id: String(item.id),
       idRemoto: String(item.id),
       origen: 'TSJ',
       tipoResolucion: item.tipo_resolucion || 'Auto Supremo',
+      subtipoResolucion: item.subtipo_resolucion,
       numeroResolucion: item.nro_resolucion,
       numeroExpediente: item.nro_expediente,
       fechaEmision: item.fecha_emision,
       sala: item.sala,
       departamento: item.departamento,
+      magistrado: item.magistrado,
+      proceso: item.procesos || item.proceso,
+      formaResolucion: item.formas_resoluciones || item.forma_resolucion,
+      materia: item.materia,
       demandante: item.demandante,
       demandado: item.demandado,
       resumen: item.resumen || (item.procesos ? `Proceso: ${item.procesos}` : undefined),
     }));
+
+    // Asegurar ordenamiento descendente por fecha de emisión (más reciente primero)
+    const items = ordenarResolucionesPorFechaDesc(rawItems);
 
     return {
       items,
@@ -270,22 +265,150 @@ export class ClienteTsj implements IClienteTsj {
     };
   }
 
+  private async buscarPorGestion(
+    idSala: number,
+    gestion: number,
+    page: number,
+    limit: number
+  ): Promise<ResultadoPaginadoJurisprudencia> {
+    const claveCache = `${idSala}_${gestion}`;
+    const ahora = Date.now();
+    const TTL_MS = 3 * 60 * 1000; // 3 minutos
+
+    let todosLosItems: ResolucionJurisprudencia[] | null = null;
+    const cacheado = this.cacheGestion.get(claveCache);
+
+    if (cacheado && (page > 1 || ahora - cacheado.timestamp < TTL_MS)) {
+      todosLosItems = cacheado.items;
+    }
+
+    if (!todosLosItems) {
+      const res = await fetchHttp(`${BASE_URL}/resoluciones/busqueda_por_gestion`, {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({
+          idSala,
+          gestion,
+          idTipoRes: null,
+          paginate: { page: 1, limit: 2000 },
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Error del servidor TSJ Génesis (${res.status}): ${res.statusText}`);
+      }
+
+      const json: TsjSearchResponse = await res.json();
+      if (json.success === false) {
+        throw new Error(json.message || 'Error en la respuesta del TSJ');
+      }
+
+      let rawItems: TsjItem[] = json.data?.data ?? [];
+      const totalPages = json.data?.meta?.totalPages ?? 1;
+
+      if (totalPages > 1) {
+        for (let p = 2; p <= totalPages; p++) {
+          try {
+            const resP = await fetchHttp(`${BASE_URL}/resoluciones/busqueda_por_gestion`, {
+              method: 'POST',
+              headers: HEADERS,
+              body: JSON.stringify({
+                idSala,
+                gestion,
+                idTipoRes: null,
+                paginate: { page: p, limit: 2000 },
+              }),
+            });
+            if (resP.ok) {
+              const jsonP: TsjSearchResponse = await resP.json();
+              if (jsonP.success !== false && Array.isArray(jsonP.data?.data)) {
+                rawItems = rawItems.concat(jsonP.data.data);
+              }
+            }
+          } catch {
+            break;
+          }
+        }
+      }
+
+      const mapeados: ResolucionJurisprudencia[] = rawItems.map((item) => ({
+        id: String(item.id),
+        idRemoto: String(item.id),
+        origen: 'TSJ',
+        tipoResolucion: item.tipo_resolucion || 'Auto Supremo',
+        subtipoResolucion: item.subtipo_resolucion,
+        numeroResolucion: item.nro_resolucion,
+        numeroExpediente: item.nro_expediente,
+        fechaEmision: item.fecha_emision,
+        sala: item.sala,
+        departamento: item.departamento,
+        magistrado: item.magistrado,
+        proceso: item.procesos || item.proceso,
+        formaResolucion: item.formas_resoluciones || item.forma_resolucion,
+        materia: item.materia,
+        demandante: item.demandante,
+        demandado: item.demandado,
+        resumen: item.resumen || (item.procesos ? `Proceso: ${item.procesos}` : undefined),
+      }));
+
+      todosLosItems = ordenarResolucionesPorFechaDesc(mapeados);
+      this.cacheGestion.set(claveCache, { items: todosLosItems, timestamp: ahora });
+    }
+
+    const total = todosLosItems.length;
+    const totalPaginas = Math.max(1, Math.ceil(total / limit));
+    const inicio = (page - 1) * limit;
+    const itemsPagina = todosLosItems.slice(inicio, inicio + limit);
+
+    return {
+      items: itemsPagina,
+      total,
+      pagina: page,
+      totalPaginas,
+    };
+  }
+
   async obtenerDetalle(id: string): Promise<ResolucionJurisprudencia> {
-    const res = await fetchHttp(`${BASE_URL}/resoluciones/${id}`, {
+    // Intentar primero con /jurisprudencia/:id que incluye las fichas jurisprudenciales completas
+    let res = await fetchHttp(`${BASE_URL}/jurisprudencia/${id}`, {
       method: 'GET',
       headers: HEADERS,
     });
 
     if (!res.ok) {
+      // Fallback a /resoluciones/:id
+      res = await fetchHttp(`${BASE_URL}/resoluciones/${id}`, {
+        method: 'GET',
+        headers: HEADERS,
+      });
+    }
+
+    if (!res.ok) {
       throw new Error(`No se pudo cargar el detalle del TSJ (${res.status})`);
     }
 
-    const json: TsjDetailResponse = await res.json();
+    const json = await res.json();
     if (json.success === false) {
       throw new Error(json.message || 'No se pudo obtener el detalle de la resolución');
     }
 
     const d = json.data;
+
+    // Procesar array de jurisprudencia (fichas jurisprudenciales oficiales)
+    const rawFichas = Array.isArray(d.jurisprudencia) ? d.jurisprudencia : [];
+    const fichas = rawFichas.map((j: Record<string, unknown>) => ({
+      id: j.id != null ? String(j.id) : undefined,
+      maxima: typeof j.maxima === 'string' ? j.maxima : undefined,
+      sintesis: typeof j.sintesis === 'string' ? j.sintesis : undefined,
+      ratioDecidendi: typeof j.ratio === 'string' ? j.ratio : undefined,
+      descriptor: typeof j.descriptor === 'string' ? j.descriptor : undefined,
+      restrictor: typeof j.restrictor === 'string' ? j.restrictor : undefined,
+      precedente: typeof j.precedente === 'string' ? j.precedente : undefined,
+      tipoJurisprudencia: typeof j.tipo_jurisprudencia === 'string' ? j.tipo_jurisprudencia : undefined,
+      formaResolucion: typeof d.formas_resoluciones === 'string' ? d.formas_resoluciones : undefined,
+    }));
+
+    const primeraFicha = fichas[0];
 
     return {
       id: String(d.id),
@@ -302,17 +425,51 @@ export class ClienteTsj implements IClienteTsj {
       demandante: d.demandante,
       demandado: d.demandado,
       materia: d.materia,
+      proceso: d.procesos || d.nro_expediente,
+      formaResolucion: d.formas_resoluciones,
+      tipoJurisprudencia: primeraFicha?.tipoJurisprudencia,
+      maxima: primeraFicha?.maxima,
+      sintesis: primeraFicha?.sintesis,
+      ratioDecidendi: primeraFicha?.ratioDecidendi,
+      descriptor: primeraFicha?.descriptor,
+      restrictor: primeraFicha?.restrictor,
+      precedente: primeraFicha?.precedente,
+      fichas: fichas.length > 0 ? fichas : undefined,
       contenidoHtml: d.contenido,
+      urlPdf: d.url_pdf_escaneado,
+      tieneHtml: d.tiene_html,
     };
   }
 
-  async descargarPdf(id: string): Promise<{ buffer: Uint8Array; nombreArchivo: string }> {
-    const res = await fetchHttp(`${BASE_URL}/resoluciones/${id}/pdf`, {
-      method: 'GET',
-      headers: HEADERS,
-    });
+  async descargarPdf(id: string, urlPdf?: string): Promise<{ buffer: Uint8Array; nombreArchivo: string }> {
+    let res: Response;
+    if (urlPdf) {
+      res = await fetchHttp(urlPdf, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/pdf, */*',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        },
+      });
+    } else {
+      res = await fetchHttp(`${BASE_URL}/resoluciones/${id}/pdf`, {
+        method: 'GET',
+        headers: HEADERS,
+      });
+    }
 
     if (!res.ok) {
+      if (!urlPdf) {
+        try {
+          const det = await this.obtenerDetalle(id);
+          if (det.urlPdf) {
+            return await this.descargarPdf(id, det.urlPdf);
+          }
+        } catch {
+          // Fallback omitido si detalle no tiene urlPdf
+        }
+      }
       throw new Error(`No se pudo descargar el PDF de la resolución TSJ (${res.status})`);
     }
 

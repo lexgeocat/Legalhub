@@ -1,4 +1,5 @@
 import type {
+  FichaAnalisisJurisprudencial,
   FiltroBusquedaJurisprudencia,
   OrigenJurisprudencia,
   ResolucionJurisprudencia,
@@ -12,27 +13,49 @@ import { nuevoId } from '../../domain/comun/id';
 
 const s = (v: unknown): string => (v == null ? '' : String(v));
 
-const filaAResolucion = (f: Fila): ResolucionJurisprudencia => ({
-  id: s(f.id),
-  idLocal: s(f.id),
-  idRemoto: f.id_remoto ? s(f.id_remoto) : undefined,
-  origen: s(f.origen) as OrigenJurisprudencia,
-  tipoResolucion: s(f.tipo_resolucion),
-  subtipoResolucion: f.subtipo_resolucion ? s(f.subtipo_resolucion) : undefined,
-  numeroResolucion: s(f.numero_resolucion),
-  numeroExpediente: f.numero_expediente ? s(f.numero_expediente) : undefined,
-  fechaEmision: s(f.fecha_emision),
-  sala: f.sala ? s(f.sala) : undefined,
-  departamento: f.departamento ? s(f.departamento) : undefined,
-  magistrado: f.magistrado ? s(f.magistrado) : undefined,
-  demandante: f.demandante ? s(f.demandante) : undefined,
-  demandado: f.demandado ? s(f.demandado) : undefined,
-  materia: f.materia ? s(f.materia) : undefined,
-  resumen: f.resumen ? s(f.resumen) : undefined,
-  contenidoHtml: f.contenido_html ? s(f.contenido_html) : undefined,
-  rutaPdf: f.ruta_pdf ? s(f.ruta_pdf) : undefined,
-  guardadaLocal: true,
-});
+const filaAResolucion = (f: Fila): ResolucionJurisprudencia => {
+  let fichas: FichaAnalisisJurisprudencial[] | undefined;
+  if (f.fichas_json) {
+    try {
+      const parsed = JSON.parse(s(f.fichas_json));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        fichas = parsed;
+      }
+    } catch {}
+  }
+
+  return {
+    id: s(f.id),
+    idLocal: s(f.id),
+    idRemoto: f.id_remoto ? s(f.id_remoto) : undefined,
+    origen: s(f.origen) as OrigenJurisprudencia,
+    tipoResolucion: s(f.tipo_resolucion),
+    subtipoResolucion: f.subtipo_resolucion ? s(f.subtipo_resolucion) : undefined,
+    numeroResolucion: s(f.numero_resolucion),
+    numeroExpediente: f.numero_expediente ? s(f.numero_expediente) : undefined,
+    fechaEmision: s(f.fecha_emision),
+    sala: f.sala ? s(f.sala) : undefined,
+    departamento: f.departamento ? s(f.departamento) : undefined,
+    magistrado: f.magistrado ? s(f.magistrado) : undefined,
+    demandante: f.demandante ? s(f.demandante) : undefined,
+    demandado: f.demandado ? s(f.demandado) : undefined,
+    materia: f.materia ? s(f.materia) : undefined,
+    proceso: f.proceso ? s(f.proceso) : undefined,
+    formaResolucion: f.forma_resolucion ? s(f.forma_resolucion) : undefined,
+    tipoJurisprudencia: f.tipo_jurisprudencia ? s(f.tipo_jurisprudencia) : undefined,
+    maxima: f.maxima ? s(f.maxima) : undefined,
+    sintesis: f.sintesis ? s(f.sintesis) : undefined,
+    ratioDecidendi: f.ratio_decidendi ? s(f.ratio_decidendi) : undefined,
+    descriptor: f.descriptor ? s(f.descriptor) : undefined,
+    restrictor: f.restrictor ? s(f.restrictor) : undefined,
+    precedente: f.precedente ? s(f.precedente) : undefined,
+    fichas,
+    resumen: f.resumen ? s(f.resumen) : undefined,
+    contenidoHtml: f.contenido_html ? s(f.contenido_html) : undefined,
+    rutaPdf: f.ruta_pdf ? s(f.ruta_pdf) : undefined,
+    guardadaLocal: true,
+  };
+};
 
 export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudencia {
   constructor(
@@ -60,6 +83,10 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
       rutaPdf = rutaCompleta;
     }
 
+    const fichasJson = resolucion.fichas && resolucion.fichas.length > 0
+      ? JSON.stringify(resolucion.fichas)
+      : null;
+
     if (existentes.length > 0) {
       await this.db.ejecutar(
         `UPDATE jurisprudencia_guardada SET
@@ -74,6 +101,16 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
           demandante = ?,
           demandado = ?,
           materia = ?,
+          proceso = ?,
+          forma_resolucion = ?,
+          tipo_jurisprudencia = ?,
+          maxima = ?,
+          sintesis = ?,
+          ratio_decidendi = ?,
+          descriptor = ?,
+          restrictor = ?,
+          precedente = ?,
+          fichas_json = coalesce(?, fichas_json),
           resumen = ?,
           contenido_html = coalesce(?, contenido_html),
           ruta_pdf = coalesce(?, ruta_pdf),
@@ -91,6 +128,16 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
           resolucion.demandante ?? null,
           resolucion.demandado ?? null,
           resolucion.materia ?? null,
+          resolucion.proceso ?? null,
+          resolucion.formaResolucion ?? null,
+          resolucion.tipoJurisprudencia ?? null,
+          resolucion.maxima ?? null,
+          resolucion.sintesis ?? null,
+          resolucion.ratioDecidendi ?? null,
+          resolucion.descriptor ?? null,
+          resolucion.restrictor ?? null,
+          resolucion.precedente ?? null,
+          fichasJson,
           resolucion.resumen ?? null,
           resolucion.contenidoHtml ?? null,
           rutaPdf,
@@ -103,9 +150,11 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
         `INSERT INTO jurisprudencia_guardada (
           id, id_remoto, origen, tipo_resolucion, subtipo_resolucion, numero_resolucion,
           numero_expediente, fecha_emision, sala, departamento, magistrado,
-          demandante, demandado, materia, resumen, contenido_html, ruta_pdf,
+          demandante, demandado, materia, proceso, forma_resolucion, tipo_jurisprudencia,
+          maxima, sintesis, ratio_decidendi, descriptor, restrictor, precedente,
+          fichas_json, resumen, contenido_html, ruta_pdf,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           idRemoto ?? null,
@@ -121,6 +170,16 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
           resolucion.demandante ?? null,
           resolucion.demandado ?? null,
           resolucion.materia ?? null,
+          resolucion.proceso ?? null,
+          resolucion.formaResolucion ?? null,
+          resolucion.tipoJurisprudencia ?? null,
+          resolucion.maxima ?? null,
+          resolucion.sintesis ?? null,
+          resolucion.ratioDecidendi ?? null,
+          resolucion.descriptor ?? null,
+          resolucion.restrictor ?? null,
+          resolucion.precedente ?? null,
+          fichasJson,
           resolucion.resumen ?? null,
           resolucion.contenidoHtml ?? null,
           rutaPdf,
@@ -195,7 +254,9 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
     const filas = await this.db.consultar<Fila>(
       `SELECT j.id, j.id_remoto, j.origen, j.tipo_resolucion, j.subtipo_resolucion, j.numero_resolucion,
               j.numero_expediente, j.fecha_emision, j.sala, j.departamento, j.magistrado,
-              j.demandante, j.demandado, j.materia, j.resumen, j.ruta_pdf
+              j.demandante, j.demandado, j.materia, j.proceso, j.forma_resolucion, j.tipo_jurisprudencia,
+              j.maxima, j.sintesis, j.ratio_decidendi, j.descriptor, j.restrictor, j.precedente,
+              j.fichas_json, j.resumen, j.ruta_pdf
        ${fromClausula} ${whereStr} ORDER BY j.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -249,7 +310,9 @@ export class RepositorioJurisprudenciaSqlite implements IRepositorioJurisprudenc
     const filas = await this.db.consultar<Fila>(
       `SELECT j.id, j.id_remoto, j.origen, j.tipo_resolucion, j.subtipo_resolucion, j.numero_resolucion,
               j.numero_expediente, j.fecha_emision, j.sala, j.departamento, j.magistrado,
-              j.demandante, j.demandado, j.materia, j.resumen, j.ruta_pdf, je.notas as resumen_vinculo
+              j.demandante, j.demandado, j.materia, j.proceso, j.forma_resolucion, j.tipo_jurisprudencia,
+              j.maxima, j.sintesis, j.ratio_decidendi, j.descriptor, j.restrictor, j.precedente,
+              j.fichas_json, j.resumen, j.ruta_pdf, je.notas as resumen_vinculo
        FROM jurisprudencia_guardada j
        JOIN jurisprudencia_expediente je ON je.jurisprudencia_id = j.id
        WHERE je.expediente_id = ?

@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatearCitaJurisprudencial,
+  formatearFichaJurisprudencial,
   sanearTextoExtracto,
   sanearContenidoHtml,
   generarNombreArchivoPdf,
   mezclarDetalle,
   esPdfValido,
   formatearFechaIsoBolivia,
+  parsearFechaEmision,
+  extraerNumeroResolucion,
+  ordenarResolucionesPorFechaDesc,
+  debeMostrarResumen,
   type ResolucionJurisprudencia,
 } from '../src/domain/jurisprudencia/jurisprudencia';
 
@@ -44,10 +49,12 @@ describe('Jurisprudencia Domain', () => {
     );
   });
 
-  it('sanea extractos HTML reemplazando estilos de resaltado con etiquetas mark', () => {
-    const raw = "dentro del <span style='background-color:#FFFF00;'><b>proceso</b></span> seguido";
-    const limpio = sanearTextoExtracto(raw);
-    expect(limpio).toBe('dentro del <mark><b>proceso</b></mark> seguido');
+  it('sanea extractos HTML reemplazando estilos de resaltado y etiquetas de TSJ con etiquetas mark', () => {
+    const rawTcp = "dentro del <span style='background-color:#FFFF00;'><b>proceso</b></span> seguido";
+    expect(sanearTextoExtracto(rawTcp)).toBe('dentro del <mark>proceso</mark> seguido');
+
+    const rawTsj = 'del proceso de <b>Asistencia</b> <b>Familiar</b> seguido';
+    expect(sanearTextoExtracto(rawTsj)).toBe('del proceso de <mark>Asistencia</mark> <mark>Familiar</mark> seguido');
   });
 
   it('sanitiza HTML eliminando enlaces, scripts e iframes potencialmente maliciosos (S1)', () => {
@@ -108,4 +115,133 @@ describe('Jurisprudencia Domain', () => {
   it('formatea fechas ISO bolivianas sin desfase UTC-4 (Q15)', () => {
     expect(formatearFechaIsoBolivia('2024-05-10')).toBe('10 de mayo de 2024');
   });
+
+  it('formatea la Ficha de Análisis Jurisprudencial completa con todos los campos necesarios', () => {
+    const res: ResolucionJurisprudencia = {
+      id: '32703',
+      origen: 'TSJ',
+      tipoResolucion: 'Auto Supremo',
+      numeroResolucion: 'AS/0169/2019',
+      numeroExpediente: 'O-4-19-Com.',
+      fechaEmision: '27/02/2019',
+      sala: 'Sala Civil',
+      magistrado: 'Juan Carlos Berrios Albizu',
+      formaResolucion: 'Legal',
+      tipoJurisprudencia: 'Reiteradora',
+      descriptor: 'Derecho Civil / Derecho Procesal Civil / Recursos / Recurso de Compulsa / Legal',
+      restrictor: 'Por no aplicarse la ultractividad de la norma que permitia la concesión del recurso de casación',
+      maxima: 'ULTRA ACTIVIDAD DE LA NORMA PROCESAL/La ley derogatoria en ciertos casos...',
+      sintesis: 'El recurrente reclamó que el Tribunal Ad quem...',
+      ratioDecidendi: '… de acuerdo a los antecedentes contenidos en la Sentencia Nº 057/2018...',
+      precedente: 'Ley Nº 548, Código Niña, Niño y Adolescente...',
+    };
+
+    const fichaTexto = formatearFichaJurisprudencial(res);
+    expect(fichaTexto).toContain('FICHA DE ANÁLISIS JURISPRUDENCIAL');
+    expect(fichaTexto).toContain('Sala:                   Sala Civil');
+    expect(fichaTexto).toContain('N° de Resolución:       Auto Supremo AS/0169/2019');
+    expect(fichaTexto).toContain('MÁXIMA:');
+    expect(fichaTexto).toContain('ULTRA ACTIVIDAD DE LA NORMA PROCESAL');
+    expect(fichaTexto).toContain('EXTRACTO DE LA RATIO DECIDENDI:');
+    expect(fichaTexto).toContain('DESCRIPTOR:');
+    expect(fichaTexto).toContain('RESTRICTOR:');
+    expect(fichaTexto).toContain('PRECEDENTE / NORMA APLICADA:');
+    expect(fichaTexto).toContain('Forma de Resolución:    Legal');
+    expect(fichaTexto).toContain('Tipo de Jurisprudencia: Reiteradora');
+  });
+
+  it('parsea correctamente fechas bolivianas en formatos DD/MM/YYYY, DD-MM-YYYY y YYYY-MM-DD', () => {
+    const f1 = parsearFechaEmision('27/12/2024');
+    const f2 = parsearFechaEmision('05-01/2024');
+    const f3 = parsearFechaEmision('2024-06-15');
+
+    expect(f1).toBeGreaterThan(f2);
+    expect(f1).toBeGreaterThan(f3);
+    expect(f3).toBeGreaterThan(f2);
+    expect(parsearFechaEmision(undefined)).toBe(0);
+    expect(parsearFechaEmision('')).toBe(0);
+  });
+
+  it('extrae el número correlativo de una resolución para desempates', () => {
+    expect(extraerNumeroResolucion('AS/1471/2024-RI')).toBe(1471);
+    expect(extraerNumeroResolucion('AS/0002/2024')).toBe(2);
+    expect(extraerNumeroResolucion('3593/2026-S1')).toBe(3593);
+    expect(extraerNumeroResolucion(undefined)).toBe(0);
+  });
+
+  it('ordena resoluciones por fecha de emisión en el más reciente (descendente)', () => {
+    const lista: ResolucionJurisprudencia[] = [
+      {
+        id: '1',
+        origen: 'TSJ',
+        tipoResolucion: 'Auto Supremo',
+        numeroResolucion: 'AS/0001/2024-RA',
+        fechaEmision: '05/01/2024',
+      },
+      {
+        id: '2',
+        origen: 'TSJ',
+        tipoResolucion: 'Auto Supremo',
+        numeroResolucion: 'AS/1424/2024',
+        fechaEmision: '27/12/2024',
+      },
+      {
+        id: '3',
+        origen: 'TSJ',
+        tipoResolucion: 'Auto Supremo',
+        numeroResolucion: 'AS/0500/2024',
+        fechaEmision: '15/06/2024',
+      },
+      {
+        id: '4',
+        origen: 'TSJ',
+        tipoResolucion: 'Auto Supremo',
+        numeroResolucion: 'AS/1470/2024-RA',
+        fechaEmision: '06/12/2024',
+      },
+      {
+        id: '5',
+        origen: 'TSJ',
+        tipoResolucion: 'Auto Supremo',
+        numeroResolucion: 'AS/1471/2024-RI',
+        fechaEmision: '06/12/2024',
+      },
+    ];
+
+    const ordenadas = ordenarResolucionesPorFechaDesc(lista);
+
+    expect(ordenadas.map((r) => r.numeroResolucion)).toEqual([
+      'AS/1424/2024',    // 27/12/2024 (el más reciente)
+      'AS/1471/2024-RI', // 06/12/2024 (desempate por correlativo 1471 > 1470)
+      'AS/1470/2024-RA', // 06/12/2024
+      'AS/0500/2024',    // 15/06/2024
+      'AS/0001/2024-RA', // 05/01/2024 (el más antiguo)
+    ]);
+  });
+
+  it('debeMostrarResumen descarta resúmenes que sólo duplican el proceso y conserva descripciones válidas', () => {
+    // Casos que duplican el proceso (devueltos por TSJ Génesis)
+    expect(debeMostrarResumen('Proceso: Violación', 'Violación')).toBe(false);
+    expect(debeMostrarResumen('proceso: violación', 'Violación')).toBe(false);
+    expect(debeMostrarResumen('Violación', 'Violación')).toBe(false);
+    expect(debeMostrarResumen('<b>Proceso: Violación</b>', 'Violación')).toBe(false);
+    expect(debeMostrarResumen('Proceso:', 'Violación')).toBe(false);
+    expect(debeMostrarResumen(undefined, 'Violación')).toBe(false);
+
+    // Casos donde hay una descripción sustancial o coincidencia de búsqueda por palabras
+    expect(
+      debeMostrarResumen(
+        'En los delitos contra la libertad sexual la declaración de la víctima adquiere relevancia...',
+        'Violación'
+      )
+    ).toBe(true);
+    expect(
+      debeMostrarResumen(
+        'El recurrente alega errónea valoración probatoria respecto al tipo penal de <mark>violación</mark>...',
+        'Violación'
+      )
+    ).toBe(true);
+  });
 });
+
+

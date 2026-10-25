@@ -17,7 +17,7 @@ import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { esMateriaRecomendada } from '../../domain/modelos/fuenteModelo';
 import { contextoDeFuente } from '../../domain/modelos/marcadores';
 import type { ResolucionJurisprudencia } from '../../domain/jurisprudencia/jurisprudencia';
-import { formatearCitaJurisprudencial } from '../../domain/jurisprudencia/jurisprudencia';
+import { formatearCitaJurisprudencial, formatearFichaJurisprudencial } from '../../domain/jurisprudencia/jurisprudencia';
 import { DetalleResolucionModal } from '../jurisprudencia/DetalleResolucionModal';
 
 type PestanaExp = 'modelo' | 'partes' | 'datos' | 'documentos' | 'jurisprudencia';
@@ -511,6 +511,16 @@ function TabJurisprudenciaExpediente({
         }
     }
 
+    async function copiarFicha(r: ResolucionJurisprudencia) {
+        const fichaTxt = formatearFichaJurisprudencial(r);
+        try {
+            await navigator.clipboard.writeText(fichaTxt);
+            avisar('Ficha jurisprudencial copiada al portapapeles');
+        } catch {
+            avisar('No se pudo copiar automáticamente', 'error');
+        }
+    }
+
     async function abrirPdf(r: ResolucionJurisprudencia) {
         try {
             if (r.rutaPdf) {
@@ -540,22 +550,31 @@ function TabJurisprudenciaExpediente({
                     {juris.map((r) => (
                         <div key={r.id} className="tarjeta">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
-                                <div>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                                <div style={{ flex: 1, minWidth: '260px' }}>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
                                         <Insignia tono={r.origen === 'TSJ' ? 'ambar' : 'azul'}>
                                             {r.origen} · {r.tipoResolucion}
                                         </Insignia>
                                         {r.sala && <Insignia tono="gris">{r.sala}</Insignia>}
                                         {r.fechaEmision && <span className="suave" style={{ fontSize: '0.82rem' }}>{r.fechaEmision}</span>}
+                                        {r.tipoJurisprudencia && <Insignia tono="violeta">{r.tipoJurisprudencia}</Insignia>}
                                     </div>
                                     <h3 style={{ margin: '4px 0', fontSize: '1.05rem' }}>
                                         {r.tipoResolucion} {r.numeroResolucion}
                                         {r.numeroExpediente && ` (Exp. ${r.numeroExpediente})`}
                                     </h3>
+                                    {r.descriptor && (
+                                        <p style={{ margin: '4px 0', fontSize: '0.8rem', color: 'var(--texto-3)' }}>
+                                            {r.descriptor}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="acciones">
                                     <button type="button" className="btn btn-sec btn-sm" onClick={() => setDetalle(r)}>
                                         <Icono n="libro" tam={14} /> Ver resolución
+                                    </button>
+                                    <button type="button" className="btn btn-sec btn-sm" onClick={() => void copiarFicha(r)}>
+                                        <Icono n="documento" tam={14} /> Copiar ficha
                                     </button>
                                     <button type="button" className="btn btn-sec btn-sm" onClick={() => void copiarCita(r)}>
                                         <Icono n="documento" tam={14} /> Copiar cita
@@ -568,10 +587,21 @@ function TabJurisprudenciaExpediente({
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Mostrar Máxima jurisprudencial destacada */}
+                            {r.maxima && (
+                                <div style={{ marginTop: '8px', background: 'linear-gradient(135deg, rgba(29, 78, 216, 0.05) 0%, rgba(29, 78, 216, 0.01) 100%)', borderLeft: '3px solid var(--primario)', padding: '8px 12px', borderRadius: '0 var(--radio-sm) var(--radio-sm) 0', fontSize: '0.88rem' }}>
+                                    <strong style={{ display: 'block', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--primario)', marginBottom: '2px' }}>
+                                        Máxima Jurisprudencial:
+                                    </strong>
+                                    <span>{r.maxima}</span>
+                                </div>
+                            )}
+
                             {/* Mostrar nota / justificación si se ingresó al vincular (F3) */}
                             {r.resumen && (
-                                <div style={{ marginTop: '8px', fontSize: '0.88rem', background: 'var(--superficie-2)', padding: '8px 12px', borderRadius: 'var(--radio-sm)', borderLeft: '3px solid var(--primario)' }}>
-                                    <strong style={{ display: 'block', fontSize: '0.78rem', color: 'var(--texto-3)', marginBottom: '2px' }}>
+                                <div style={{ marginTop: '8px', fontSize: '0.88rem', background: 'var(--superficie-2)', padding: '8px 12px', borderRadius: 'var(--radio-sm)', borderLeft: '3px solid #8b5cf6' }}>
+                                    <strong style={{ display: 'block', fontSize: '0.74rem', color: 'var(--texto-3)', marginBottom: '2px' }}>
                                         Nota de vinculación / Justificación:
                                     </strong>
                                     <span>{r.resumen}</span>
