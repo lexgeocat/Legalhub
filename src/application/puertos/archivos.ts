@@ -12,6 +12,7 @@ export interface ArchivosPuerto {
     rutaPlantilla(nombreArchivo: string): Promise<string>;
     rutaLey(nombreArchivo: string): Promise<string>;
     rutaJurisprudencia(nombreArchivo: string): Promise<string>;
+    rutaDiccionario(nombreArchivo: string): Promise<string>;
     /** Escribe en una ruta elegida por la persona (diálogo «Guardar como»); sobrescribe. */
     escribir(ruta: string, contenido: Uint8Array): Promise<void>;
 }

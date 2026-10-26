@@ -12,22 +12,21 @@ import { Personas } from './ui/paginas/Personas';
 import { Leyes } from './ui/paginas/Leyes';
 import { Procedimientos } from './ui/paginas/Procedimientos';
 import { Jurisprudencia } from './ui/paginas/Jurisprudencia';
+import { DiccionarioJuridico } from './ui/paginas/DiccionarioJuridico';
 
 import { useTema } from './ui/_core/tema';
-import LexAi from './ui/paginas/LexAi';
 
-type Item = 'expedientes' | 'lex-ai' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'jurisprudencia' | 'config';
+type Item = 'expedientes' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'jurisprudencia' | 'diccionarios' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
 
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'expedientes', etiqueta: 'Expedientes', icono: 'carpeta' },
-  { id: 'lex-ai', etiqueta: 'Lex AI', icono: 'destello' },
   { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
   { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
   { id: 'procedimientos', etiqueta: 'Procedimientos', icono: 'flujo' },
   { id: 'leyes', etiqueta: 'Normativa', icono: 'libro' },
   { id: 'jurisprudencia', etiqueta: 'Jurisprudencia', icono: 'tribunal' },
-  { id: 'config', etiqueta: 'Configuración', icono: 'ajustes' },
+  { id: 'diccionarios', etiqueta: 'Diccionarios', icono: 'diccionarios' },
 ];
 
 /** Ficha de una persona abierta desde el buscador o desde el panel de clientes. */
@@ -189,6 +188,16 @@ export default function App() {
             <div className="nav-pie-colapsado-grupo">
               <button
                 type="button"
+                className={`nav-item nav-item-pie colapsado${vista.n === 'config' ? ' activo' : ''}`}
+                onClick={() => ir('config')}
+                onMouseEnter={(e) => mostrarTooltip(e, 'Configuración')}
+                onMouseLeave={ocultarTooltip}
+                aria-label="Configuración"
+              >
+                <Icono n="engranaje" tam={18} />
+              </button>
+              <button
+                type="button"
                 className="nav-btn-tema colapsado"
                 onClick={alternarTema}
                 onMouseEnter={(e) =>
@@ -214,20 +223,18 @@ export default function App() {
                   }}
                 />
               </button>
-              <button
-                type="button"
-                className="nav-pie-colapsar colapsado"
-                onClick={alternarColapso}
-                onMouseEnter={(e) => mostrarTooltip(e, 'Expandir panel (Ctrl+B)')}
-                onMouseLeave={ocultarTooltip}
-                aria-label="Expandir panel"
-                title="Expandir panel (Ctrl+B)"
-              >
-                <Icono n="chevronDerecha" tam={16} />
-              </button>
             </div>
           ) : (
             <>
+              <button
+                type="button"
+                className={`nav-item nav-item-pie${vista.n === 'config' ? ' activo' : ''}`}
+                onClick={() => ir('config')}
+                aria-label="Configuración"
+              >
+                <Icono n="engranaje" tam={18} />
+                <span className="nav-item-texto">Configuración</span>
+              </button>
               <div className="nav-pie-fila">
                 <button
                   type="button"
@@ -255,17 +262,6 @@ export default function App() {
                   v{VERSION_APP}
                 </span>
               </div>
-              <button
-                type="button"
-                className="nav-pie-colapsar"
-                onClick={alternarColapso}
-                title="Colapsar panel (Ctrl+B)"
-                aria-label="Colapsar panel"
-              >
-                <Icono n="chevronIzquierda" tam={13} />
-                <span>Colapsar</span>
-                <kbd>Ctrl B</kbd>
-              </button>
             </>
           )}
         </div>
@@ -282,12 +278,12 @@ export default function App() {
         {vista.n === 'expediente' && (
           <Expediente key={vista.id} id={vista.id} volver={() => void navegar({ n: 'expedientes' })} />
         )}
-        {vista.n === 'lex-ai' && <LexAi />}
         {vista.n === 'personas' && <Personas abrirExpediente={(id) => void navegar({ n: 'expediente', id })} />}
         {vista.n === 'modelos' && <Modelos />}
         {vista.n === 'procedimientos' && <Procedimientos />}
         {vista.n === 'leyes' && <Leyes />}
         {vista.n === 'jurisprudencia' && <Jurisprudencia />}
+        {vista.n === 'diccionarios' && <DiccionarioJuridico />}
         {vista.n === 'config' && <Configuracion />}
       </main>
 

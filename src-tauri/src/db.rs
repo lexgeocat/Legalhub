@@ -36,6 +36,7 @@ const MIGRACIONES: &[(i64, &str)] = &[
     (16, include_str!("../migrations/016_jurisprudencia_mejoras.sql")),
     (17, include_str!("../migrations/017_jurisprudencia_subtipo.sql")),
     (18, include_str!("../migrations/018_jurisprudencia_fichas.sql")),
+    (19, include_str!("../migrations/019_diccionarios.sql")),
 ];
 
 pub struct EstadoDb {

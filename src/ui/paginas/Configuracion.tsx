@@ -8,6 +8,7 @@ import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar } from 
 import { FormularioPersona } from '../compartidos/FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { useTema } from '../_core/tema';
+import { ModalSubirDiccionario } from '../diccionarios/ModalSubirDiccionario';
 
 type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | 'limpieza' | null;
 
@@ -28,6 +29,9 @@ export function Configuracion() {
     const [abogadoSel, setAbogadoSel] = useState<string | null>(null);
 
     const c = cfg.datos;
+    const diccionarios = useCargar(() => s.diccionarios.listar(), []);
+    const [subirDicc, setSubirDicc] = useState(false);
+    const [importandoBase, setImportandoBase] = useState(false);
     const abogadoId = abogadoSel ?? c?.abogadoPersonaId ?? '';
     // Solo se consulta la ficha del abogado: ya no se lista a todas las personas.
     const abogado = useCargar(
@@ -156,6 +160,70 @@ export function Configuracion() {
             setError(mensajeError(err));
         } finally {
             setOcupado(null);
+        }
+    }
+
+    async function eliminarDiccionario(id: string, nombre: string) {
+        const ok = await confirmar(
+            `¿Eliminar el diccionario «${nombre}» y todos sus términos indexados?`,
+            'Eliminar diccionario',
+        );
+        if (!ok) return;
+        try {
+            await s.diccionarios.eliminar(id);
+            diccionarios.recargar();
+            avisar('Diccionario eliminado');
+        } catch (err) {
+            setError(mensajeError(err));
+        }
+    }
+
+    async function importarColeccionBase() {
+        setImportandoBase(true);
+        setError(null);
+        try {
+            const coleccion = [
+                {
+                    archivo: 'DICCIONARIO JURIDICO ELEMENTAL - Guillermo Cabanellas de Torres.pdf',
+                    nombre: 'Diccionario Jurídico Elemental',
+                    autor: 'Guillermo Cabanellas de Torres',
+                    descripcion: 'Definiciones esenciales de derecho civil, penal, laboral, procesal y constitucional.',
+                },
+                {
+                    archivo: 'DICCIONARIO JURIDICO_MANUEL OSORIO.pdf',
+                    nombre: 'Diccionario de Ciencias Jurídicas, Políticas y Sociales',
+                    autor: 'Manuel Ossorio',
+                    descripcion: 'Compendio doctrinal latinoamericano de conceptos jurídicos y procesales.',
+                },
+                {
+                    archivo: 'GLOSARIO DE TÉRMINOS PARA LA IMPLEMENTACIÓN DE LA LEY INTEGRAL PARA GARANTIZAR A LAS MUJERES UNA VIDA LIBRE DE VIOLENCIA.pdf',
+                    nombre: 'Glosario de Términos - Ley 348',
+                    autor: 'Ministerio de Justicia del Estado Plurinacional de Bolivia',
+                    descripcion: 'Definiciones técnico-jurídicas para la aplicación de la Ley 348.',
+                },
+            ];
+
+            let count = 0;
+            for (const item of coleccion) {
+                try {
+                    const ruta = `F:/Apps_web/legal-hub/diccionarios/${item.archivo}`;
+                    const bytes = await s.archivos.leer(ruta);
+                    await s.diccionarios.importar(bytes, {
+                        nombre: item.nombre,
+                        autor: item.autor,
+                        descripcion: item.descripcion,
+                    });
+                    count++;
+                } catch {
+                    // Si ya existe o error en uno, se continúa con el siguiente
+                }
+            }
+            diccionarios.recargar();
+            avisar(`Se importaron ${count} diccionarios correctamente a la base.`);
+        } catch (err) {
+            setError(`Error al importar colección: ${mensajeError(err)}`);
+        } finally {
+            setImportandoBase(false);
         }
     }
 
@@ -346,6 +414,106 @@ export function Configuracion() {
             <section className="tarjeta">
                 <div className="tarjeta-cab">
                     <div>
+                        <h3>Diccionarios Jurídicos (PDF)</h3>
+                        <p className="suave">
+                            Fuentes doctrinales y glosarios para consulta y citación en documentos. El motor indexa automáticamente los términos y definiciones con SQLite FTS5 y lectura sincronizada en visor PDF.
+                        </p>
+                    </div>
+                    <div className="acciones">
+                        <button
+                            type="button"
+                            className="btn btn-sec btn-sm"
+                            disabled={importandoBase}
+                            onClick={() => void importarColeccionBase()}
+                            title="Importa los 3 diccionarios esenciales (Cabanellas, Ossorio, Glosario Ley 348) ubicados en la carpeta diccionarios"
+                        >
+                            <Icono n="libro" tam={14} /> {importandoBase ? 'Importando colección…' : 'Colección Base (3 Obras)'}
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-pri btn-sm"
+                            onClick={() => setSubirDicc(true)}
+                        >
+                            <Icono n="mas" tam={14} /> Subir Diccionario…
+                        </button>
+                    </div>
+                </div>
+
+                {diccionarios.datos && diccionarios.datos.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', background: 'var(--fondo-2)', borderRadius: '8px', border: '1px dashed var(--borde-2)' }}>
+                        <p style={{ margin: '0 0 10px 0', fontWeight: 600, color: 'var(--texto-1)' }}>Aún no tienes diccionarios jurídicos cargados</p>
+                        <p className="suave" style={{ margin: '0 0 16px 0', fontSize: '0.85rem' }}>
+                            Puedes importar con 1 clic los 3 diccionarios fundamentales del sistema (Cabanellas, Ossorio, Ley 348) o subir cualquier otro archivo PDF doctrinal.
+                        </p>
+                        <div className="acciones" style={{ justifyContent: 'center' }}>
+                            <button
+                                type="button"
+                                className="btn btn-pri btn-sm"
+                                disabled={importandoBase}
+                                onClick={() => void importarColeccionBase()}
+                            >
+                                <Icono n="libro" tam={14} /> {importandoBase ? 'Importando colección…' : 'Cargar 3 Diccionarios Esenciales'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-sec btn-sm"
+                                onClick={() => setSubirDicc(true)}
+                            >
+                                Subir PDF personalizado…
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="tabla-responsive">
+                        <table className="tabla" style={{ width: '100%' }}>
+                            <thead>
+                                <tr>
+                                    <th>Diccionario</th>
+                                    <th>Autor</th>
+                                    <th>Páginas</th>
+                                    <th>Términos Indexados</th>
+                                    <th style={{ textAlign: 'right' }}>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {diccionarios.datos?.map((d) => (
+                                    <tr key={d.id}>
+                                        <td>
+                                            <b>{d.nombre}</b>
+                                            {d.descripcion && (
+                                                <div className="suave" style={{ fontSize: '0.78rem', marginTop: '2px' }}>
+                                                    {d.descripcion}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td>{d.autor || <span className="suave">—</span>}</td>
+                                        <td>
+                                            <Insignia tono="azul">{d.numPaginas} págs.</Insignia>
+                                        </td>
+                                        <td>
+                                            <Insignia tono="verde">{d.numTerminos.toLocaleString()} términos</Insignia>
+                                        </td>
+                                        <td style={{ textAlign: 'right' }}>
+                                            <button
+                                                type="button"
+                                                className="btn btn-fan btn-sm"
+                                                title="Eliminar este diccionario"
+                                                onClick={() => void eliminarDiccionario(d.id, d.nombre)}
+                                            >
+                                                <Icono n="papelera" tam={14} /> Eliminar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+
+            <section className="tarjeta">
+                <div className="tarjeta-cab">
+                    <div>
                         <h3>Respaldo y restauración</h3>
                         <p className="suave">Incluye la base de datos, los modelos y los expedientes. Se verifica con hashes al crearlo.</p>
                     </div>
@@ -420,6 +588,19 @@ export function Configuracion() {
                     }}
                 />
             )}
+
+            {subirDicc && (
+                <ModalSubirDiccionario
+                    cerrar={() => {
+                        setSubirDicc(false);
+                        diccionarios.recargar();
+                    }}
+                    alGuardar={() => {
+                        setSubirDicc(false);
+                        diccionarios.recargar();
+                    }}
+                />
+            )}
         </div>
     );
-}
+}

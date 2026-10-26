@@ -15,8 +15,9 @@ import { claveCampo, claveNormalizada, etiquetaRol, pluralRol } from '../../doma
 import { Campo, Icono, Segmentado, confirmar } from '../_core/comunes';
 import { fecha, fechalarga, hoyISO } from '../../domain/modelos/filtros/fecha';
 import { BuscadorLeyes } from '../leyes/PanelLeyes';
+import { PanelDiccionario } from '../diccionarios/PanelDiccionario';
 
-type Pestana = 'datos' | 'partes' | 'genero' | 'leyes';
+type Pestana = 'datos' | 'partes' | 'genero' | 'leyes' | 'diccionario';
 type Insertar = (texto: string, bloque: boolean) => void;
 type Alcance = 'parte' | 'caso';
 type Modo = null | 'agregar' | 'nombre' | { t: 'caso' | 'parte'; i: number };
@@ -940,6 +941,7 @@ export function PanelCampos({
         { id: 'partes', etiqueta: `Partes${partes.length ? ` (${partes.length})` : ''}` },
         { id: 'genero', etiqueta: 'Género' },
         { id: 'leyes', etiqueta: 'Normativa' },
+        { id: 'diccionario', etiqueta: 'Diccionario' },
     ];
 
     return (
@@ -984,6 +986,7 @@ export function PanelCampos({
                 )}
                 {pestana === 'genero' && <TabGenero lista={lista} quien={quien} onSel={setSel} onInsertar={onInsertar} />}
                 {pestana === 'leyes' && <BuscadorLeyes onInsertar={onInsertar} />}
+                {pestana === 'diccionario' && <PanelDiccionario onInsertar={onInsertar} />}
             </div>
 
             <div className="pc-pie">

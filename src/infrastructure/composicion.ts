@@ -30,9 +30,9 @@ import { FormatoPaqueteFflate } from './docx/paqueteModelo';
 import { CargadorFuentesWeb } from './fuentes/cargadorFuentes';
 import { Plantillas } from '../application/casosDeUso/plantillas';
 import { Leyes } from '../application/casosDeUso/leyes';
+import { Diccionarios } from '../application/casosDeUso/diccionarios';
 import { LectorPdfPdfjs } from './pdf/lectorPdf';
 import type { GeneradorDocx, LectorDocx } from '../application/puertos/modelos';
-import { GuardarEscritoIa } from '../application/casosDeUso/guardarEscritoIa';
 import { Procedimientos } from '../application/casosDeUso/procedimientos';
 import { JurisprudenciaCasosDeUso } from '../application/casosDeUso/jurisprudencia';
 import { ClienteTsj } from './jurisprudencia/clienteTsj';
@@ -49,7 +49,6 @@ export interface Servicios {
     contexto: ConstructorContextoDb;
     lector: LectorDocx;
     generador: GeneradorDocx;
-    guardarEscritoIa: GuardarEscritoIa;
     crearExpediente: CrearExpediente;
     actualizarExpediente: ActualizarExpediente;
     crearPersona: CrearPersona;
@@ -78,7 +77,9 @@ export interface Servicios {
     leyes: Leyes;
     procedimientos: Procedimientos;
     jurisprudencia: JurisprudenciaCasosDeUso;
+    diccionarios: Diccionarios;
 }
+
 
 export async function crearServicios(): Promise<Servicios> {
     const db = new DbObservable(new DbTauri());
@@ -129,8 +130,8 @@ export async function crearServicios(): Promise<Servicios> {
         eliminarExpediente: new EliminarExpediente(db),
         eliminarModelo: new EliminarModelo(db),
         leyes: new Leyes({ db, archivos, lector: new LectorPdfPdfjs() }),
+        diccionarios: new Diccionarios({ db, archivos, lector: new LectorPdfPdfjs() }),
         procedimientos: new Procedimientos(db),
-        guardarEscritoIa: new GuardarEscritoIa({ db, archivos, motor }),
         jurisprudencia,
     };
 }

@@ -1,0 +1,480 @@
+/* ================= DICCIONARIOS JURÍDICOS ================= */
+
+.dicc-pagina {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 24px;
+  gap: 14px;
+}
+
+.dicc-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dicc-cabecera-izq h1 {
+  margin: 0 0 4px 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.dicc-subtitulo {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--texto-2);
+}
+
+.dicc-acciones-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Barra de control y búsqueda */
+.dicc-barra-filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  padding: 8px 12px;
+}
+
+.dicc-select-obra {
+  max-width: 300px;
+  min-width: 200px;
+  font-size: 0.88rem;
+}
+
+.dicc-buscador-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 250px;
+}
+
+.dicc-buscador-icono {
+  position: absolute;
+  left: 10px;
+  color: var(--texto-3);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.dicc-input-buscar {
+  width: 100%;
+  padding: 8px 32px 8px 34px;
+  font-size: 0.92rem;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--borde);
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.dicc-input-buscar:focus {
+  background: var(--superficie);
+  border-color: var(--primario);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+}
+
+.dicc-btn-limpiar {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--texto-3);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.82rem;
+}
+
+/* Contenido Principal en Dos Columnas */
+.dicc-cuerpo-split {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Columna Izquierda: Lista de Términos */
+.dicc-panel-lista {
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dicc-lista-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.82rem;
+  color: var(--texto-2);
+  font-weight: 600;
+}
+
+.dicc-scroll-resultados {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.dicc-item-termino {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.dicc-item-termino:hover {
+  background: var(--superficie-2);
+}
+
+.dicc-item-termino.activo {
+  background: rgba(29, 78, 216, 0.08);
+  border-left: 3.5px solid var(--primario);
+}
+
+[data-tema="oscuro"] .dicc-item-termino.activo {
+  background: rgba(59, 130, 246, 0.15);
+  border-left-color: #60a5fa;
+}
+
+.dicc-item-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.dicc-item-titulo {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.dicc-item-termino.activo .dicc-item-titulo {
+  color: var(--primario);
+}
+
+.dicc-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--texto-3);
+}
+
+.dicc-item-extracto {
+  font-size: 0.82rem;
+  color: var(--texto-2);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dicc-item-extracto mark {
+  background: rgba(245, 158, 11, 0.25);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+/* Columna Derecha: Panel de Lectura Doctrinal (Grande, Legible y Sin Lags) */
+.dicc-panel-lectura {
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  overflow-y: auto;
+  min-height: 0;
+  padding: 24px 32px;
+}
+
+.dicc-lectura-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.dicc-lectura-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.dicc-lectura-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dicc-lectura-obra-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--texto-2);
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+.dicc-lectura-titulo {
+  font-size: 2.15rem;
+  font-weight: 800;
+  color: var(--texto);
+  line-height: 1.22;
+  margin: 4px 0 0 0;
+  letter-spacing: -0.025em;
+}
+
+.dicc-lectura-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.dicc-lectura-cuerpo {
+  font-size: 1.16rem;
+  line-height: 1.85;
+  color: var(--texto);
+  margin: 22px 0 30px 0;
+  max-width: 950px;
+  letter-spacing: 0.01em;
+}
+
+.dicc-lectura-cuerpo mark {
+  background: rgba(245, 158, 11, 0.28);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+/* Caja de Citación Doctrinal */
+.dicc-cita-box {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-left: 4.5px solid var(--primario);
+  border-radius: 0 var(--radio-sm) var(--radio-sm) 0;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 950px;
+  margin-bottom: 20px;
+}
+
+.dicc-cita-box-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dicc-cita-box-etiq {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--texto-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dicc-cita-box-texto {
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--texto);
+  font-style: italic;
+  margin: 0;
+}
+
+/* Estado de bienvenida en el panel de lectura */
+.dicc-vacio-lectura {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 350px;
+  text-align: center;
+  padding: 40px 20px;
+  gap: 14px;
+  color: var(--texto-2);
+}
+
+.dicc-vacio-icono {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--superficie-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primario);
+  margin-bottom: 4px;
+}
+
+.dicc-vacio-titulo {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--texto);
+  margin: 0;
+}
+
+.dicc-vacio-desc {
+  max-width: 480px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.dicc-sugerencias-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 10px;
+  max-width: 580px;
+}
+
+.dicc-chip-btn {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  color: var(--texto);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dicc-chip-btn:hover {
+  background: var(--superficie);
+  border-color: var(--primario);
+  color: var(--primario);
+  transform: translateY(-1px);
+}
+
+
+/* ================= PANEL DICCIONARIO PARA EL EDITOR ================= */
+.panel-dicc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding: 12px;
+}
+
+.panel-dicc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-dicc-lista {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-dicc-card {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.panel-dicc-card:hover {
+  border-color: var(--primario);
+}
+
+.panel-dicc-card-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-dicc-card-titulo {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.panel-dicc-card-desc {
+  font-size: 0.82rem;
+  color: var(--texto-2);
+  line-height: 1.4;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.panel-dicc-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .dicc-cuerpo-split {
+    grid-template-columns: 1fr;
+  }
+  .dicc-panel-visor {
+    display: none;
+  }
+}

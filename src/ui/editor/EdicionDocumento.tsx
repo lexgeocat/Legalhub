@@ -5,6 +5,7 @@ import { Alerta, Icono, Insignia, confirmar } from '../_core/comunes';
 import { EditorHoja } from './EditorHoja';
 import type { ControlHoja } from './HojaEditable';
 import { PanelLeyes } from '../leyes/PanelLeyes';
+import { PanelDiccionario } from '../diccionarios/PanelDiccionario';
 
 /** Edita un documento ya completado con el mismo editor del modelo, a pantalla completa y sin campos. */
 export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar, descartar }: {
@@ -19,7 +20,7 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
     const [textoInicial] = useState(() => bloquesATexto(bloques));
     const [config, setConfig] = useState<ConfigPagina>(configInicial);
     const [modificado, setModificado] = useState(false);
-    const [leyes, setLeyes] = useState(false);
+    const [panelActivo, setPanelActivo] = useState<'leyes' | 'diccionario' | null>(null);
 
     async function salir() {
         if (modificado && !(await confirmar('Hay cambios sin aplicar. ¿Descartarlos?', 'Descartar cambios'))) return;
@@ -49,12 +50,31 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                 onConfig={(c) => { setConfig(c); setModificado(true); }}
                 onCambio={() => setModificado(true)}
                 barra={
-                    <Tb titulo="Buscar y citar un artículo de una ley en el cursor" activo={leyes} onClick={() => setLeyes((v) => !v)}>
-                        Leyes
-                    </Tb>
+                    <>
+                        <Tb
+                            titulo="Buscar y citar un artículo de una ley en el cursor"
+                            activo={panelActivo === 'leyes'}
+                            onClick={() => setPanelActivo((p) => (p === 'leyes' ? null : 'leyes'))}
+                        >
+                            Leyes
+                        </Tb>
+                        <Tb
+                            titulo="Buscar términos y citar definiciones doctrinales en el cursor"
+                            activo={panelActivo === 'diccionario'}
+                            onClick={() => setPanelActivo((p) => (p === 'diccionario' ? null : 'diccionario'))}
+                        >
+                            Diccionario
+                        </Tb>
+                    </>
                 }
-                panel={leyes ? <PanelLeyes onInsertar={(t, b) => hoja.current?.insertar(t, b)} /> : undefined}
-                ayuda="Ctrl+N negrita · Ctrl+K cursiva · Ctrl+S subrayado · arrastra los márgenes en la regla · «Leyes»: cita un artículo"
+                panel={
+                    panelActivo === 'leyes' ? (
+                        <PanelLeyes onInsertar={(t, b) => hoja.current?.insertar(t, b)} />
+                    ) : panelActivo === 'diccionario' ? (
+                        <PanelDiccionario onInsertar={(t, b) => hoja.current?.insertar(t, b)} />
+                    ) : undefined
+                }
+                ayuda="Ctrl+N negrita · Ctrl+K cursiva · Ctrl+S subrayado · arrastra los márgenes en la regla · «Leyes» y «Diccionario»: cita en cursor"
             />
         </div>
     );
