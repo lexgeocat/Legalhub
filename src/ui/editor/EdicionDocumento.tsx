@@ -7,6 +7,8 @@ import type { ControlHoja } from './HojaEditable';
 import { PanelLeyes } from '../leyes/PanelLeyes';
 import { PanelDiccionario } from '../diccionarios/PanelDiccionario';
 
+import { ControlesVentana } from '../_core/ControlesVentana';
+
 /** Edita un documento ya completado con el mismo editor del modelo, a pantalla completa y sin campos. */
 export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar, descartar }: {
     bloques: Bloque[];
@@ -29,16 +31,21 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
 
     return (
         <div className="ed-ventana alto">
-            <header className="ed-barra-titulo">
+            <header className="ed-barra-titulo" data-tauri-drag-region>
                 <button type="button" className="btn btn-fan" onClick={() => void salir()}><Icono n="atras" /> Vista previa</button>
-                <b className="ed-titulo">Editar documento</b>
-                {modificado && <Insignia tono="ambar">Sin aplicar</Insignia>}
-                <div className="espacio" />
-                <button type="button" className="btn btn-sec" onClick={() => void salir()}>Descartar</button>
-                <button type="button" className="btn btn-pri"
-                    onClick={() => aplicar(hoja.current?.leerTexto() ?? textoInicial, config)}>
-                    Aplicar al documento
-                </button>
+                <div className="ed-office-centro" data-tauri-drag-region>
+                    <b className="ed-titulo">Editar documento</b>
+                    {modificado && <Insignia tono="ambar">Sin aplicar</Insignia>}
+                </div>
+                <div className="ed-acciones-top">
+                    <button type="button" className="btn btn-sec" onClick={() => void salir()}>Descartar</button>
+                    <button type="button" className="btn btn-pri"
+                        onClick={() => aplicar(hoja.current?.leerTexto() ?? textoInicial, config)}>
+                        Aplicar al documento
+                    </button>
+                </div>
+                <div className="ed-sep-v" />
+                <ControlesVentana variante="editor" />
             </header>
 
             {aviso && <div className="ed-aviso"><Alerta tipo="adv">{aviso}</Alerta></div>}

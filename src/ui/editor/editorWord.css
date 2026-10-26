@@ -11,11 +11,90 @@
 .ed-barra-titulo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    padding: 8px 16px;
+    gap: 8px;
+    padding: 0 0 0 10px;
+    min-height: 38px;
+    height: 38px;
     background: var(--superficie);
     border-bottom: 1px solid var(--borde);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-app-region: drag;
+    flex-shrink: 0;
+}
+
+.ed-barra-titulo * {
+    -webkit-app-region: no-drag;
+}
+
+.ed-barra-titulo [data-tauri-drag-region] {
+    -webkit-app-region: drag;
+}
+
+.ed-office-centro {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+}
+
+.ed-office-centro .editor-nombre {
+    max-width: 340px;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--texto);
+    transition: all 0.15s ease;
+}
+
+.ed-office-centro .editor-nombre:hover {
+    background: var(--superficie-2);
+    border-color: var(--borde);
+}
+
+.ed-office-centro .editor-nombre:focus {
+    background: var(--superficie);
+    border-color: var(--primario);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--primario-claro);
+}
+
+.ed-acciones-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ed-sep-v {
+    width: 1px;
+    height: 20px;
+    background: var(--borde);
+    margin: 0 4px;
+}
+
+.ed-barra-titulo .controles-ventana {
+    margin-left: 2px;
+    height: 100%;
+}
+
+.ed-barra-titulo .cv-btn {
+    height: 100%;
+    color: var(--texto-3);
+}
+
+.ed-barra-titulo .cv-btn:hover {
+    background: var(--superficie-2);
+    color: var(--texto);
+}
+
+.ed-barra-titulo .cv-btn.cv-cerrar:hover {
+    background: #e81123 !important;
+    color: #fff !important;
 }
 
 .ed-cinta {

@@ -13,6 +13,7 @@ import { Leyes } from './ui/paginas/Leyes';
 import { Procedimientos } from './ui/paginas/Procedimientos';
 import { Jurisprudencia } from './ui/paginas/Jurisprudencia';
 import { DiccionarioJuridico } from './ui/paginas/DiccionarioJuridico';
+import { ControlesVentana } from './ui/_core/ControlesVentana';
 
 import { useTema } from './ui/_core/tema';
 
@@ -110,8 +111,20 @@ export default function App() {
   const ir = (n: Item) => void navegar({ n });
 
   return (
-    <div className={`app${colapsado ? ' nav-colapsado' : ''}`}>
-      <nav className={`nav${colapsado ? ' colapsada' : ''}`} aria-label="Navegación principal">
+    <div className="contenedor-app">
+      <header className="barra-superior-app" data-tauri-drag-region>
+        <div className="bs-marca" data-tauri-drag-region="false">
+          <Icono n="balanza" tam={14} />
+          <span>LEGAL-HUB</span>
+        </div>
+        <div className="bs-drag-space" data-tauri-drag-region>
+          {vista.n === 'expediente' ? 'Expediente' : MENU.find((m) => m.id === vista.n)?.etiqueta ?? ''}
+        </div>
+        <ControlesVentana variante="normal" />
+      </header>
+
+      <div className={`app${colapsado ? ' nav-colapsado' : ''}`}>
+        <nav className={`nav${colapsado ? ' colapsada' : ''}`} aria-label="Navegación principal">
         <div className={`nav-marca${colapsado ? ' colapsada' : ''}`}>
           {colapsado ? (
             <button
@@ -300,6 +313,7 @@ export default function App() {
       )}
       {persona && <FichaPersona id={persona} cerrar={() => setPersona(null)} />}
       <Notificaciones />
+      </div>
     </div>
   );
 }

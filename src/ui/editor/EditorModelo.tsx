@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { esTextoLargo, tipoSugerido, usosCaso } from '../../application/camposModelo';
 import type { ResultadoImportacion, ResultadoValidacion } from '../../application/casosDeUso/importarModelo';
 import { datoAsignable, reasignarDato } from '../../domain/modelos/camposParte';
@@ -21,6 +21,7 @@ import { ModalMarcador } from './EditorMarcador';
 import type { ControlHoja, EdicionDirecta, LlenadoHoja, MenuCampoInfo, SelectorEdicion } from './HojaEditable';
 import { MenuCampo } from './MenuCampo';
 import { PanelCampos } from './PanelCampos';
+import { ControlesVentana } from '../_core/ControlesVentana';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
 export interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
@@ -346,55 +347,60 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
 
     return (
         <div className="ed-ventana">
-            {/* ===== Barra de título ===== */}
-            <header className="ed-barra-titulo">
+            {/* ===== Barra de título estilo Office ===== */}
+            <header className="ed-barra-titulo" data-tauri-drag-region>
                 <button type="button" className="btn btn-fan" onClick={() => void salir()}>
                     <Icono n="atras" /> {llenado ? 'Expediente' : 'Modelos'}
                 </button>
 
-                {modoModelo ? (
-                    <input className="editor-nombre" placeholder="Nombre del modelo" value={nombre} readOnly={soloLectura}
-                        onChange={(e) => { setNombre(e.target.value); tocar(); }} />
-                ) : (
-                    <b className="ed-nombre" title={nombre}>{nombre}</b>
-                )}
+                <div className="ed-office-centro" data-tauri-drag-region>
+                    {modoModelo ? (
+                        <input className="editor-nombre" placeholder="Nombre del modelo" value={nombre} readOnly={soloLectura}
+                            onChange={(e) => { setNombre(e.target.value); tocar(); }} />
+                    ) : (
+                        <b className="ed-nombre" title={nombre}>{nombre}</b>
+                    )}
 
-                {llenado && !soloLectura && (
-                    <Segmentado<VistaEditor>
-                        valor={vista}
-                        cambiar={cambiarVista}
-                        opciones={[{ id: 'llenar', etiqueta: 'Llenar datos' }, { id: 'modelo', etiqueta: 'Editar modelo' }]}
-                    />
-                )}
-                {llenado && soloLectura && <Insignia tono="gris">Modelo de Word: solo llenado</Insignia>}
-                {ultima && <Insignia tono="verde">Modelo guardado v{ultima}</Insignia>}
-                {modificado && <Insignia tono="ambar">Modelo sin guardar</Insignia>}
-                {llenado?.sucio && <Insignia tono="rojo">Datos sin guardar</Insignia>}
+                    {llenado && !soloLectura && (
+                        <Segmentado<VistaEditor>
+                            valor={vista}
+                            cambiar={cambiarVista}
+                            opciones={[{ id: 'llenar', etiqueta: 'Llenar datos' }, { id: 'modelo', etiqueta: 'Editar modelo' }]}
+                        />
+                    )}
+                    {llenado && soloLectura && <Insignia tono="gris">Modelo de Word: solo llenado</Insignia>}
+                    {ultima && <Insignia tono="verde">v{ultima}</Insignia>}
+                    {modificado && <Insignia tono="ambar">Sin guardar</Insignia>}
+                    {llenado?.sucio && <Insignia tono="rojo">Datos sin guardar</Insignia>}
+                </div>
 
-                <div className="espacio" />
-
-                {llenado && !modoModelo ? (
-                    <>
-                        {modificado && (
-                            <button type="button" className="btn btn-sec" disabled={guardando} onClick={() => void guardar(false)}>
-                                Guardar modelo
+                <div className="ed-acciones-top">
+                    {llenado && !modoModelo ? (
+                        <>
+                            {modificado && (
+                                <button type="button" className="btn btn-sec" disabled={guardando} onClick={() => void guardar(false)}>
+                                    Guardar modelo
+                                </button>
+                            )}
+                            <button type="button" className="btn btn-pri" disabled={!llenado.sucio || llenado.guardando}
+                                onClick={() => void llenado.guardarDatos()}>
+                                {llenado.guardando ? 'Guardando…' : 'Guardar datos'}
                             </button>
-                        )}
-                        <button type="button" className="btn btn-pri" disabled={!llenado.sucio || llenado.guardando}
-                            onClick={() => void llenado.guardarDatos()}>
-                            {llenado.guardando ? 'Guardando…' : 'Guardar datos'}
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        <button type="button" className="btn btn-fan" onClick={() => setDialogo({ n: 'datos' })}>Propiedades</button>
-                        <button type="button" className="btn btn-sec" onClick={verificar}>Verificar</button>
-                        {!llenado && (
-                            <button type="button" className="btn btn-sec" disabled={guardando} onClick={() => void guardar(true)}>Guardar y cerrar</button>
-                        )}
-                        <button type="button" className="btn btn-pri" disabled={guardando} onClick={() => void guardar(false)}>Guardar versión</button>
-                    </>
-                )}
+                        </>
+                    ) : (
+                        <>
+                            <button type="button" className="btn btn-fan" onClick={() => setDialogo({ n: 'datos' })}>Propiedades</button>
+                            <button type="button" className="btn btn-sec" onClick={verificar}>Verificar</button>
+                            {!llenado && (
+                                <button type="button" className="btn btn-sec" disabled={guardando} onClick={() => void guardar(true)}>Guardar y cerrar</button>
+                            )}
+                            <button type="button" className="btn btn-pri" disabled={guardando} onClick={() => void guardar(false)}>Guardar versión</button>
+                        </>
+                    )}
+                </div>
+
+                <div className="ed-sep-v" />
+                <ControlesVentana variante="editor" />
             </header>
 
             {error && <div className="ed-aviso"><Aviso error={error} /></div>}
