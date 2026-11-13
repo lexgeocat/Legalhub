@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { VERSION_APP } from './domain/comun/version';
 import { Buscador } from './ui/compartidos/Buscador';
 import { Icono, Notificaciones, avisar, permitirSalir, type NombreIcono } from './ui/_core/comunes';
+import { ModalCierreSistema } from './ui/_core/ModalCierreSistema';
 import { FormularioPersona } from './ui/compartidos/FormularioPersona';
 import { Configuracion } from './ui/paginas/Configuracion';
 import { Expediente } from './ui/paginas/Expediente';
@@ -23,7 +24,7 @@ type Vista = { n: Item } | { n: 'expediente'; id: string };
 const MENU: { id: Item; etiqueta: string; icono: NombreIcono }[] = [
   { id: 'expedientes', etiqueta: 'Expedientes', icono: 'carpeta' },
   { id: 'personas', etiqueta: 'Personas', icono: 'personas' },
-  { id: 'modelos', etiqueta: 'Modelos', icono: 'documento' },
+  { id: 'modelos', etiqueta: 'Escritos', icono: 'documento' },
   { id: 'procedimientos', etiqueta: 'Procedimientos', icono: 'flujo' },
   { id: 'leyes', etiqueta: 'Normativa', icono: 'libro' },
   { id: 'jurisprudencia', etiqueta: 'Jurisprudencia', icono: 'tribunal' },
@@ -313,6 +314,7 @@ export default function App() {
       )}
       {persona && <FichaPersona id={persona} cerrar={() => setPersona(null)} />}
       <Notificaciones />
+      <ModalCierreSistema />
       </div>
     </div>
   );

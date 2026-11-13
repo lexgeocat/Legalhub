@@ -21,6 +21,7 @@ import type { Servicios } from '../../infrastructure/composicion';
 import { ActualizarModelo } from './ActualizarModelo';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Pestanas, avisar, confirmar, datosDeForm, normalizarNumero,
+    registrarCambio, registrarTarea,
 } from '../_core/comunes';
 import { EditorDocumento } from './EdicionDocumento';
 import { Hoja } from './Hoja';
@@ -390,6 +391,29 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
     const cambiarVerificacion = (f: (p: DatosVerificar) => DatosVerificar) =>
         setPaso((prev) => (prev.n === 'verificar' ? f(prev) : prev));
 
+    useEffect(() => {
+        if (trabajando) {
+            return registrarTarea('generar-documento', `Generando documento para el expediente ${expediente.codigo}`);
+        }
+    }, [trabajando, expediente.codigo]);
+
+    useEffect(() => {
+        if (analizando) {
+            return registrarTarea('analizar-modelo', `Analizando modelo para el expediente ${expediente.codigo}`);
+        }
+    }, [analizando, expediente.codigo]);
+
+    useEffect(() => {
+        const activo = paso.n === 'formulario' || paso.n === 'verificar';
+        if (activo) {
+            const nom = tituloVigente ? `«${tituloVigente}»` : 'documento';
+            registrarCambio('asistente-documento', `Asistente de ${nom} en curso en expediente ${expediente.codigo}`);
+        } else {
+            registrarCambio('asistente-documento', null);
+        }
+        return () => registrarCambio('asistente-documento', null);
+    }, [paso.n, expediente.codigo, tituloVigente]);
+
     const cambiarTitulo = (t: string) => cambiarVerificacion((p) => ({ ...p, b: { ...p.b, titulo: t } }));
 
     // Si el expediente ya tiene modelo se salta el paso «Modelo»: se revisa lo que falta y se va directo a la vista previa.
@@ -656,7 +680,7 @@ export function AsistenteDocumento({ expediente, modeloInicial, irADatos, cerrar
                 )}
                 {paso.n === 'elegir' && !preparando && (
                     modelos.datos && modelos.datos.length === 0 ? (
-                        <Alerta tipo="info">Aún no hay modelos activos. Crea o instala uno en la sección Modelos.</Alerta>
+                        <Alerta tipo="info">Aún no hay escritos activos. Crea o instala uno en la sección Escritos.</Alerta>
                     ) : (
                         <>
                             {modeloSel && !cambiando ? (

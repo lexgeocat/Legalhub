@@ -1,11 +1,12 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { bloquesATexto, type Bloque, type ConfigPagina } from '../../domain/modelos/fuenteModelo';
-import { Tb } from './BarraFormato';
-import { Alerta, Icono, Insignia, confirmar } from '../_core/comunes';
+import { ControlesHistorial, ICO, Ico, Tb } from './BarraFormato';
+import { Alerta, Icono, Insignia, confirmar, registrarCambio } from '../_core/comunes';
 import { EditorHoja } from './EditorHoja';
 import type { ControlHoja } from './HojaEditable';
 import { PanelLeyes } from '../leyes/PanelLeyes';
 import { PanelDiccionario } from '../diccionarios/PanelDiccionario';
+import { ModalGuiaRedaccion } from './ModalGuiaRedaccion';
 
 import { ControlesVentana } from '../_core/ControlesVentana';
 
@@ -23,6 +24,16 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
     const [config, setConfig] = useState<ConfigPagina>(configInicial);
     const [modificado, setModificado] = useState(false);
     const [panelActivo, setPanelActivo] = useState<'leyes' | 'diccionario' | null>(null);
+    const [verGuiaRedaccion, setVerGuiaRedaccion] = useState(false);
+
+    useEffect(() => {
+        if (modificado) {
+            registrarCambio('editor-documento', 'Documento con ediciones hechas a mano sin aplicar');
+        } else {
+            registrarCambio('editor-documento', null);
+        }
+        return () => registrarCambio('editor-documento', null);
+    }, [modificado]);
 
     async function salir() {
         if (modificado && !(await confirmar('Hay cambios sin aplicar. ¿Descartarlos?', 'Descartar cambios'))) return;
@@ -33,6 +44,9 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
         <div className="ed-ventana alto">
             <header className="ed-barra-titulo" data-tauri-drag-region>
                 <button type="button" className="btn btn-fan" onClick={() => void salir()}><Icono n="atras" /> Vista previa</button>
+                <div className="ed-sep-v" />
+                <ControlesHistorial hoja={hoja} />
+                <div className="ed-sep-v" />
                 <div className="ed-office-centro" data-tauri-drag-region>
                     <b className="ed-titulo">Editar documento</b>
                     {modificado && <Insignia tono="ambar">Sin aplicar</Insignia>}
@@ -58,19 +72,31 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                 onCambio={() => setModificado(true)}
                 barra={
                     <>
+                        <div className="ed-subgrupo" role="group" aria-label="Paneles de consulta">
+                            <Tb
+                                titulo="Buscar y citar un artículo de una ley en el cursor"
+                                activo={panelActivo === 'leyes'}
+                                onClick={() => setPanelActivo((p) => (p === 'leyes' ? null : 'leyes'))}
+                            >
+                                <Ico d={ICO.leyes} />
+                                <span>Leyes</span>
+                            </Tb>
+                            <Tb
+                                titulo="Buscar términos y citar definiciones doctrinales en el cursor"
+                                activo={panelActivo === 'diccionario'}
+                                onClick={() => setPanelActivo((p) => (p === 'diccionario' ? null : 'diccionario'))}
+                            >
+                                <Ico d={ICO.diccionario} />
+                                <span>Diccionario</span>
+                            </Tb>
+                        </div>
                         <Tb
-                            titulo="Buscar y citar un artículo de una ley en el cursor"
-                            activo={panelActivo === 'leyes'}
-                            onClick={() => setPanelActivo((p) => (p === 'leyes' ? null : 'leyes'))}
+                            titulo="Ver compendio y fórmulas de redacción jurídica (Aperturas, Conectores, Técnica forense y Cierres)"
+                            activo={verGuiaRedaccion}
+                            onClick={() => setVerGuiaRedaccion(true)}
                         >
-                            Leyes
-                        </Tb>
-                        <Tb
-                            titulo="Buscar términos y citar definiciones doctrinales en el cursor"
-                            activo={panelActivo === 'diccionario'}
-                            onClick={() => setPanelActivo((p) => (p === 'diccionario' ? null : 'diccionario'))}
-                        >
-                            Diccionario
+                            <Ico d={ICO.guia} />
+                            <span>Guía Redacción</span>
                         </Tb>
                     </>
                 }
@@ -81,8 +107,12 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                         <PanelDiccionario onInsertar={(t, b) => hoja.current?.insertar(t, b)} />
                     ) : undefined
                 }
-                ayuda="Ctrl+N negrita · Ctrl+K cursiva · Ctrl+S subrayado · arrastra los márgenes en la regla · «Leyes» y «Diccionario»: cita en cursor"
+                ayuda="Ctrl+N negrita · Ctrl+K cursiva · Ctrl+S subrayado · «Guía Redacción»: fórmulas y compendio forense"
             />
+
+            {verGuiaRedaccion && (
+                <ModalGuiaRedaccion cerrar={() => setVerGuiaRedaccion(false)} />
+            )}
         </div>
     );
 }

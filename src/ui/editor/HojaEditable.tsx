@@ -1,4 +1,4 @@
-﻿import {
+import {
     useEffect, useImperativeHandle, useRef, useState,
     type ClipboardEvent, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type Ref,
 } from 'react';
@@ -120,6 +120,11 @@ export interface LlenadoHoja {
     soloVista?: boolean;
 }
 
+export interface EstadoHistorial {
+    puedeDeshacer: boolean;
+    puedeRehacer: boolean;
+}
+
 export interface ControlHoja {
     leerTexto(): string;
     insertar(texto: string, bloque: boolean): void;
@@ -128,6 +133,8 @@ export interface ControlHoja {
     saltoPagina(): void;
     deshacer(): void;
     rehacer(): void;
+    estadoHistorial(): EstadoHistorial;
+    suscribirHistorial(fn: (e: EstadoHistorial) => void): () => void;
     enfocar(): void;
     contarPendientes(): number;
     /** Aplica `fn` a todos los campos del documento; si devuelve un marcador lo reemplaza. Devuelve cuántos cambió. */
@@ -557,8 +564,20 @@ function domABloques(raiz: HTMLElement): Bloque[] {
 }
 
 /* ================= Selección ================= */
-interface SelGuardada { a: number[]; ao: number; f: number[]; fo: number }
-interface Snap { html: string; sel: SelGuardada | null }
+interface SelGuardada {
+    a: number[]; ao: number;
+    f: number[]; fo: number;
+    /** Posición lógica por índice de bloque y desplazamiento de caracteres/átomos (inmune a fusión de nodos Text en innerHTML). */
+    ba: number; ca: number;
+    bf: number; cf: number;
+}
+interface Snap {
+    html: string;
+    /** Selección justo antes del cambio que creó esta instantánea (se restaura al deshacer este paso). */
+    selAntes: SelGuardada | null;
+    /** Selección justo después del cambio que creó esta instantánea (se restaura al rehacer este paso). */
+    selDespues: SelGuardada | null;
+}
 
 function rutaDe(raiz: Node, nodo: Node): number[] | null {
     const r: number[] = [];
@@ -583,12 +602,108 @@ function nodoDe(raiz: Node, ruta: number[]): Node | null {
 
 const largo = (n: Node) => (n.nodeType === 3 ? (n as Text).length : n.childNodes.length);
 
+/** Desplazamiento lógico de `(destino, offset)` dentro de un bloque (cada carácter cuenta 1; cada `.mk` o `<br>` cuenta 1). */
+function offsetEnBloque(b: HTMLElement, destino: Node, offset: number): number {
+    let pos = 0;
+    let encontrado = false;
+    const pesoSubarbol = (n: Node): number => {
+        if (n.nodeType === 3) return (n as Text).data.length;
+        if (n instanceof HTMLElement) {
+            if (n.classList.contains('mk') || n.tagName === 'BR') return 1;
+            let s = 0;
+            for (const h of Array.from(n.childNodes)) s += pesoSubarbol(h);
+            return s;
+        }
+        return 0;
+    };
+    const rec = (n: Node) => {
+        if (encontrado) return;
+        if (n === destino) {
+            if (n.nodeType === 3) {
+                pos += Math.min(offset, (n as Text).data.length);
+            } else {
+                const hijos = n.childNodes;
+                const lim = Math.min(offset, hijos.length);
+                for (let i = 0; i < lim; i++) pos += pesoSubarbol(hijos[i]);
+            }
+            encontrado = true;
+            return;
+        }
+        if (n.nodeType === 3) {
+            pos += (n as Text).data.length;
+            return;
+        }
+        if (n instanceof HTMLElement) {
+            if (n.classList.contains('mk') || n.tagName === 'BR') {
+                if (n.contains(destino)) {
+                    pos += offset > 0 ? 1 : 0;
+                    encontrado = true;
+                    return;
+                }
+                pos += 1;
+                return;
+            }
+            for (const h of Array.from(n.childNodes)) {
+                if (encontrado) break;
+                rec(h);
+            }
+        }
+    };
+    rec(b);
+    return pos;
+}
+
+/** Convierte un desplazamiento lógico dentro del bloque `b` en un par `(nodo, offset)` válido para Selection. */
+function puntoEnBloque(b: HTMLElement, posObjetivo: number): { nodo: Node; offset: number } {
+    const hojas = hojasDe(b);
+    if (hojas.length === 0) return { nodo: b, offset: 0 };
+    let rest = Math.max(0, posObjetivo);
+    for (let i = 0; i < hojas.length; i++) {
+        const h = hojas[i];
+        if (h.nodeType === 3) {
+            const t = h as Text;
+            const len = t.data.length;
+            const sig = hojas[i + 1];
+            if (rest < len || (rest === len && (!sig || sig.nodeType !== 3))) {
+                return { nodo: t, offset: rest };
+            }
+            rest -= len;
+        } else {
+            const padre = h.parentNode;
+            const idx = padre ? Array.prototype.indexOf.call(padre.childNodes, h) : 0;
+            if (rest === 0 && padre) {
+                return { nodo: padre, offset: idx };
+            }
+            if (rest === 1 && padre) {
+                if (i === hojas.length - 1 && h.nodeName === 'BR') {
+                    return { nodo: padre, offset: idx };
+                }
+                const sig = hojas[i + 1];
+                if (!sig || sig.nodeType !== 3) {
+                    return { nodo: padre, offset: idx + 1 };
+                }
+            }
+            rest -= 1;
+        }
+    }
+    const rFin = alFinal(b);
+    return { nodo: rFin.startContainer, offset: rFin.startOffset };
+}
+
 function tomarSel(raiz: HTMLElement): SelGuardada | null {
     const s = window.getSelection();
     if (!s || s.rangeCount === 0 || !s.anchorNode || !s.focusNode || !raiz.contains(s.anchorNode) || !raiz.contains(s.focusNode)) return null;
     const a = rutaDe(raiz, s.anchorNode);
     const f = rutaDe(raiz, s.focusNode);
-    return a && f ? { a, ao: s.anchorOffset, f, fo: s.focusOffset } : null;
+    if (!a || !f) return null;
+    const bloques = todosBloques(raiz);
+    const bAncla = bloqueRaiz(raiz, s.anchorNode);
+    const bFoco = bloqueRaiz(raiz, s.focusNode);
+    const ba = bAncla ? bloques.indexOf(bAncla) : -1;
+    const bf = bFoco ? bloques.indexOf(bFoco) : -1;
+    const ca = bAncla && ba >= 0 ? offsetEnBloque(bAncla, s.anchorNode, s.anchorOffset) : 0;
+    const cf = bFoco && bf >= 0 ? offsetEnBloque(bFoco, s.focusNode, s.focusOffset) : 0;
+    return { a, ao: s.anchorOffset, f, fo: s.focusOffset, ba, ca, bf, cf };
 }
 
 function ponerRango(r: Range): void {
@@ -655,11 +770,32 @@ function trasNodo(n: Node): Range {
 function ponerSel(raiz: HTMLElement, sel: SelGuardada | null): void {
     const s = window.getSelection();
     if (!s) return;
-    const a = sel ? nodoDe(raiz, sel.a) : null;
-    const f = sel ? nodoDe(raiz, sel.f) : null;
-    if (sel && a && f) {
-        s.setBaseAndExtent(a, Math.min(sel.ao, largo(a)), f, Math.min(sel.fo, largo(f)));
-        return;
+    if (sel) {
+        const bloques = todosBloques(raiz);
+        if (sel.ba >= 0 && sel.bf >= 0 && bloques.length > 0) {
+            const bA = bloques[Math.min(sel.ba, bloques.length - 1)];
+            const bF = bloques[Math.min(sel.bf, bloques.length - 1)];
+            if (bA && bF && !esSalto(bA) && !esSalto(bF)) {
+                const pA = puntoEnBloque(bA, sel.ca);
+                const pF = puntoEnBloque(bF, sel.cf);
+                try {
+                    s.setBaseAndExtent(pA.nodo, Math.min(pA.offset, largo(pA.nodo)), pF.nodo, Math.min(pF.offset, largo(pF.nodo)));
+                    return;
+                } catch {
+                    /* respaldo por ruta de nodos */
+                }
+            }
+        }
+        const a = nodoDe(raiz, sel.a);
+        const f = nodoDe(raiz, sel.f);
+        if (a && f) {
+            try {
+                s.setBaseAndExtent(a, Math.min(sel.ao, largo(a)), f, Math.min(sel.fo, largo(f)));
+                return;
+            } catch {
+                /* respaldo al final */
+            }
+        }
     }
     const ult = raiz.lastElementChild;
     ponerRango(ult instanceof HTMLElement ? alFinal(ult) : inicioDe(raiz));
@@ -1353,12 +1489,26 @@ function caretEn(x: number, y: number): Range | null {
 /* ================= Componente ================= */
 const MAX_HISTORIAL = 200;
 const MAX_HISTORIAL_CHARS = 24_000_000;
-const PAUSA_HISTORIAL_MS = 450;
-const MAX_AGRUPAR_MS = 4000;
+const PAUSA_HISTORIAL_MS = 300;
+const MAX_AGRUPAR_MS = 1500;
 /** Entradas que solo tocan el bloque del cursor: no hace falta revisar todo el documento. */
 const RAPIDOS = /^(insertText|insertCompositionText|insertReplacementText|deleteContentBackward|deleteContentForward|deleteWordBackward|deleteWordForward)$/;
+const TECLAS_NAVEGACION = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
 
-interface Historial { pila: Snap[]; i: number; t0: number; timer: number; pendiente: boolean }
+type TipoEdicion = 'insertar' | 'borrar' | 'otro' | null;
+
+interface Historial {
+    pila: Snap[];
+    i: number;
+    t0: number;
+    timer: number;
+    pendiente: boolean;
+    tipoPendiente: TipoEdicion;
+    /** Selección en el documento justo antes de iniciar la edición pendiente actual. */
+    selAntesPendiente: SelGuardada | null;
+    /** Última selección conocida en reposo (cuando !pendiente). */
+    ultimaSel: SelGuardada | null;
+}
 
 /** HTML del documento sin las alturas que calcula la paginación (no son contenido: no deben ensuciar el historial). */
 const instantanea = (el: HTMLElement) => el.innerHTML
@@ -1394,13 +1544,18 @@ export function HojaEditable({
     const lienzo = useRef<HTMLDivElement>(null);
     const [ancho, setAncho] = useState(0);
     const guardada = useRef<Range | null>(null);
-    const hist = useRef<Historial>({ pila: [], i: -1, t0: 0, timer: 0, pendiente: false });
+    const hist = useRef<Historial>({
+        pila: [], i: -1, t0: 0, timer: 0, pendiente: false,
+        tipoPendiente: null, selAntesPendiente: null, ultimaSel: null,
+    });
+    const oyentesHist = useRef<Set<(e: EstadoHistorial) => void>>(new Set());
     const ultimoFmt = useRef('');
     const ultimoAmbito = useRef('');
     const pegando = useRef(false);
     const cuadro = useRef(0);
     const edicion = useRef<{ chip: HTMLElement; cerrar: (confirmar: boolean, salida: Salida) => void } | null>(null);
-    const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo }); const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void } | null>(null);
+    const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo });
+    const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void; antesDeEntrada(tipo: string, data: string): void } | null>(null);
     const [tip, setTip] = useState<Tip | null>(null);
     const chipTip = useRef<HTMLElement | null>(null);
     const [selector, setSelector] = useState<SelectorVisible | null>(null);
@@ -1461,21 +1616,56 @@ export function HojaEditable({
     }, [razon, config.interlineado, config.espacioAntes, config.espacioDespues, config.fuente, config.tamanoPt]);
 
     /* ----- historial propio (deshacer / rehacer) ----- */
+    function estadoHistorial(): EstadoHistorial {
+        const h = hist.current;
+        return {
+            puedeDeshacer: h.i > 0 || h.pendiente,
+            puedeRehacer: !h.pendiente && h.i >= 0 && h.i < h.pila.length - 1,
+        };
+    }
+
+    function notificarHistorial() {
+        if (oyentesHist.current.size === 0) return;
+        const est = estadoHistorial();
+        for (const fn of oyentesHist.current) fn(est);
+    }
+
+    function suscribirHistorial(fn: (e: EstadoHistorial) => void): () => void {
+        oyentesHist.current.add(fn);
+        return () => {
+            oyentesHist.current.delete(fn);
+        };
+    }
+
     function registrar() {
         if (CHIP_EDITANDO) return; // mientras se edita un dato el DOM está a medias: no se toma instantánea
         const el = raizRef.current;
         if (!el) return;
         const h = hist.current;
         window.clearTimeout(h.timer);
+        const estabaPendiente = h.pendiente;
+        const selAntes = estabaPendiente ? (h.selAntesPendiente ?? h.ultimaSel) : h.ultimaSel;
         h.pendiente = false;
+        h.tipoPendiente = null;
+
         const actual = h.pila[h.i];
-        const s: Snap = { html: instantanea(el), sel: tomarSel(el) ?? actual?.sel ?? null };
-        if (actual && actual.html === s.html) {
-            actual.sel = s.sel;
+        const html = instantanea(el);
+        const selDespues = tomarSel(el) ?? actual?.selDespues ?? null;
+        if (selDespues) {
+            h.ultimaSel = selDespues;
+            h.selAntesPendiente = selDespues;
+        }
+        if (actual && actual.html === html) {
+            if (selDespues) actual.selDespues = selDespues;
+            notificarHistorial();
             return;
         }
         h.pila = h.pila.slice(0, h.i + 1);
-        h.pila.push(s);
+        h.pila.push({
+            html,
+            selAntes: selAntes ?? actual?.selDespues ?? selDespues,
+            selDespues,
+        });
         // Tope por cantidad y por tamaño total: con documentos largos cada instantánea pesa cientos de KB.
         while (
             h.pila.length > MAX_HISTORIAL
@@ -1484,6 +1674,7 @@ export function HojaEditable({
             h.pila.shift();
         }
         h.i = h.pila.length - 1;
+        notificarHistorial();
     }
 
     function programarSnapshot() {
@@ -1492,9 +1683,49 @@ export function HojaEditable({
         if (!h.pendiente) {
             h.pendiente = true;
             h.t0 = ahora;
+            if (!h.selAntesPendiente) h.selAntesPendiente = h.ultimaSel ?? (raizRef.current ? tomarSel(raizRef.current) : null);
+        }
+        // Cualquier edición nueva descarta de inmediato los estados futuros de «rehacer».
+        if (h.i < h.pila.length - 1) {
+            h.pila = h.pila.slice(0, h.i + 1);
         }
         window.clearTimeout(h.timer);
         h.timer = window.setTimeout(registrar, Math.max(0, Math.min(PAUSA_HISTORIAL_MS, MAX_AGRUPAR_MS - (ahora - h.t0))));
+        notificarHistorial();
+    }
+
+    /** Se ejecuta en `beforeinput` antes de que el navegador altere el DOM: separa palabras, inserciones vs borrados y selecciones. */
+    function antesDeEntrada(tipo: string, data: string) {
+        const el = raizRef.current;
+        if (!el) return;
+        const h = hist.current;
+        const selActual = tomarSel(el);
+        const haySeleccion = !!selActual && (selActual.ba !== selActual.bf || selActual.ca !== selActual.cf);
+        const cat: TipoEdicion = tipo.startsWith('insert')
+            ? 'insertar'
+            : tipo.startsWith('delete')
+                ? 'borrar'
+                : 'otro';
+
+        // Al empezar una nueva palabra tras un espacio o tabulación, se cierra el paso anterior como en Word.
+        let nuevaPalabra = false;
+        if (cat === 'insertar' && h.pendiente && h.tipoPendiente === 'insertar' && data && !/^\s+$/.test(data)) {
+            const s = window.getSelection();
+            if (s && s.isCollapsed && s.anchorNode?.nodeType === 3 && s.anchorOffset > 0) {
+                const previo = (s.anchorNode as Text).data[s.anchorOffset - 1];
+                if (previo === ' ' || previo === '\t' || previo === '\u00A0') {
+                    nuevaPalabra = true;
+                }
+            }
+        }
+
+        if (h.pendiente && (haySeleccion || cat !== h.tipoPendiente || cat === 'otro' || nuevaPalabra)) {
+            registrar();
+        }
+        if (!h.pendiente) {
+            h.selAntesPendiente = selActual ?? h.ultimaSel;
+            h.tipoPendiente = cat;
+        }
     }
 
     /* ----- estado hacia el padre (cinta y panel) ----- */
@@ -1571,38 +1802,51 @@ export function HojaEditable({
         programarEstado();
     }
 
-    function restaurar(s: Snap) {
+    function restaurar(s: Snap, selObjetivo: SelGuardada | null) {
         const el = raizRef.current;
         if (!el) return;
         edicion.current?.cerrar(false, 'blur');
         const h = hist.current;
         window.clearTimeout(h.timer);
         h.pendiente = false;
+        h.tipoPendiente = null;
         el.innerHTML = s.html;
         repintar(el);
+        s.html = instantanea(el);
         el.focus({ preventScroll: true });
-        ponerSel(el, s.sel);
+        ponerSel(el, selObjetivo ?? s.selDespues);
+        const selActual = tomarSel(el);
+        h.ultimaSel = selActual;
+        h.selAntesPendiente = selActual;
         guardada.current = null;
         ultimoFmt.current = '';
         ultimoAmbito.current = '';
         pg.remedir();
+        mostrarCursor(el);
         cb.current.onCambio();
         programarEstado();
+        notificarHistorial();
     }
 
     function deshacer() {
-        registrar();
         const h = hist.current;
+        const el = raizRef.current;
+        if (el && (h.pendiente || (h.i === h.pila.length - 1 && instantanea(el) !== h.pila[h.i]?.html))) {
+            registrar();
+        }
         if (h.i <= 0) return;
+        const pasoDeshecho = h.pila[h.i];
         h.i -= 1;
-        restaurar(h.pila[h.i]);
+        restaurar(h.pila[h.i], pasoDeshecho?.selAntes ?? h.pila[h.i].selDespues);
     }
 
     function rehacer() {
         const h = hist.current;
+        if (h.pendiente) registrar();
         if (h.i >= h.pila.length - 1) return;
         h.i += 1;
-        restaurar(h.pila[h.i]);
+        const pasoRehecho = h.pila[h.i];
+        restaurar(pasoRehecho, pasoRehecho.selDespues);
     }
 
     /* ----- foco y cursor ----- */
@@ -1668,6 +1912,7 @@ export function HojaEditable({
     function nuevoParrafo() {
         const el = raizRef.current;
         if (!el) return;
+        registrar();
         borrarSeleccion();
         const r = rangoActual();
         r.collapse(true);
@@ -1701,7 +1946,7 @@ export function HojaEditable({
         limpiarBloque(bloque);
         limpiarBloque(nuevo);
         ponerRango(inicioProfundo(nuevo));
-        tras(false, false);
+        tras(true, false);
         mostrarCursor(el);
     }
 
@@ -1709,6 +1954,7 @@ export function HojaEditable({
     function saltoSuave() {
         const el = raizRef.current;
         if (!el) return;
+        registrar();
         borrarSeleccion();
         const r = rangoActual();
         r.collapse(true);
@@ -1718,13 +1964,14 @@ export function HojaEditable({
         r.insertNode(br);
         rellenarSaltoFinal(bloque, br); // al final del párrafo hace falta un <br> de relleno detrás
         ponerRango(trasNodo(br));
-        tras(false, false);
+        tras(true, false);
         mostrarCursor(el);
     }
 
     /** Tab: inserta una tabulación (en vez de sacar el foco del editor). */
     function tabulador() {
         if (!raizRef.current) return;
+        registrar();
         document.execCommand('insertText', false, '\t');
     }
 
@@ -1961,7 +2208,8 @@ export function HojaEditable({
     useImperativeHandle(
         ref,
         () => ({
-            leerTexto, insertar, comando, alinear, saltoPagina, deshacer, rehacer, enfocar: foco,
+            leerTexto, insertar, comando, alinear, saltoPagina, deshacer, rehacer,
+            estadoHistorial, suscribirHistorial, enfocar: foco,
             fuente: ponerFuente, tamano: ponerTamano, interlineado: ponerInterlineado, columnas: ponerColumnas, saltoColumna,
             contarPendientes: () => raizRef.current?.querySelectorAll('.mk[data-k="pendiente"]').length ?? 0,
             reasignar: (fn) => {
@@ -1977,7 +2225,7 @@ export function HojaEditable({
     useEffect(() => {
         cfgRef.current = config;
         cb.current = { onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo };
-        acc.current = { deshacer, rehacer, parrafo: nuevoParrafo, salto: saltoSuave };
+        acc.current = { deshacer, rehacer, parrafo: nuevoParrafo, salto: saltoSuave, antesDeEntrada };
     });
 
     useEffect(() => {
@@ -2036,6 +2284,10 @@ export function HojaEditable({
             const s = window.getSelection();
             if (!el || !s || s.rangeCount === 0 || !s.anchorNode || !el.contains(s.anchorNode)) return;
             guardada.current = s.getRangeAt(0).cloneRange();
+            if (!hist.current.pendiente) {
+                const selActual = tomarSel(el);
+                if (selActual) hist.current.ultimaSel = selActual;
+            }
             programarEstado();
         };
         document.addEventListener('selectionchange', f);
@@ -2048,13 +2300,16 @@ export function HojaEditable({
         const el = raizRef.current;
         if (!el) return;
         const f = (e: Event) => {
-            const tipo = (e as InputEvent).inputType;
+            const ev = e as InputEvent;
+            const tipo = ev.inputType ?? '';
             const a = acc.current;
             if (!a) return;
-            if (tipo === 'historyUndo') { e.preventDefault(); a.deshacer(); }
-            else if (tipo === 'historyRedo') { e.preventDefault(); a.rehacer(); }
-            else if (tipo === 'insertParagraph') { e.preventDefault(); a.parrafo(); }
-            else if (tipo === 'insertLineBreak') { e.preventDefault(); a.salto(); }
+            if (tipo === 'historyUndo') { e.preventDefault(); a.deshacer(); return; }
+            if (tipo === 'historyRedo') { e.preventDefault(); a.rehacer(); return; }
+            if (tipo === 'insertParagraph') { e.preventDefault(); a.parrafo(); return; }
+            if (tipo === 'insertLineBreak') { e.preventDefault(); a.salto(); return; }
+            if (pegando.current || CHIP_EDITANDO) return;
+            a.antesDeEntrada(tipo, ev.data ?? '');
         };
         el.addEventListener('beforeinput', f);
         return () => el.removeEventListener('beforeinput', f);
@@ -2087,6 +2342,10 @@ export function HojaEditable({
 
         if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (chipTip.current) ocultarTip();
+
+        if (TECLAS_NAVEGACION.has(e.key) && hist.current.pendiente) {
+            registrar();
+        }
 
         if (e.key === 'Enter') {
             if (e.ctrlKey || e.metaKey) {
@@ -2365,6 +2624,7 @@ export function HojaEditable({
 
     /** Llenar: mousedown sobre un dato → su texto pasa a ser editable en el mismo lugar. */
     function alMouseDown(e: MouseEvent<HTMLDivElement>) {
+        if (hist.current.pendiente) registrar();
         const ll = LLENADO;
         const el = raizRef.current;
         const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;

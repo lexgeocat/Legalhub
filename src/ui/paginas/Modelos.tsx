@@ -1,4 +1,4 @@
-﻿import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ModeloResumen } from '../../application/consultas';
 import { CATEGORIAS_MODELO } from '../../domain/modelos/fuenteModelo';
 import { PLANTILLAS_INICIALES } from '../../domain/modelos/plantillasIniciales';
@@ -101,18 +101,18 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
         <div className="pagina">
             <div className="pagina-cab">
                 <div>
-                    <h1>Modelos</h1>
-                    <p className="subtitulo">Plantillas de documentos con campos que se completan desde el expediente.</p>
+                    <h1>Escritos</h1>
+                    <p className="subtitulo">Modelos y plantillas de escritos con campos que se completan desde el expediente.</p>
                 </div>
                 <div className="acciones">
                     <button type="button" className="btn btn-sec" onClick={() => setPlantillas(true)}>Plantillas</button>
                     <button type="button" className="btn btn-sec" onClick={() => setImportando(true)}>Importar Word</button>
-                    <button type="button" className="btn btn-pri" onClick={nuevo}><Icono n="mas" tam={16} /> Nuevo modelo</button>
+                    <button type="button" className="btn btn-pri" onClick={nuevo}><Icono n="mas" tam={16} /> Nuevo escrito</button>
                 </div>
             </div>
 
             <div className="filtros">
-                <input className="buscar" type="search" placeholder="Buscar modelo…" value={q} onChange={(e) => setQ(e.target.value)} />
+                <input className="buscar" type="search" placeholder="Buscar escrito…" value={q} onChange={(e) => setQ(e.target.value)} />
                 <select value={cat} onChange={(e) => setCat(e.target.value)}>
                     <option value="">Todas las categorías</option>
                     {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -127,12 +127,12 @@ function ListaModelos({ ver, nuevo }: { ver: (id: string) => void; nuevo: () => 
 
             {lista.datos && filtrados.length === 0 && (
                 <Vacio
-                    titulo={lista.datos.length === 0 ? 'Aún no tienes modelos' : 'Sin resultados'}
+                    titulo={lista.datos.length === 0 ? 'Aún no tienes escritos' : 'Sin resultados'}
                     texto={lista.datos.length === 0 ? 'Crea uno desde cero, importa un .docx con marcadores o instala una plantilla inicial.' : 'Prueba con otra búsqueda o categoría.'}
                 >
                     {lista.datos.length === 0 && (
                         <>
-                            <button type="button" className="btn btn-pri" onClick={nuevo}>Nuevo modelo</button>
+                            <button type="button" className="btn btn-pri" onClick={nuevo}>Nuevo escrito</button>
                             <button type="button" className="btn btn-sec" onClick={() => setPlantillas(true)}>Ver plantillas</button>
                         </>
                     )}

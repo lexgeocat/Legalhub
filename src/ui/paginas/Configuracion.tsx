@@ -1,10 +1,10 @@
 // src/ui/paginas/Configuracion.tsx
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { hoyISO } from '../../domain/modelos/filtros/fecha';
 import { VERSION_APP } from '../../domain/comun/version';
-import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar } from '../_core/comunes';
+import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar, registrarTarea } from '../_core/comunes';
 import { FormularioPersona } from '../compartidos/FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 import { useTema } from '../_core/tema';
@@ -39,6 +39,18 @@ export function Configuracion() {
         [abogadoId],
     );
     const nombreAbogado = abogadoId ? (abogado.datos?.nombre ?? null) : null;
+
+    useEffect(() => {
+        if (!ocupado) return;
+        const desc: Record<string, string> = {
+            guardar: 'Guardando configuración del sistema',
+            respaldo: 'Creando y verificando copia de seguridad (.lhbak)',
+            restaurar: 'Restaurando base de datos y modelos desde copia de seguridad',
+            auditoria: 'Verificando cadena criptográfica de auditoría',
+            limpieza: 'Limpiando y archivando registros no utilizados',
+        };
+        return registrarTarea(`config-${ocupado}`, desc[ocupado] ?? 'Operación del sistema en curso');
+    }, [ocupado]);
 
     async function guardar(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -266,7 +278,7 @@ export function Configuracion() {
                                 <b>Oxford Editorial</b>
                                 {tema === 'oxford' && <Insignia tono="azul">Activo</Insignia>}
                             </div>
-                            <p className="suave">Oxford Navy & Alabastro. Tonalidad de prestigio jurídico y legibilidad óptima para despachos.</p>
+                            <p className="suave">Oxford Navy & Pizarra Perla Intermedio. Tono descansado sin deslumbramiento para despachos.</p>
                         </div>
                     </button>
 
@@ -303,11 +315,11 @@ export function Configuracion() {
                             avisar('Tema Rose Quartz Boutique activado');
                         }}
                     >
-                        <div className="tema-preview" style={{ background: '#fdfbf9', borderColor: '#f2e2df' }}>
-                            <div className="tp-nav" style={{ background: '#22111a', borderRight: '1px solid rgba(244, 215, 222, 0.15)' }} />
+                        <div className="tema-preview tema-preview-rose">
+                            <div className="tp-nav" />
                             <div className="tp-content">
-                                <div className="tp-bar" style={{ background: '#9d4466' }} />
-                                <div className="tp-card" style={{ background: '#ffffff', borderColor: '#f2e2df' }} />
+                                <div className="tp-bar" />
+                                <div className="tp-card" />
                             </div>
                         </div>
                         <div className="tema-opcion-info">
@@ -316,7 +328,7 @@ export function Configuracion() {
                                 <b>Rose Quartz Boutique</b>
                                 {tema === 'rose' && <Insignia tono="violeta">Activo</Insignia>}
                             </div>
-                            <p className="suave">Panel oscuro boutique (Plum Wine & Rose Gold) con espacio de trabajo marfil suave. Sofisticación para firmas ejecutivas.</p>
+                            <p className="suave">Panel oscuro boutique (Plum Wine & Rose Gold) con lienzo cálido cachemira intermedio anti-fatiga.</p>
                         </div>
                     </button>
                 </div>
@@ -440,8 +452,8 @@ export function Configuracion() {
                 </div>
 
                 {diccionarios.datos && diccionarios.datos.length === 0 ? (
-                    <div style={{ padding: '24px', textAlign: 'center', background: 'var(--fondo-2)', borderRadius: '8px', border: '1px dashed var(--borde-2)' }}>
-                        <p style={{ margin: '0 0 10px 0', fontWeight: 600, color: 'var(--texto-1)' }}>Aún no tienes diccionarios jurídicos cargados</p>
+                    <div style={{ padding: '24px', textAlign: 'center', background: 'var(--superficie-2)', borderRadius: '8px', border: '1px dashed var(--borde-fuerte)' }}>
+                        <p style={{ margin: '0 0 10px 0', fontWeight: 600, color: 'var(--texto)' }}>Aún no tienes diccionarios jurídicos cargados</p>
                         <p className="suave" style={{ margin: '0 0 16px 0', fontSize: '0.85rem' }}>
                             Puedes importar con 1 clic los 3 diccionarios fundamentales del sistema (Cabanellas, Ossorio, Ley 348) o subir cualquier otro archivo PDF doctrinal.
                         </p>

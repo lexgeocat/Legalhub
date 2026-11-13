@@ -86,7 +86,7 @@
   background: var(--superficie);
   border-color: var(--primario);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+  box-shadow: 0 0 0 3px var(--primario-claro);
 }
 
 .dicc-btn-limpiar {
@@ -160,10 +160,11 @@
 }
 
 .dicc-item-termino.activo {
-  background: rgba(29, 78, 216, 0.08);
+  background: var(--primario-claro);
   border-left: 3.5px solid var(--primario);
 }
 
+[data-tema="slate"] .dicc-item-termino.activo,
 [data-tema="oscuro"] .dicc-item-termino.activo {
   background: rgba(59, 130, 246, 0.15);
   border-left-color: #60a5fa;

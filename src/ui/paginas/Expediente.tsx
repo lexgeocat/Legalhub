@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { fichaDeModelo, seccionesDeModelo, type FichaModelo } from '../../application/camposModelo';
 import type { ModeloVisible } from '../../application/casosDeUso/administrarModelos';
 import type { DocumentoResumen, ExpedienteResumen, ModeloResumen, PersonaResumen } from '../../application/consultas';
@@ -9,7 +9,7 @@ import { AsistenteDocumento } from '../editor/AsistenteDocumento';
 import {
     Alerta, Aviso, Campo, ESTADOS, ETIQUETA_ESTADO, Icono, Insignia, Modal, Pestanas, Vacio,
     avisar, confirmar, datosDeForm, etiquetaTipo, fechaCorta, fechaHora,
-    hayCambiosPendientes, marcarCambiosPendientes, permitirSalir,
+    hayCambiosPendientes, marcarCambiosPendientes, permitirSalir, registrarCambio,
 } from '../_core/comunes';
 import { DatosExpediente } from '../compartidos/DatosExpediente';
 import { Hoja } from '../editor/Hoja';
@@ -61,6 +61,10 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
     const alInicio = clienteAlInicio(t);
     const activa: PestanaExp = pestana ?? 'partes';
     const enTrabajo = (p: PestanaExp) => p === 'partes' || p === 'datos';
+
+    useEffect(() => {
+        return () => registrarCambio('expediente-datos', null);
+    }, []);
 
     /** Cambiar de pestaña: entre Partes y Datos no se pierde nada; al salir de ellas avisa si hay cambios sin guardar. */
     async function irA(p: PestanaExp) {
@@ -178,7 +182,12 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
                     irPartes={() => setPestana('partes')}
                     irDatos={() => setPestana('datos')}
                     irDocumento={() => setAsistente(true)}
-                    onSucio={marcarCambiosPendientes}
+                    onSucio={(sucio) =>
+                        registrarCambio(
+                            'expediente-datos',
+                            sucio ? `Datos y partes del expediente ${e.codigo} con cambios sin guardar` : null,
+                        )
+                    }
                 />
             )}
             {activa === 'documentos' && (
@@ -238,7 +247,7 @@ function TabModelo({ e, modelos, actual, visible, ficha, elegir, siguiente }: {
     const ctxMarcadores = useMemo(() => (visible?.fuente ? contextoDeFuente(visible.fuente) : undefined), [visible]);
 
     if (modelos.length === 0) {
-        return <Alerta tipo="info">Aún no hay modelos activos. Crea o instala uno en la sección Modelos y vuelve aquí.</Alerta>;
+        return <Alerta tipo="info">Aún no hay escritos activos. Crea o instala uno en la sección Escritos y vuelve aquí.</Alerta>;
     }
 
     return (

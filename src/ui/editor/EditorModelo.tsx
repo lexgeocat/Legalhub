@@ -11,16 +11,17 @@ import { precargarFuentes } from '../../domain/fuentes/fuentes';
 import { nuevoId } from '../../domain/comun/id';
 import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../../domain/modelos/marcadores';
 import { claveCampo, etiquetaRol } from '../../domain/comun/texto';
-import { SelectFuente, SelectInterlineado, SelectTamano, Tb } from './BarraFormato';
+import { ControlesHistorial, ICO, Ico, SelectFuente, SelectInterlineado, SelectTamano, Tb } from './BarraFormato';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, SelectCategoria, SelectMateria, TablaEsquema,
-    avisar, confirmar,
+    avisar, confirmar, registrarCambio, registrarTarea,
 } from '../_core/comunes';
 import { EditorHoja } from './EditorHoja';
 import { ModalMarcador } from './EditorMarcador';
 import type { ControlHoja, EdicionDirecta, LlenadoHoja, MenuCampoInfo, SelectorEdicion } from './HojaEditable';
 import { MenuCampo } from './MenuCampo';
 import { PanelCampos } from './PanelCampos';
+import { ModalGuiaRedaccion } from './ModalGuiaRedaccion';
 import { ControlesVentana } from '../_core/ControlesVentana';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
 
@@ -29,6 +30,7 @@ export interface Inicial { nombre: string; materia: string; categoria: string; d
 type Dialogo =
     | { n: 'datos' }
     | { n: 'verificacion' }
+    | { n: 'guia' }
     | { n: 'marcador'; actual: string; aplicar: (nuevo: string) => void; ambito: string[] };
 
 type VistaEditor = 'llenar' | 'modelo';
@@ -85,7 +87,7 @@ export function EditorModelo({ modeloId, versionId, volver, guardado }: {
     }, [versionId, modeloId]);
 
     const atras = (
-        <button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Modelos</button>
+        <button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Escritos</button>
     );
 
     if (versionId) {
@@ -150,7 +152,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     const [grupos, setGrupos] = useState<GrupoDatos[]>(inicial.fuente.grupos ?? []);
     const [ambito, setAmbito] = useState<string[]>([]);
     const [notas, setNotas] = useState('');
-    const [panelAbierto, setPanelAbierto] = useState(true);
+    const [verCampos, setVerCampos] = useState(true);
     const [dialogo, setDialogo] = useState<Dialogo | null>(null);
     const [verif, setVerif] = useState<ResultadoValidacion | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -317,6 +319,36 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     }
 
     useEffect(() => {
+        if (guardando) {
+            return registrarTarea('guardar-escrito', `Guardando versión del escrito «${nombre || 'Sin título'}»`);
+        }
+    }, [guardando, nombre]);
+
+    useEffect(() => {
+        if (llenado?.guardando) {
+            return registrarTarea('guardar-datos-doc', `Guardando datos del escrito «${nombre || 'Sin título'}»`);
+        }
+    }, [llenado?.guardando, nombre]);
+
+    useEffect(() => {
+        if (modificado && !soloLectura) {
+            registrarCambio('editor-escrito', `Escrito «${nombre || 'Sin título'}» con cambios sin guardar`);
+        } else {
+            registrarCambio('editor-escrito', null);
+        }
+        return () => registrarCambio('editor-escrito', null);
+    }, [modificado, soloLectura, nombre]);
+
+    useEffect(() => {
+        if (llenado?.sucio) {
+            registrarCambio('editor-datos-llenado', `Datos del escrito «${nombre || 'Sin título'}» sin guardar`);
+        } else {
+            registrarCambio('editor-datos-llenado', null);
+        }
+        return () => registrarCambio('editor-datos-llenado', null);
+    }, [llenado?.sucio, nombre]);
+
+    useEffect(() => {
         guardarRef.current = () => {
             if (llenado && vista === 'llenar') void llenado.guardarDatos();
             else void guardar(false);
@@ -350,12 +382,16 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
             {/* ===== Barra de título estilo Office ===== */}
             <header className="ed-barra-titulo" data-tauri-drag-region>
                 <button type="button" className="btn btn-fan" onClick={() => void salir()}>
-                    <Icono n="atras" /> {llenado ? 'Expediente' : 'Modelos'}
+                    <Icono n="atras" /> {llenado ? 'Expediente' : 'Escritos'}
                 </button>
+
+                <div className="ed-sep-v" />
+                <ControlesHistorial hoja={hoja} bloqueada={soloLectura} />
+                <div className="ed-sep-v" />
 
                 <div className="ed-office-centro" data-tauri-drag-region>
                     {modoModelo ? (
-                        <input className="editor-nombre" placeholder="Nombre del modelo" value={nombre} readOnly={soloLectura}
+                        <input className="editor-nombre" placeholder="Nombre del escrito" value={nombre} readOnly={soloLectura}
                             onChange={(e) => { setNombre(e.target.value); tocar(); }} />
                     ) : (
                         <b className="ed-nombre" title={nombre}>{nombre}</b>
@@ -365,7 +401,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                         <Segmentado<VistaEditor>
                             valor={vista}
                             cambiar={cambiarVista}
-                            opciones={[{ id: 'llenar', etiqueta: 'Llenar datos' }, { id: 'modelo', etiqueta: 'Editar modelo' }]}
+                            opciones={[{ id: 'llenar', etiqueta: 'Llenar datos' }, { id: 'modelo', etiqueta: 'Editar escrito' }]}
                         />
                     )}
                     {llenado && soloLectura && <Insignia tono="gris">Modelo de Word: solo llenado</Insignia>}
@@ -427,35 +463,66 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                 onEditarCampo={modoModelo ? (actual, aplicar, amb) => setDialogo({ n: 'marcador', actual, aplicar, ambito: amb }) : undefined}
                 barra={modoModelo ? (
                     <>
-                        <Tb titulo="Ver el documento con los datos de ejemplo de cada campo" activo={verEjemplos}
-                            onClick={() => { setVerEjemplos((v) => !v); setVerCodigos(false); }}>Ejemplos</Tb>
-                        <Tb titulo="Mostrar el código {{…}} de cada campo en vez de su etiqueta corta" activo={verCodigos}
-                            onClick={() => { setVerCodigos((v) => !v); setVerEjemplos(false); }}>{'{ }'} Códigos</Tb>
-                        <Tb titulo="Mostrar u ocultar el constructor de campos (datos, partes y género)" activo={panelAbierto}
-                            onClick={() => setPanelAbierto((v) => !v)}>Campos</Tb>
+                        <div className="ed-subgrupo" role="group" aria-label="Vista de marcadores">
+                            <Tb titulo="Ver el documento con los datos de ejemplo de cada campo" activo={verEjemplos}
+                                onClick={() => { setVerEjemplos((v) => !v); setVerCodigos(false); }}>
+                                <Ico d={ICO.ojo} />
+                                <span>Ejemplos</span>
+                            </Tb>
+                            <Tb titulo="Mostrar el código {{…}} de cada campo en vez de su etiqueta corta" activo={verCodigos}
+                                onClick={() => { setVerCodigos((v) => !v); setVerEjemplos(false); }}>
+                                <Ico d={ICO.codigos} />
+                                <span>Códigos</span>
+                            </Tb>
+                        </div>
+                        <div className="ed-subgrupo" role="group" aria-label="Herramientas de redacción y campos">
+                            <Tb titulo="Mostrar u ocultar el constructor de campos (datos, partes y género)" activo={verCampos}
+                                onClick={() => setVerCampos((v) => !v)}>
+                                <Ico d={ICO.campos} />
+                                <span>Campos</span>
+                            </Tb>
+                            <Tb titulo="Ver compendio y fórmulas de redacción jurídica (Aperturas, Conectores, Técnica forense y Cierres)" activo={dialogo?.n === 'guia'}
+                                onClick={() => setDialogo({ n: 'guia' })}>
+                                <Ico d={ICO.guia} />
+                                <span>Guía Redacción</span>
+                            </Tb>
+                        </div>
                     </>
-                ) : undefined}
-                panel={modoModelo && panelAbierto ? (
-                    <PanelCampos
-                        campos={campos}
-                        partes={partes}
-                        grupos={grupos}
-                        ambito={ambito}
-                        onCampos={cambiarCampos}
-                        onPartes={cambiarPartes}
-                        onGrupos={cambiarGrupos}
-                        onInsertar={insertar}
-                        onDetectar={detectar}
-                        pendientes={pendientes}
-                        onAsignarPendientes={asignarPendientes}
-                    />
-                ) : undefined}
+                ) : (
+                    <>
+                        <Tb titulo="Ver compendio y fórmulas de redacción jurídica (Aperturas, Conectores, Técnica forense y Cierres)" activo={dialogo?.n === 'guia'}
+                            onClick={() => setDialogo({ n: 'guia' })}>
+                            <Ico d={ICO.guia} />
+                            <span>Guía Redacción</span>
+                        </Tb>
+                    </>
+                )}
+                panel={
+                    modoModelo && verCampos ? (
+                        <PanelCampos
+                            campos={campos}
+                            partes={partes}
+                            grupos={grupos}
+                            ambito={ambito}
+                            onCampos={cambiarCampos}
+                            onPartes={cambiarPartes}
+                            onGrupos={cambiarGrupos}
+                            onInsertar={insertar}
+                            onDetectar={detectar}
+                            pendientes={pendientes}
+                            onAsignarPendientes={asignarPendientes}
+                        />
+                    ) : undefined
+                }
                 ayuda={modoModelo
-                    ? 'Pasa el mouse sobre un campo para ver qué es · doble clic: editarlo · Ctrl+G guardar'
-                    : 'Clic en un dato y escribe · Enter confirma · Esc cancela · Tab siguiente dato · Ctrl+G guardar datos'}
+                    ? 'Pasa el mouse sobre un campo para ver qué es · doble clic: editarlo · Ctrl+G guardar · «Guía Redacción»: fórmulas forenses'
+                    : 'Clic en un dato y escribe · Enter confirma · Esc cancela · Tab siguiente dato · Ctrl+G guardar datos · «Guía Redacción»: fórmulas forenses'}
             />
 
             {/* ===== Diálogos ===== */}
+            {dialogo?.n === 'guia' && (
+                <ModalGuiaRedaccion cerrar={cerrarDialogo} />
+            )}
             {dialogo?.n === 'marcador' && (
                 <ModalMarcador
                     actual={dialogo.actual}

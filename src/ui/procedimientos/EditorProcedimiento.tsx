@@ -6,7 +6,7 @@ import {
 import { borrarBorrador, guardarBorrador, leerBorrador } from '../editor/borradores';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectMateria,
-    avisar, confirmar, etiquetaMateria, marcarCambiosPendientes,
+    avisar, confirmar, etiquetaMateria, registrarCambio, registrarTarea,
 } from '../_core/comunes';
 import { FlujoProcedimiento } from './FlujoProcedimiento';
 import { RequisitosProcedimiento } from './RequisitosProcedimiento';
@@ -74,9 +74,15 @@ function Editor({ inicial, volver }: { inicial: Procedimiento | null; volver: ()
 
     /* ----- avisa a la navegación lateral si hay cambios sin guardar ----- */
     useEffect(() => {
-        marcarCambiosPendientes(sucio);
-    }, [sucio]);
-    useEffect(() => () => marcarCambiosPendientes(false), []);
+        registrarCambio('procedimiento-edicion', sucio ? `Procedimiento «${nombre || 'Sin título'}» con cambios sin guardar` : null);
+    }, [sucio, nombre]);
+    useEffect(() => () => registrarCambio('procedimiento-edicion', null), []);
+
+    useEffect(() => {
+        if (guardando) {
+            return registrarTarea('guardar-procedimiento', `Guardando procedimiento «${nombre || 'Sin título'}»`);
+        }
+    }, [guardando, nombre]);
 
     /* ----- borrador automático ----- */
     useEffect(() => {

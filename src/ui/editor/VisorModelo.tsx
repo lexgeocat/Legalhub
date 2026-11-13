@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { contextoDeFuente } from '../../domain/modelos/marcadores';
 import { Alerta, Aviso, Campo, Icono, Insignia, Pestanas, SelectCategoria, SelectMateria, TablaEsquema, avisar, confirmar, etiquetaMateria, fechaHora } from '../_core/comunes';
 import { Hoja } from './Hoja';
@@ -154,12 +154,12 @@ export function VisorModelo({ modeloId, volver, editar, abrir }: {
         });
     }
 
-    if (modelo.error) return <div className="pagina"><button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Modelos</button><Aviso error={modelo.error} /></div>;
+    if (modelo.error) return <div className="pagina"><button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Escritos</button><Aviso error={modelo.error} /></div>;
     if (!m) return <div className="pagina"><p className="suave">Cargando…</p></div>;
 
     return (
         <div className="pagina pagina-ancha">
-            <div><button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Modelos</button></div>
+            <div><button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Escritos</button></div>
 
             <div className="pagina-cab">
                 <div>

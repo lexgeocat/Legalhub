@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { hayCambiosPendientes, permitirSalir } from './comunes';
+import { estaSalidaAutorizada, solicitarCierreSistema } from './guardiaCierre';
 
 export function useControlVentana() {
   const [maximizada, setMaximizada] = useState(false);
@@ -19,7 +19,7 @@ export function useControlVentana() {
           })
           .catch(() => {});
 
-        const unlistenPromise = appWindow.onResized(() => {
+        const unlistenResizePromise = appWindow.onResized(() => {
           appWindow
             .isMaximized()
             .then((m) => {
@@ -28,9 +28,19 @@ export function useControlVentana() {
             .catch(() => {});
         });
 
+        // Intercepta Alt+F4 y el cierre desde el sistema operativo para mostrar la ventana emergente
+        const unlistenClosePromise = appWindow.onCloseRequested((event) => {
+          if (estaSalidaAutorizada()) {
+            return;
+          }
+          event.preventDefault();
+          solicitarCierreSistema();
+        });
+
         return () => {
           cancelado = true;
-          unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+          unlistenResizePromise.then((unlisten) => unlisten()).catch(() => {});
+          unlistenClosePromise.then((unlisten) => unlisten()).catch(() => {});
         };
       })
       .catch(() => {});
@@ -58,15 +68,9 @@ export function useControlVentana() {
     }
   };
 
-  const cerrar = async () => {
-    if (!esTauri) return;
-    try {
-      if (hayCambiosPendientes() && !(await permitirSalir())) return;
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().close();
-    } catch (e) {
-      console.warn('Error al cerrar ventana:', e);
-    }
+  const cerrar = () => {
+    // Activa la ventana emergente de verificación de estado y cierre seguro
+    solicitarCierreSistema();
   };
 
   return { maximizada, minimizar, alternarMaximizar, cerrar, esTauri };

@@ -57,7 +57,7 @@
     flex: 1 1 0;
     min-height: 140px;
     overflow: auto;
-    background: #fff;
+    background: var(--superficie);
     border: 1px solid var(--borde);
     border-radius: 10px;
     padding: 10px 8px 14px;
@@ -94,9 +94,15 @@
     align-items: center;
     gap: 2px;
     margin: 2px 0;
-    border: 1px solid hsl(var(--h) 55% 86%);
+    border: 1px solid hsl(var(--h) 45% 80%);
     border-radius: 8px;
-    background: hsl(var(--h) 90% 96%);
+    background: hsl(var(--h) 55% 91%);
+}
+
+[data-tema="slate"] .org-fila,
+[data-tema="oscuro"] .org-fila {
+    border-color: hsl(var(--h) 38% 30%);
+    background: hsl(var(--h) 32% 18%);
 }
 
 .org-fila.niv-articulo {
@@ -105,11 +111,11 @@
 }
 
 .org-fila:hover {
-    border-color: hsl(var(--h) 55% 68%);
+    border-color: hsl(var(--h) 55% 64%);
 }
 
 .org-fila.en-ruta {
-    border-color: hsl(var(--h) 60% 62%);
+    border-color: hsl(var(--h) 60% 58%);
 }
 
 .org-fila.sel {
@@ -198,7 +204,7 @@
     flex-direction: column;
     gap: 14px;
     padding: 22px 28px 26px;
-    background: #fff;
+    background: var(--superficie);
     border: 1px solid var(--borde);
     border-radius: 10px;
 }
@@ -257,7 +263,7 @@
     font-family: Georgia, "Times New Roman", serif;
     font-size: 16px;
     line-height: 1.75;
-    color: #1a1d29;
+    color: var(--texto);
 }
 
 .ley-cuerpo p {
@@ -302,17 +308,29 @@
     flex-direction: column;
     gap: 3px;
     padding: 10px 12px;
-    border: 1px solid hsl(var(--h) 55% 84%);
+    border: 1px solid hsl(var(--h) 45% 80%);
     border-left: 4px solid hsl(var(--h) 60% 55%);
     border-radius: 10px;
-    background: hsl(var(--h) 90% 97%);
+    background: hsl(var(--h) 55% 92%);
     font: inherit;
     text-align: left;
     cursor: pointer;
 }
 
 .ley-card:hover {
-    background: hsl(var(--h) 90% 93%);
+    background: hsl(var(--h) 55% 88%);
+}
+
+[data-tema="slate"] .ley-card,
+[data-tema="oscuro"] .ley-card {
+    border-color: hsl(var(--h) 38% 30%);
+    border-left-color: hsl(var(--h) 65% 60%);
+    background: hsl(var(--h) 32% 18%);
+}
+
+[data-tema="slate"] .ley-card:hover,
+[data-tema="oscuro"] .ley-card:hover {
+    background: hsl(var(--h) 35% 22%);
 }
 
 .ley-card:focus-visible,
@@ -327,6 +345,11 @@
     letter-spacing: .05em;
     text-transform: uppercase;
     color: hsl(var(--h) 45% 36%);
+}
+
+[data-tema="slate"] .ley-card-niv,
+[data-tema="oscuro"] .ley-card-niv {
+    color: hsl(var(--h) 75% 74%);
 }
 
 .ley-card-tit {
@@ -348,7 +371,8 @@
     padding: 4px 10px;
     border: 1px solid var(--borde-fuerte);
     border-radius: 999px;
-    background: #fff;
+    background: var(--superficie-2);
+    color: var(--texto);
     font: inherit;
     font-size: 12.5px;
     cursor: pointer;
@@ -399,7 +423,12 @@
     border: 1px solid var(--borde);
     border-radius: 10px;
     overflow: hidden;
-    background: #dde1ea;
+    background: #d2dae6;
+}
+
+[data-tema="slate"] .ley-visor-caja,
+[data-tema="oscuro"] .ley-visor-caja {
+    background: #11151e;
 }
 
 .ley-visor-barra {
@@ -426,7 +455,7 @@
 
 .ley-pagina {
     position: absolute;
-    background: #fff;
+    background: #f7f9fc;
     overflow: hidden;
     box-shadow: 0 1px 2px rgba(16, 24, 40, .16), 0 6px 18px rgba(16, 24, 40, .14);
 }
@@ -540,9 +569,9 @@
 }
 
 .ley-btn-modo.activo {
-    background: #ffffff;
+    background: var(--superficie);
     color: var(--primario);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+    box-shadow: var(--sombra);
     font-weight: 700;
 }
 
@@ -779,7 +808,7 @@
     display: block;
     box-shadow: 0 16px 40px -6px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
     border-radius: 10px;
-    background: #ffffff;
+    background: var(--superficie);
 }
 
 /* Nodos SVG en el organigrama */
@@ -819,11 +848,11 @@
     align-items: center;
     gap: 10px;
     padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.88);
+    background: var(--superficie);
     backdrop-filter: blur(8px);
     border: 1px solid var(--borde);
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--sombra);
     font-size: 11px;
     font-weight: 650;
     color: var(--texto-2);
@@ -850,12 +879,12 @@
     flex-direction: column;
     gap: 12px;
     min-height: 0;
-    background: #ffffff;
+    background: var(--superficie);
     border: 1px solid var(--borde);
     border-radius: 12px;
     padding: 16px 18px 20px;
     overflow-y: auto;
-    box-shadow: var(--sombra-sm);
+    box-shadow: var(--sombra);
 }
 
 .org-inspector-cab {
