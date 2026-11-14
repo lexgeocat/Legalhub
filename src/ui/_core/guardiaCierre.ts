@@ -27,10 +27,19 @@ export interface EstadoCierreSistema {
 const tareasActivas = new Map<string, string>();
 const cambiosPendientes = new Map<string, string>();
 const oyentesCierre = new Set<(solicitado: boolean, estado: EstadoCierreSistema) => void>();
+const desuscribirCloseRequested = new Set<() => void>();
 let cierreSolicitado = false;
 let salidaAutorizada = false;
 
 export const estaSalidaAutorizada = (): boolean => salidaAutorizada;
+
+/** Registra el `unlisten` de `onCloseRequested` para poder desactivar el interceptor antes de cerrar la ventana. */
+export function registrarInterceptorCierre(unlisten: () => void): () => void {
+    desuscribirCloseRequested.add(unlisten);
+    return () => {
+        desuscribirCloseRequested.delete(unlisten);
+    };
+}
 
 export function obtenerEstadoCierre(): EstadoCierreSistema {
     return {
@@ -107,25 +116,40 @@ export function suscribirCierre(cb: (solicitado: boolean, estado: EstadoCierreSi
 
 /**
  * Ejecuta el cierre definitivo del sistema.
- * En entorno Tauri intenta destroy() directo o close() con salidaAutorizada = true.
+ * Desactiva primero los oyentes `onCloseRequested` (que en Tauri v2 redirigen a `destroy()`)
+ * y luego ejecuta `close()` y `destroy()`.
  */
 export async function confirmarCierreSistema(): Promise<void> {
     salidaAutorizada = true;
+    cierreSolicitado = false;
+    tareasActivas.clear();
+    cambiosPendientes.clear();
+
+    // Desregistrar todos los interceptores `onCloseRequested` activos para que `close()` cierre la ventana nativa directamente
+    for (const unlisten of Array.from(desuscribirCloseRequested)) {
+        try {
+            unlisten();
+        } catch {
+            /* ignorar */
+        }
+    }
+    desuscribirCloseRequested.clear();
+
     const esTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     if (esTauri) {
-        try {
-            const { getCurrentWindow } = await import('@tauri-apps/api/window');
-            await getCurrentWindow().destroy();
-            return;
-        } catch (errDestroy) {
-            console.warn('destroy() falló o no permitido, probando close():', errDestroy);
-        }
         try {
             const { getCurrentWindow } = await import('@tauri-apps/api/window');
             await getCurrentWindow().close();
             return;
         } catch (errClose) {
-            console.warn('close() falló:', errClose);
+            console.warn('close() falló, probando destroy():', errClose);
+        }
+        try {
+            const { getCurrentWindow } = await import('@tauri-apps/api/window');
+            await getCurrentWindow().destroy();
+            return;
+        } catch (errDestroy) {
+            console.warn('destroy() falló:', errDestroy);
         }
     }
     window.close();

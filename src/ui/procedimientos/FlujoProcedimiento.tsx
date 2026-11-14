@@ -7,7 +7,7 @@ import {
     type HallazgoFlujo, type Paso, type Requisito, type Salida, type TipoPaso,
 } from '../../domain/procedimientos/procedimientos';
 import { Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, Vacio, avisar, confirmar } from '../_core/comunes';
-import { useTema } from '../_core/tema';
+import { useConfigTema } from '../_core/tema';
 import { COLOR_PASO, Flujograma } from './Flujograma';
 import { mensajeError, useServicios } from '../_core/servicios';
 import './procedimientos.css';
@@ -27,8 +27,7 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
     cambiarCarriles: (c: string[]) => void;
 }) {
     const s = useServicios();
-    const [tema, , alternarTema] = useTema();
-    const esOscuro = tema === 'slate';
+    const { esOscuro, alternarEsquema } = useConfigTema();
     const svg = useRef<SVGSVGElement>(null);
     const lienzo = useRef<HTMLDivElement>(null);
     const [modo, setModo] = useState<Modo>('editar');
@@ -396,7 +395,7 @@ export function FlujoProcedimiento({ nombre, pasos, carriles, requisitos, respon
                     <button
                         type="button"
                         className="btn btn-sec btn-sm"
-                        onClick={() => alternarTema()}
+                        onClick={() => alternarEsquema()}
                         title={esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
                     >
                         <Icono n={esOscuro ? 'sol' : 'luna'} tam={14} />

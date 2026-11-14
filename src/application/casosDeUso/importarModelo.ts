@@ -27,9 +27,11 @@ export interface EntradaImportacion extends DatosModelo {
 }
 
 export interface EntradaFuente extends DatosModelo {
-    /** Si se indica, crea una versión nueva de ese modelo y actualiza sus datos. */
+    /** Si se indica, actualiza ese modelo (crea versión nueva salvo que `nuevaVersion` sea `false`). */
     modeloId?: string;
     fuente: FuenteModelo;
+    /** Por defecto `true` (crea versión nueva). Con `false` sobrescribe la versión actual si existe. */
+    nuevaVersion?: boolean;
 }
 
 export interface ResultadoImportacion {
@@ -105,7 +107,10 @@ export class ImportarModelo {
         const escaneo: ResultadoEscaneo = {
             esValido: true, errores: [], advertencias: r.advertencias, info: r.info, esquema: r.esquema,
         };
-        return this.publicar({ modeloId: e.modeloId, datos: e, docx: r.docx, escaneo, fuente, actualizarDatos: true });
+        return this.publicar({
+            modeloId: e.modeloId, datos: e, docx: r.docx, escaneo, fuente,
+            actualizarDatos: true, nuevaVersion: e.nuevaVersion,
+        });
     }
 
     private async publicar(p: {
@@ -115,6 +120,7 @@ export class ImportarModelo {
         escaneo: ResultadoEscaneo;
         fuente?: FuenteModelo;
         actualizarDatos: boolean;
+        nuevaVersion?: boolean;
     }): Promise<ResultadoImportacion> {
         const { db, archivos, formato } = this.dep;
         const nombre = p.datos.nombre.trim();
@@ -123,6 +129,48 @@ export class ImportarModelo {
         if (p.modeloId) {
             const [existe] = await db.consultar<{ id: string }>('SELECT id FROM modelo WHERE id = ?1', [p.modeloId]);
             if (!existe) throw new ErrorDeDatos('El modelo ya no existe');
+        }
+        if (p.modeloId && p.nuevaVersion === false) {
+            const [actual] = await db.consultar<{ id: string; version: number; ruta_paquete: string }>(
+                'SELECT id, version, ruta_paquete FROM modelo_version WHERE modelo_id = ?1 ORDER BY version DESC LIMIT 1',
+                [p.modeloId],
+            );
+            if (actual) {
+                const creadoEn = new Date().toISOString();
+                const paquete = formato.empaquetar({
+                    docx: p.docx,
+                    schema: p.escaneo.esquema,
+                    fuente: p.fuente,
+                    manifest: {
+                        modelo: nombre, version: actual.version, sha256: await archivos.sha256Bytes(p.docx), creadoEn,
+                        versionMinima: VERSION_APP, origen: p.fuente ? 'editor' : 'word',
+                    },
+                });
+                await archivos.escribir(actual.ruta_paquete, paquete);
+                const sha256 = await archivos.sha256(actual.ruta_paquete);
+                const datosModelo = {
+                    nombre,
+                    materia: nulo(normalizarMateria(p.datos.materia)),
+                    categoria: nulo(normalizarCategoria(p.datos.categoria)),
+                    descripcion: nulo(p.datos.descripcion),
+                };
+                const datosVersion: Record<string, unknown> = {
+                    sha256,
+                    schema_json: JSON.stringify(p.escaneo.esquema),
+                    editable: p.fuente ? 1 : 0,
+                };
+                if (nulo(p.datos.notas) !== null) datosVersion.notas = nulo(p.datos.notas);
+                const sentencias: Sentencia[] = [];
+                if (p.actualizarDatos) sentencias.push(actualizar('modelo', p.modeloId, datosModelo));
+                sentencias.push(actualizar('modelo_version', actual.id, datosVersion));
+                await db.transaccion(sentencias, [
+                    {
+                        accion: 'modelo.guardar', entidad: 'modelo_version', entidadId: actual.id,
+                        detalle: { version: actual.version, editable: !!p.fuente, advertencias: p.escaneo.advertencias.length },
+                    },
+                ]);
+                return { modeloId: p.modeloId, modeloVersionId: actual.id, version: actual.version, escaneo: p.escaneo };
+            }
         }
         const modeloId = p.modeloId ?? nuevoId();
         const [{ version }] = await db.consultar<{ version: number }>(

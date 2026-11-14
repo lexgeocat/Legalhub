@@ -53,6 +53,10 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
         [visible],
     );
 
+    useEffect(() => {
+        return () => registrarCambio('expediente-datos', null);
+    }, []);
+
     const atras = <button type="button" className="btn btn-fan" onClick={volver}><Icono n="atras" /> Expedientes</button>;
     if (exp.error) return <div className="pagina">{atras}<Aviso error={exp.error} /></div>;
     if (!e || (!modelos.datos && !modelos.error)) return <div className="pagina">{atras}<p className="suave">Cargando…</p></div>;
@@ -61,10 +65,6 @@ export function Expediente({ id, volver }: { id: string; volver: () => void }) {
     const alInicio = clienteAlInicio(t);
     const activa: PestanaExp = pestana ?? 'partes';
     const enTrabajo = (p: PestanaExp) => p === 'partes' || p === 'datos';
-
-    useEffect(() => {
-        return () => registrarCambio('expediente-datos', null);
-    }, []);
 
     /** Cambiar de pestaña: entre Partes y Datos no se pierde nada; al salir de ellas avisa si hay cambios sin guardar. */
     async function irA(p: PestanaExp) {

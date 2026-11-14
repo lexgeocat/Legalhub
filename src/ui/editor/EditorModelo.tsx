@@ -11,7 +11,7 @@ import { precargarFuentes } from '../../domain/fuentes/fuentes';
 import { nuevoId } from '../../domain/comun/id';
 import { contextoDeFuente, describirMarcador, type ContextoMarcadores } from '../../domain/modelos/marcadores';
 import { claveCampo, etiquetaRol } from '../../domain/comun/texto';
-import { ControlesHistorial, ICO, Ico, SelectFuente, SelectInterlineado, SelectTamano, Tb } from './BarraFormato';
+import { ControlesHistorial, ICO, Ico, Tb } from './BarraFormato';
 import {
     Alerta, Aviso, Campo, Icono, Insignia, Modal, Segmentado, SelectCategoria, SelectMateria, TablaEsquema,
     avisar, confirmar, registrarCambio, registrarTarea,
@@ -24,6 +24,9 @@ import { PanelCampos } from './PanelCampos';
 import { ModalGuiaRedaccion } from './ModalGuiaRedaccion';
 import { ControlesVentana } from '../_core/ControlesVentana';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
+import { PRIMARIOS, useConfigTema } from '../_core/tema';
+import { IconoPaleta, etiquetaConfigTema } from '../_core/IconoTema';
+import { ConfiguradorTema } from '../_core/ConfiguradorTema';
 
 export interface Inicial { nombre: string; materia: string; categoria: string; descripcion: string; fuente: FuenteModelo }
 
@@ -163,7 +166,38 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
     const [verEjemplos, setVerEjemplos] = useState(false);
     const [pendientes, setPendientes] = useState(0);
     const [menu, setMenu] = useState<MenuCampoInfo | null>(null);
+    const [dlgPagina, setDlgPagina] = useState(false);
+    const [menuGuardar, setMenuGuardar] = useState(false);
+    const [menuTema, setMenuTema] = useState(false);
+    const refMenuGuardar = useRef<HTMLDivElement>(null);
+    const refMenuTema = useRef<HTMLDivElement>(null);
+    const { config: cfgTema } = useConfigTema();
+    const swatchPrimario = PRIMARIOS.find((p) => p.id === cfgTema.primary)?.swatch;
     const cerrarMenu = useCallback(() => setMenu(null), []);
+
+    useEffect(() => {
+        if (!menuGuardar && !menuTema) return;
+        const alClic = (e: globalThis.MouseEvent) => {
+            if (menuGuardar && refMenuGuardar.current && e.target instanceof Node && !refMenuGuardar.current.contains(e.target)) {
+                setMenuGuardar(false);
+            }
+            if (menuTema && refMenuTema.current && e.target instanceof Node && !refMenuTema.current.contains(e.target)) {
+                setMenuTema(false);
+            }
+        };
+        const alTecla = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setMenuGuardar(false);
+                setMenuTema(false);
+            }
+        };
+        window.addEventListener('mousedown', alClic);
+        window.addEventListener('keydown', alTecla);
+        return () => {
+            window.removeEventListener('mousedown', alClic);
+            window.removeEventListener('keydown', alTecla);
+        };
+    }, [menuGuardar, menuTema]);
 
     const contextoMarcadores = useMemo<ContextoMarcadores>(
         () => contextoDeFuente({ campos, grupos, partes }),
@@ -196,12 +230,6 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
         setVerEjemplos(false);
         setVista(v);
     }
-
-    /** Fuente / tamaño / interlineado base del documento (Propiedades). */
-    const setBase = (p: Partial<ConfigPagina>) => {
-        setConfig((c) => ({ ...c, ...p }));
-        tocar();
-    };
 
     const armarFuente = (): FuenteModelo => ({
         version: 1,
@@ -281,15 +309,16 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
         }
     }
 
-    async function guardar(cerrarDespues: boolean) {
+    async function guardar(cerrarDespues: boolean, nuevaVersion = false) {
         if (guardando || soloLectura) return;
         // Al guardar el modelo se recargan las partes: primero se guardan los datos para no perderlos.
         if (llenado?.sucio && !(await llenado.guardarDatos())) return;
         setGuardando(true);
         try {
             const f = armarFuente();
+            const esNuevaVersion = nuevaVersion || !modeloId;
             const r = await s.importarModelo.desdeFuente({
-                modeloId, nombre, materia, categoria, descripcion, notas, fuente: f,
+                modeloId, nombre, materia, categoria, descripcion, notas, fuente: f, nuevaVersion,
             });
             setModeloId(r.modeloId);
             setUltima(r.version);
@@ -298,7 +327,7 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
             setModificado(false);
             setNotas('');
             setError(null);
-            avisar(`Modelo guardado como versión ${r.version}`);
+            avisar(esNuevaVersion ? `Modelo guardado como versión ${r.version}` : 'Cambios guardados');
             guardado(r);
             if (cerrarDespues) {
                 volver();
@@ -411,6 +440,26 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                 </div>
 
                 <div className="ed-acciones-top">
+                    <div className="ed-top-tema-wrap" ref={refMenuTema}>
+                        <button
+                            type="button"
+                            className={`ed-top-ico-btn${menuTema ? ' activo' : ''}`}
+                            title={`Personalizar tema (${etiquetaConfigTema(cfgTema)}) · Ctrl+Shift+T alterna Claro/Oscuro`}
+                            aria-label="Personalizar tema"
+                            aria-expanded={menuTema}
+                            onClick={() => {
+                                setMenuGuardar(false);
+                                setMenuTema((v) => !v);
+                            }}
+                        >
+                            <IconoPaleta color={swatchPrimario} tam={16} />
+                        </button>
+                        {menuTema && (
+                            <div className="ed-top-tema-popover">
+                                <ConfiguradorTema variante="popover" cerrar={() => setMenuTema(false)} />
+                            </div>
+                        )}
+                    </div>
                     {llenado && !modoModelo ? (
                         <>
                             {modificado && (
@@ -425,12 +474,102 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                         </>
                     ) : (
                         <>
-                            <button type="button" className="btn btn-fan" onClick={() => setDialogo({ n: 'datos' })}>Propiedades</button>
-                            <button type="button" className="btn btn-sec" onClick={verificar}>Verificar</button>
-                            {!llenado && (
-                                <button type="button" className="btn btn-sec" disabled={guardando} onClick={() => void guardar(true)}>Guardar y cerrar</button>
-                            )}
-                            <button type="button" className="btn btn-pri" disabled={guardando} onClick={() => void guardar(false)}>Guardar versión</button>
+                            <button
+                                type="button"
+                                className="ed-top-pagina-btn"
+                                title="Configurar página: tamaño de papel, márgenes y espaciado"
+                                onClick={() => setDlgPagina(true)}
+                            >
+                                <Ico d={ICO.pagina} />
+                                <span>Configuración de página</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="ed-top-ico-btn"
+                                title="Propiedades del escrito"
+                                aria-label="Propiedades del escrito"
+                                onClick={() => setDialogo({ n: 'datos' })}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <line x1="4" y1="21" x2="4" y2="14" />
+                                    <line x1="4" y1="10" x2="4" y2="3" />
+                                    <line x1="12" y1="21" x2="12" y2="12" />
+                                    <line x1="12" y1="8" x2="12" y2="3" />
+                                    <line x1="20" y1="21" x2="20" y2="16" />
+                                    <line x1="20" y1="12" x2="20" y2="3" />
+                                    <line x1="1" y1="14" x2="7" y2="14" />
+                                    <line x1="9" y1="8" x2="15" y2="8" />
+                                    <line x1="17" y1="16" x2="23" y2="16" />
+                                </svg>
+                            </button>
+                            <button
+                                type="button"
+                                className="ed-top-ico-btn"
+                                title="Verificar estructura y campos"
+                                aria-label="Verificar estructura y campos"
+                                onClick={verificar}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    <path d="M9 12l2 2 4-4" />
+                                </svg>
+                            </button>
+                            <div className={`ed-top-split${modificado ? ' con-cambios' : ''}`} ref={refMenuGuardar}>
+                                <button
+                                    type="button"
+                                    className="ed-top-save-btn"
+                                    disabled={guardando}
+                                    title={modificado ? 'Guardar cambios (Ctrl+G)' : 'Guardar (Ctrl+G)'}
+                                    aria-label="Guardar"
+                                    onClick={() => {
+                                        setMenuGuardar(false);
+                                        void guardar(false);
+                                    }}
+                                >
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                        <polyline points="17 21 17 13 7 13 7 21" />
+                                        <polyline points="7 3 7 8 15 8" />
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`ed-top-save-chev${menuGuardar ? ' on' : ''}`}
+                                    disabled={guardando}
+                                    title="Opciones de guardado"
+                                    aria-label="Opciones de guardado"
+                                    aria-expanded={menuGuardar}
+                                    onClick={() => setMenuGuardar((v) => !v)}
+                                >
+                                    ▾
+                                </button>
+                                {menuGuardar && (
+                                    <div className="ed-top-menu" role="menu">
+                                        {!llenado && (
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => {
+                                                    setMenuGuardar(false);
+                                                    void guardar(true, false);
+                                                }}
+                                            >
+                                                <span>Guardar y cerrar</span>
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => {
+                                                setMenuGuardar(false);
+                                                void guardar(false, true);
+                                            }}
+                                        >
+                                            <span>Guardar versión</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </>
                     )}
                 </div>
@@ -449,6 +588,8 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
             {/* ===== Cinta + hoja + panel + pie (compartido) ===== */}
             <EditorHoja
                 hoja={hoja}
+                paginaAbierta={dlgPagina}
+                onPaginaAbierta={setDlgPagina}
                 textoInicial={inicial.fuente.texto}
                 config={config}
                 onConfig={(c) => { setConfig(c); tocar(); }}
@@ -462,40 +603,21 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                 onMenuCampo={modoModelo ? setMenu : undefined}
                 onEditarCampo={modoModelo ? (actual, aplicar, amb) => setDialogo({ n: 'marcador', actual, aplicar, ambito: amb }) : undefined}
                 barra={modoModelo ? (
-                    <>
-                        <div className="ed-subgrupo" role="group" aria-label="Vista de marcadores">
-                            <Tb titulo="Ver el documento con los datos de ejemplo de cada campo" activo={verEjemplos}
-                                onClick={() => { setVerEjemplos((v) => !v); setVerCodigos(false); }}>
-                                <Ico d={ICO.ojo} />
-                                <span>Ejemplos</span>
-                            </Tb>
-                            <Tb titulo="Mostrar el código {{…}} de cada campo en vez de su etiqueta corta" activo={verCodigos}
-                                onClick={() => { setVerCodigos((v) => !v); setVerEjemplos(false); }}>
-                                <Ico d={ICO.codigos} />
-                                <span>Códigos</span>
-                            </Tb>
-                        </div>
-                        <div className="ed-subgrupo" role="group" aria-label="Herramientas de redacción y campos">
-                            <Tb titulo="Mostrar u ocultar el constructor de campos (datos, partes y género)" activo={verCampos}
-                                onClick={() => setVerCampos((v) => !v)}>
-                                <Ico d={ICO.campos} />
-                                <span>Campos</span>
-                            </Tb>
-                            <Tb titulo="Ver compendio y fórmulas de redacción jurídica (Aperturas, Conectores, Técnica forense y Cierres)" activo={dialogo?.n === 'guia'}
-                                onClick={() => setDialogo({ n: 'guia' })}>
-                                <Ico d={ICO.guia} />
-                                <span>Guía Redacción</span>
-                            </Tb>
-                        </div>
-                    </>
-                ) : (
-                    <>
+                    <div className="ed-subgrupo" role="group" aria-label="Herramientas de redacción y campos">
+                        <Tb titulo="Mostrar u ocultar el constructor de campos (datos, partes y género)" activo={verCampos}
+                            onClick={() => setVerCampos((v) => !v)}>
+                            <Ico d={ICO.campos} />
+                        </Tb>
                         <Tb titulo="Ver compendio y fórmulas de redacción jurídica (Aperturas, Conectores, Técnica forense y Cierres)" activo={dialogo?.n === 'guia'}
                             onClick={() => setDialogo({ n: 'guia' })}>
                             <Ico d={ICO.guia} />
-                            <span>Guía Redacción</span>
                         </Tb>
-                    </>
+                    </div>
+                ) : (
+                    <Tb titulo="Ver compendio y fórmulas de redacción jurídica (Aperturas, Conectores, Técnica forense y Cierres)" activo={dialogo?.n === 'guia'}
+                        onClick={() => setDialogo({ n: 'guia' })}>
+                        <Ico d={ICO.guia} />
+                    </Tb>
                 )}
                 panel={
                     modoModelo && verCampos ? (
@@ -511,12 +633,13 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                             onDetectar={detectar}
                             pendientes={pendientes}
                             onAsignarPendientes={asignarPendientes}
+                            verEjemplos={verEjemplos}
+                            onAlternarEjemplos={() => { setVerEjemplos((v) => !v); setVerCodigos(false); }}
+                            verCodigos={verCodigos}
+                            onAlternarCodigos={() => { setVerCodigos((v) => !v); setVerEjemplos(false); }}
                         />
                     ) : undefined
                 }
-                ayuda={modoModelo
-                    ? 'Pasa el mouse sobre un campo para ver qué es · doble clic: editarlo · Ctrl+G guardar · «Guía Redacción»: fórmulas forenses'
-                    : 'Clic en un dato y escribe · Enter confirma · Esc cancela · Tab siguiente dato · Ctrl+G guardar datos · «Guía Redacción»: fórmulas forenses'}
             />
 
             {/* ===== Diálogos ===== */}
@@ -559,15 +682,6 @@ export function EditorModeloVentana({ modeloId: idInicial, inicial, volver, guar
                 <Modal titulo="Propiedades del modelo" cerrar={cerrarDialogo}
                     pie={<><span className="espacio" /><button type="button" className="btn btn-pri" onClick={cerrarDialogo}>Listo</button></>}>
                     <div className="form-grid">
-                        <Campo etiqueta="Fuente base" ayuda="La usa todo el texto que no tenga una fuente propia.">
-                            <SelectFuente valor={config.fuente} onCambio={(f) => setBase({ fuente: f })} />
-                        </Campo>
-                        <Campo etiqueta="Tamaño base (pt)">
-                            <SelectTamano valor={config.tamanoPt} onCambio={(n) => setBase({ tamanoPt: n })} />
-                        </Campo>
-                        <Campo etiqueta="Interlineado base">
-                            <SelectInterlineado valor={config.interlineado} onCambio={(n) => setBase({ interlineado: n })} />
-                        </Campo>
                         <Campo etiqueta="Categoría">
                             <SelectCategoria value={categoria} onChange={(e) => { setCategoria(e.target.value); tocar(); }} />
                         </Campo>

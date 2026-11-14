@@ -1,8 +1,11 @@
-﻿import type { Alineacion, Bloque, EstiloParrafo, Tramo } from '../../domain/modelos/fuenteModelo';
+import {
+    esColorResaltado, esTipoLista,
+    type Alineacion, type Bloque, type CeldaTabla, type ColorResaltado, type EstiloParrafo, type TipoLista, type Tramo,
+} from '../../domain/modelos/fuenteModelo';
 
-interface Fmt { b: boolean; i: boolean; u: boolean }
+interface Fmt { b: boolean; i: boolean; u: boolean; hl?: ColorResaltado }
 interface Pieza { texto: string; f: Fmt }
-interface Parrafo { piezas: Pieza[]; alineacion: Alineacion | null; estilo: EstiloParrafo }
+interface Parrafo { piezas: Pieza[]; alineacion: Alineacion | null; estilo: EstiloParrafo; lista?: TipoLista }
 interface Lista { ordenada: boolean; n: number; nivel: number }
 interface Ctx { f: Fmt; alin: Alineacion | null; enLinea: boolean; lista?: Lista }
 type Decl = Record<string, string>;
@@ -81,12 +84,35 @@ function estiloDe(el: Element): EstiloParrafo {
     return 'normal';
 }
 
+function colorResaltadoCss(bg: string | undefined): ColorResaltado | undefined {
+    if (!bg) return undefined;
+    const v = bg.trim().toLowerCase();
+    if (!v || v === 'transparent' || v === 'none' || v === 'inherit' || v === 'initial' || v === '#ffffff' || v === 'white' || v === 'rgb(255, 255, 255)') {
+        return undefined;
+    }
+    if (esColorResaltado(v)) return v;
+    if (v.includes('fef08a') || v.includes('ffff00') || v.includes('yellow')) return 'yellow';
+    if (v.includes('bbf7d0') || v.includes('00ff00') || v.includes('green') || v.includes('lime')) return 'green';
+    if (v.includes('bae6fd') || v.includes('00ffff') || v.includes('cyan') || v.includes('aqua')) return 'cyan';
+    if (v.includes('fbcfe8') || v.includes('ff00ff') || v.includes('magenta') || v.includes('pink')) return 'magenta';
+    if (v.includes('fed7aa') || v.includes('ffa500') || v.includes('orange')) return 'orange';
+    if (v.includes('e2e8f0') || v.includes('gray') || v.includes('grey')) return 'gray';
+    return undefined;
+}
+
 function formato(el: Element, d: Decl, previo: Fmt): Fmt {
     const f = { ...previo };
     const t = el.tagName;
     if (t === 'B' || t === 'STRONG') f.b = true;
     if (t === 'I' || t === 'EM' || t === 'CITE' || t === 'DFN') f.i = true;
     if (t === 'U' || t === 'INS') f.u = true;
+    if (t === 'MARK') {
+        const attrHl = el.getAttribute('data-hl')?.toLowerCase();
+        f.hl = esColorResaltado(attrHl) ? attrHl : (colorResaltadoCss(d['background-color'] ?? d['background']) ?? 'yellow');
+    } else {
+        const bgHl = colorResaltadoCss(d['background-color'] ?? d['background'] ?? d['mso-highlight']);
+        if (bgHl) f.hl = bgHl;
+    }
     const peso = d['font-weight'];
     if (peso) f.b = peso === 'bold' || peso === 'bolder' || Number(peso) >= 600;
     const estilo = d['font-style'];
@@ -113,8 +139,14 @@ function aTramos(piezas: Pieza[], sinNegrita: boolean): Tramo[] {
     const poner = (t: string, f: Fmt, marcador: boolean) => {
         const u = tramos[tramos.length - 1];
         const negrita = f.b && !sinNegrita;
-        if (!marcador && u && !u.marcador && u.negrita === negrita && u.cursiva === f.i && u.subrayado === f.u) u.texto += t;
-        else tramos.push({ texto: t, negrita, cursiva: f.i, subrayado: f.u, marcador });
+        if (!marcador && u && !u.marcador && u.negrita === negrita && u.cursiva === f.i && u.subrayado === f.u && u.resaltado === f.hl) {
+            u.texto += t;
+        } else {
+            tramos.push({
+                texto: t, negrita, cursiva: f.i, subrayado: f.u, marcador,
+                ...(f.hl ? { resaltado: f.hl } : {}),
+            });
+        }
     };
     for (let i = 0; i < texto.length;) {
         if (texto.startsWith('{{', i)) {
@@ -146,20 +178,21 @@ function aBloque(p: Parrafo, esWord: boolean): Bloque {
         alineacion: p.alineacion ?? defecto,
         estilo: p.estilo,
         tramos: aTramos(piezas, p.estilo !== 'normal'),
+        ...(p.lista ? { lista: p.lista } : {}),
     };
 }
 
 /**
  * HTML del portapapeles → bloques del editor.
- * Conserva: negrita, cursiva, subrayado, alineación, títulos, saltos de línea y de página,
- * tabulaciones, listas (como texto con viñeta/número) y tablas (una fila por línea, celdas con tabulación).
+ * Conserva: negrita, cursiva, subrayado, resaltado, alineación, títulos, saltos de línea y de página,
+ * tabulaciones, listas (ul/ol) y tablas.
  */
 export function htmlABloques(html: string): Bloque[] {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const reglas = leerReglas(doc);
     const esWord = /urn:schemas-microsoft-com:office:word|class=["']?Mso/i.test(html);
     const salida: Bloque[] = [];
-    const st = { actual: null as Parrafo | null, pendiente: null as string | null };
+    const st = { actual: null as Parrafo | null, pendiente: null as string | null, listaPendiente: undefined as TipoLista | undefined };
 
     function cerrar(): void {
         if (!st.actual) return;
@@ -167,9 +200,10 @@ export function htmlABloques(html: string): Bloque[] {
         st.actual = null;
     }
 
-    function abrir(alineacion: Alineacion | null, estilo: EstiloParrafo = 'normal'): Parrafo {
+    function abrir(alineacion: Alineacion | null, estilo: EstiloParrafo = 'normal', lista?: TipoLista): Parrafo {
         cerrar();
-        const p: Parrafo = { piezas: [], alineacion, estilo };
+        const p: Parrafo = { piezas: [], alineacion, estilo, lista: lista ?? st.listaPendiente };
+        st.listaPendiente = undefined;
         if (st.pendiente) {
             p.piezas.push({ texto: `${st.pendiente}\t`, f: SIN_FMT });
             st.pendiente = null;
@@ -216,10 +250,12 @@ export function htmlABloques(html: string): Bloque[] {
             return;
         }
 
-        // Marcador de lista de Word («1.», «·»…): se conserva como texto + tabulación.
+        // Marcador de lista de Word («1.», «·»…): activa lista ul/ol en el párrafo actual.
         if (d['mso-list'] === 'ignore') {
             const marca = (el.textContent ?? '').replace(/[\s\u00A0]+/g, ' ').trim();
-            if (marca) poner(`${VINETA.test(marca) ? '•' : marca}\t`, SIN_FMT, c.alin);
+            if (marca && st.actual) {
+                st.actual.lista = VINETA.test(marca) ? 'ul' : 'ol';
+            }
             return;
         }
         if (d['mso-tab-count'] !== undefined) {
@@ -257,6 +293,39 @@ export function htmlABloques(html: string): Bloque[] {
         }
         if (d['page-break-before'] === 'always' || d['break-before'] === 'page') salto();
 
+        if (tag === 'TABLE') {
+            cerrar();
+            const filas: CeldaTabla[][] = [];
+            let encabezado = false;
+            const trs = Array.from(el.querySelectorAll('tr')).filter((tr) => tr.closest('table') === el);
+            trs.forEach((tr, rIdx) => {
+                const celdas: CeldaTabla[] = [];
+                const hijos = Array.from(tr.children).filter((ch) => ch.tagName === 'TD' || ch.tagName === 'TH');
+                if (rIdx === 0 && (tr.parentElement?.tagName === 'THEAD' || hijos.some((ch) => ch.tagName === 'TH'))) {
+                    encabezado = true;
+                }
+                for (const celda of hijos) {
+                    const dCelda = declaraciones(celda, reglas);
+                    const alinCelda = alineacionDe(celda, dCelda);
+                    const anterior = st.actual;
+                    const pTemp: Parrafo = { piezas: [], alineacion: alinCelda, estilo: 'normal' };
+                    st.actual = pTemp;
+                    recorrer(celda, { f: formato(celda, dCelda, f), alin: alinCelda, enLinea: true });
+                    const bCelda = aBloque(pTemp, esWord);
+                    st.actual = anterior;
+                    celdas.push({
+                        tramos: bCelda.tipo === 'parrafo' ? bCelda.tramos : [],
+                        ...(alinCelda && alinCelda !== 'left' ? { alineacion: alinCelda } : {}),
+                    });
+                }
+                if (celdas.length > 0) filas.push(celdas);
+            });
+            if (filas.length > 0) {
+                salida.push({ tipo: 'tabla', filas, ...(encabezado ? { encabezado: true } : {}) });
+            }
+            return;
+        }
+
         if (tag === 'TR') {
             abrir(alin);
             let primera = true;
@@ -285,18 +354,20 @@ export function htmlABloques(html: string): Bloque[] {
 
         if (tag === 'LI') {
             const l = c.lista;
-            const marca = l ? (l.ordenada ? `${(l.n += 1)}.` : '•') : '•';
-            st.pendiente = '\t'.repeat(l?.nivel ?? 0) + marca;
+            const tipoLista: TipoLista = l?.ordenada ? 'ol' : 'ul';
+            st.listaPendiente = tipoLista;
             // Si el <li> contiene bloques (Google Docs: <li><p>…), la viñeta la toma su primer párrafo.
-            if (!Array.from(el.children).some((h) => BLOQUE.has(h.tagName))) abrir(alin);
+            if (!Array.from(el.children).some((h) => BLOQUE.has(h.tagName))) abrir(alin, 'normal', tipoLista);
             recorrer(el, { ...c, f, alin });
-            st.pendiente = null;
+            st.listaPendiente = undefined;
             cerrar();
             return;
         }
 
         if (PARRAFO.has(tag)) {
-            const p = abrir(alin, estiloDe(el));
+            const attrLista = el.getAttribute('data-lista');
+            const listaAttr: TipoLista | undefined = esTipoLista(attrLista) ? attrLista : undefined;
+            const p = abrir(alin, estiloDe(el), listaAttr);
             const nivel = /level(\d+)/.exec(d['mso-list'] ?? '');
             if (nivel && Number(nivel[1]) > 1) p.piezas.push({ texto: '\t'.repeat(Number(nivel[1]) - 1), f: SIN_FMT });
             recorrer(el, { ...c, f, alin });
@@ -304,7 +375,7 @@ export function htmlABloques(html: string): Bloque[] {
             return;
         }
 
-        // Contenedor (div, table, section…)
+        // Contenedor (div, section…)
         cerrar();
         recorrer(el, { ...c, f, alin });
         cerrar();
@@ -315,7 +386,7 @@ export function htmlABloques(html: string): Bloque[] {
 
     while (salida.length > 0) {
         const u = salida[salida.length - 1];
-        if (u.tipo === 'salto' || u.tramos.length === 0) salida.pop();
+        if (u.tipo === 'salto' || (u.tipo === 'parrafo' && u.tramos.length === 0)) salida.pop();
         else break;
     }
     return salida;

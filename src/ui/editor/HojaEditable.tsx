@@ -3,9 +3,16 @@ import {
     type ClipboardEvent, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type Ref,
 } from 'react';
 import {
-    bloquesATexto, PAGINA_CM, margenesSeguros, parsearTexto, tramosDe,
-    type Alineacion, type Bloque, type BloqueParrafo, type ConfigPagina, type EstiloParrafo, type Margenes, type Tramo,
+    bloquesATexto, COLORES_RESALTADO, esColorResaltado, esListaOrdenada, esTipoLista, formatearMarcadorLista,
+    PAGINA_CM, margenesSeguros, parsearTexto, tramosDe,
+    type Alineacion, type Bloque, type BloqueParrafo, type BloqueTabla, type CeldaTabla, type ColorResaltado,
+    type ConfigPagina, type EstiloParrafo, type Margenes, type TipoLista, type Tramo,
 } from '../../domain/modelos/fuenteModelo';
+import {
+    agregarAlDiccionarioPersonal, analizarParrafoObservador, calcularMetricasDocumento, cargarDiccionarioPersonal,
+    type CategoriaObservador, type HallazgoObservador, type MetricasDocumento,
+} from '../../domain/redaccion/observadorRedaccion';
+import { buscarSinonimos, type ResultadoSinonimos } from '../../domain/redaccion/tesauroForense';
 import { Regla } from './Regla';
 import { usePaginacion } from '../compartidos/Paginacion';
 import './editorWord.css';
@@ -25,14 +32,31 @@ const DESDE_CSS: Record<string, Alineacion> = { left: 'left', start: 'left', cen
 const A_CSS: Record<Alineacion, string> = { left: 'left', center: 'center', right: 'right', both: 'justify' };
 const BLOQUES = new Set(['P', 'H1', 'H2']);
 
+export type AccionTabla =
+    | 'filaArriba'
+    | 'filaAbajo'
+    | 'colIzquierda'
+    | 'colDerecha'
+    | 'eliminarFila'
+    | 'eliminarColumna'
+    | 'alternarEncabezado'
+    | 'eliminarTabla';
+
+export interface EstadoObservador {
+    activo: boolean;
+    hallazgos: HallazgoObservador[];
+    metricas: MetricasDocumento;
+    palabraSeleccionada: string;
+}
+
 type Atajo =
     | 'negrita' | 'cursiva' | 'subrayado' | 'izquierda' | 'centro' | 'derecha' | 'justificado'
-    | 'todo' | 'deshacer' | 'rehacer';
+    | 'todo' | 'deshacer' | 'rehacer' | 'sinonimos';
 
 const ATAJOS = new Map<string, Atajo>([
     ['n', 'negrita'], ['k', 'cursiva'], ['s', 'subrayado'],
     ['q', 'izquierda'], ['t', 'centro'], ['d', 'derecha'], ['j', 'justificado'],
-    ['e', 'todo'], ['z', 'deshacer'], ['y', 'rehacer'],
+    ['e', 'todo'], ['z', 'deshacer'], ['y', 'rehacer'], ['.', 'sinonimos'],
 ]);
 
 function atajoDe(tecla: string, mayus: boolean): Atajo | null {
@@ -60,11 +84,20 @@ export interface FormatoActivo {
     interlineado: number | null;
     /** Columnas del párrafo donde está el cursor (1 = normal). */
     columnas: number;
+    /** Color de resaltado en el cursor/selección (null = sin resaltado). */
+    resaltado: ColorResaltado | null;
+    /** Modo resaltador activo (como marcador de Word al arrastrar sobre el texto). */
+    modoResaltado?: ColorResaltado | 'quitar' | null;
+    /** Tipo de lista del párrafo actual ('ul' = viñetas, 'ol' = numerada, null = párrafo normal). */
+    lista: TipoLista | null;
+    /** true si el cursor está dentro de una celda de tabla. */
+    enTabla: boolean;
 }
 
 export const FORMATO_INICIAL: FormatoActivo = {
     negrita: false, cursiva: false, subrayado: false, alineacion: 'both', estilo: 'normal',
     fuente: null, tamanoPt: null, interlineado: null, columnas: 1,
+    resaltado: null, lista: null, enTabla: false,
 };
 export interface MenuCampoInfo {
     marcador: string;
@@ -145,14 +178,35 @@ export interface ControlHoja {
     interlineado(v: number): void;
     columnas(n: number): void;
     saltoColumna(): void;
+    /** Aplica o quita color de resaltado al texto seleccionado (null = quitar resaltado). */
+    resaltar(color: ColorResaltado | null): void;
+    /** Alterna o quita estilo de lista (viñetas o numeración) en los párrafos seleccionados. */
+    lista(tipo: TipoLista | null): void;
+    /** Inserta una tabla de `filas` × `columnas` en la posición del cursor. */
+    insertarTabla(filas: number, columnas: number): void;
+    /** Ejecuta una operación estructural sobre la tabla donde está el cursor. */
+    accionTabla(accion: AccionTabla): void;
+    /** Abre el asistente flotante de sinónimos y corrección sobre la palabra donde está el cursor. */
+    abrirSinonimos(): void;
+    /** Estado y suscripción del observador inteligente de redacción. */
+    estadoObservador(): EstadoObservador;
+    suscribirObservador(fn: (e: EstadoObservador) => void): () => void;
+    alternarObservador(activo?: boolean): void;
+    aplicarHallazgo(id: string, reemplazo: string): void;
+    irAHallazgo(id: string): void;
+    ignorarHallazgo(id: string): void;
+    agregarPalabraDiccionario(palabra: string): void;
+    reemplazarPalabraActual(reemplazo: string): void;
 }
 
 /* ================= DOM ⇄ bloques ================ */
-interface Fmt { b: boolean; i: boolean; u: boolean; fam?: string; pt?: number }
+interface Fmt { b: boolean; i: boolean; u: boolean; fam?: string; pt?: number; hl?: ColorResaltado }
 interface Pieza { texto: string; f: Fmt; chip: boolean; br?: boolean }
 const SIN_FMT: Fmt = { b: false, i: false, u: false };
 
 const esSalto = (n: Node | null): boolean => n instanceof HTMLElement && n.dataset.salto !== undefined;
+const esTabla = (n: Node | null | undefined): n is HTMLTableElement =>
+    n instanceof HTMLTableElement && n.dataset.tabla !== undefined;
 const esBr = (n: Node | null | undefined): boolean => !!n && n.nodeName === 'BR';
 const estiloDe = (b: Element): EstiloParrafo => (b.tagName === 'H1' ? 'titulo' : b.tagName === 'H2' ? 'subtitulo' : 'normal');
 /* ----- Regiones de columnas (secciones continuas de Word) ----- */
@@ -276,8 +330,8 @@ function tramoADom(t: Tramo): Node {
     if (t.subrayado) n = envolver('u', n);
     if (t.cursiva) n = envolver('i', n);
     if (t.negrita) n = envolver('b', n);
-    if (t.fuente || t.tamanoPt) {
-        const s = spanLetra(t.fuente, t.tamanoPt);
+    if (t.fuente || t.tamanoPt || t.resaltado) {
+        const s = spanLetra(t.fuente, t.tamanoPt, t.resaltado);
         s.appendChild(n);
         n = s;
     }
@@ -298,6 +352,7 @@ function parrafoADom(b: BloqueParrafo): HTMLElement {
         el.style.lineHeight = lineaCss(b.interlineado);
     }
     if (b.nuevaColumna) el.dataset.nc = '1';
+    if (b.lista) el.dataset.lista = b.lista;
     if (b.tramos.length === 0) {
         el.appendChild(document.createElement('br'));
         return el;
@@ -307,6 +362,35 @@ function parrafoADom(b: BloqueParrafo): HTMLElement {
     const ultimo = b.tramos[b.tramos.length - 1];
     if (!ultimo.marcador && ultimo.texto.endsWith('\n')) el.appendChild(document.createElement('br'));
     return el;
+}
+
+function tablaADom(b: BloqueTabla): HTMLTableElement {
+    const tbl = document.createElement('table');
+    tbl.className = 'ed-tabla';
+    tbl.dataset.tabla = '1';
+    if (b.encabezado) tbl.dataset.encabezado = '1';
+    const tbody = document.createElement('tbody');
+    b.filas.forEach((fila, rIdx) => {
+        const tr = document.createElement('tr');
+        const esTh = rIdx === 0 && !!b.encabezado;
+        fila.forEach((celda) => {
+            const cell = document.createElement(esTh ? 'th' : 'td');
+            if (celda.alineacion && celda.alineacion !== 'left') {
+                cell.style.textAlign = A_CSS[celda.alineacion];
+            }
+            if (celda.tramos.length === 0) {
+                cell.appendChild(document.createElement('br'));
+            } else {
+                for (const t of celda.tramos) cell.appendChild(tramoADom(t));
+                const ult = celda.tramos[celda.tramos.length - 1];
+                if (!ult.marcador && ult.texto.endsWith('\n')) cell.appendChild(document.createElement('br'));
+            }
+            tr.appendChild(cell);
+        });
+        tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    return tbl;
 }
 
 function saltoADom(): HTMLElement {
@@ -326,6 +410,9 @@ function bloquesADom(texto: string): HTMLElement[] {
     for (const b of parsearTexto(texto)) {
         if (b.tipo === 'salto') {
             salida.push(saltoADom());
+            sec = null;
+        } else if (b.tipo === 'tabla') {
+            salida.push(tablaADom(b));
             sec = null;
         } else if (b.columnas && b.columnas > 1) {
             if (!sec) {
@@ -352,6 +439,10 @@ function formatoDe(el: HTMLElement, f: Fmt): Fmt {
     if (t === 'B' || t === 'STRONG') r.b = true;
     if (t === 'I' || t === 'EM') r.i = true;
     if (t === 'U') r.u = true;
+    if (t === 'MARK') {
+        const hl = el.dataset.hl;
+        r.hl = esColorResaltado(hl) ? hl : 'yellow';
+    }
     const s = el.style;
     if (s.fontWeight) r.b = s.fontWeight === 'bold' || s.fontWeight === 'bolder' || Number(s.fontWeight) >= 600;
     if (s.fontStyle) r.i = s.fontStyle === 'italic' || s.fontStyle === 'oblique';
@@ -360,6 +451,7 @@ function formatoDe(el: HTMLElement, f: Fmt): Fmt {
     if (el.dataset.fam) r.fam = el.dataset.fam;
     const pt = Number(el.dataset.pt);
     if (pt > 0) r.pt = pt;
+    if (esColorResaltado(el.dataset.hl)) r.hl = el.dataset.hl;
     return r;
 }
 
@@ -417,7 +509,7 @@ function formatoUniforme(raiz: HTMLElement, r: Range, c: ComandoFmt): boolean {
 
 /** El ancestro más cercano (dentro del bloque) que aplica ese formato. */
 function ancestroConFormato(nodo: Node, k: 'b' | 'i' | 'u', raiz: HTMLElement): HTMLElement | null {
-    for (let n = nodo.parentElement; n && n !== raiz && !BLOQUES.has(n.tagName); n = n.parentElement) {
+    for (let n = nodo.parentElement; n && n !== raiz && !BLOQUES.has(n.tagName) && n.tagName !== 'TD' && n.tagName !== 'TH'; n = n.parentElement) {
         if (formatoDe(n, SIN_FMT)[k]) return n;
     }
     return null;
@@ -485,12 +577,14 @@ function aTramos(piezas: Pieza[]): Tramo[] {
         const u = tramos[tramos.length - 1];
         if (
             !marcador && u && !u.marcador && u.negrita === f.b && u.cursiva === f.i && u.subrayado === f.u
-            && u.fuente === f.fam && u.tamanoPt === f.pt
+            && u.fuente === f.fam && u.tamanoPt === f.pt && u.resaltado === f.hl
         ) u.texto += texto;
         else {
             tramos.push({
                 texto, negrita: f.b, cursiva: f.i, subrayado: f.u, marcador,
-                ...(f.fam ? { fuente: f.fam } : {}), ...(f.pt ? { tamanoPt: f.pt } : {}),
+                ...(f.fam ? { fuente: f.fam } : {}),
+                ...(f.pt ? { tamanoPt: f.pt } : {}),
+                ...(f.hl ? { resaltado: f.hl } : {}),
             });
         }
     };
@@ -532,16 +626,48 @@ function leerAlineacion(el: HTMLElement): Alineacion | null {
 }
 
 function bloqueDeElemento(n: HTMLElement, enColumnas: boolean): Bloque {
+    if (esTabla(n)) return tablaDeElemento(n);
     const estilo = estiloDe(n);
     const piezas: Pieza[] = [];
     recolectar(n, SIN_FMT, piezas);
     // El último <br> del bloque es solo relleno, no un salto de línea.
     if (piezas.length > 0 && piezas[piezas.length - 1].br) piezas.pop();
     const lh = Number(n.dataset.lh);
+    const lista: TipoLista | undefined = esTipoLista(n.dataset.lista) ? n.dataset.lista : undefined;
     return {
         tipo: 'parrafo', alineacion: leerAlineacion(n) ?? BASE[estilo], estilo, tramos: aTramos(piezas),
         ...(lh > 0 ? { interlineado: lh } : {}),
         ...(enColumnas ? { columnas: 2, ...(n.dataset.nc ? { nuevaColumna: true } : {}) } : {}),
+        ...(lista ? { lista } : {}),
+    };
+}
+
+function tablaDeElemento(tbl: HTMLTableElement): BloqueTabla {
+    const filas: CeldaTabla[][] = [];
+    const trs = Array.from(tbl.querySelectorAll('tr')).filter((tr) => tr.closest('table') === tbl);
+    let encabezado = tbl.dataset.encabezado === '1';
+    trs.forEach((tr, rIdx) => {
+        const celdas: CeldaTabla[] = [];
+        const hijos = Array.from(tr.children).filter(
+            (ch): ch is HTMLTableCellElement => ch.tagName === 'TD' || ch.tagName === 'TH',
+        );
+        if (rIdx === 0 && hijos.some((ch) => ch.tagName === 'TH')) encabezado = true;
+        for (const celda of hijos) {
+            const piezas: Pieza[] = [];
+            recolectar(celda, SIN_FMT, piezas);
+            if (piezas.length > 0 && piezas[piezas.length - 1].br) piezas.pop();
+            const alin = leerAlineacion(celda);
+            celdas.push({
+                tramos: aTramos(piezas),
+                ...(alin && alin !== 'left' ? { alineacion: alin } : {}),
+            });
+        }
+        if (celdas.length > 0) filas.push(celdas);
+    });
+    return {
+        tipo: 'tabla',
+        filas: filas.length > 0 ? filas : [[{ tramos: [] }]],
+        ...(encabezado ? { encabezado: true } : {}),
     };
 }
 
@@ -551,6 +677,8 @@ function domABloques(raiz: HTMLElement): Bloque[] {
         if (!(n instanceof HTMLElement)) continue;
         if (esSalto(n)) {
             salida.push({ tipo: 'salto' });
+        } else if (esTabla(n)) {
+            salida.push(tablaDeElemento(n));
         } else if (esSeccion(n)) {
             for (const h of Array.from(n.children)) {
                 if (!(h instanceof HTMLElement)) continue;
@@ -775,7 +903,7 @@ function ponerSel(raiz: HTMLElement, sel: SelGuardada | null): void {
         if (sel.ba >= 0 && sel.bf >= 0 && bloques.length > 0) {
             const bA = bloques[Math.min(sel.ba, bloques.length - 1)];
             const bF = bloques[Math.min(sel.bf, bloques.length - 1)];
-            if (bA && bF && !esSalto(bA) && !esSalto(bF)) {
+            if (bA && bF && !esSalto(bA) && !esSalto(bF) && !esTabla(bA) && !esTabla(bF)) {
                 const pA = puntoEnBloque(bA, sel.ca);
                 const pF = puntoEnBloque(bF, sel.cf);
                 try {
@@ -877,11 +1005,11 @@ function colocarBloques(raiz: HTMLElement, r: Range, nuevos: HTMLElement[]): voi
         raiz.append(...nuevos);
         return;
     }
-    if (esSalto(b)) {
+    if (esSalto(b) || esTabla(b)) {
         b.after(...nuevos);
         return;
     }
-    if (esVacio(b)) {
+    if (esVacio(b) && !b.querySelector('.mk')) {
         b.replaceWith(...nuevos);
         return;
     }
@@ -891,11 +1019,11 @@ function colocarBloques(raiz: HTMLElement, r: Range, nuevos: HTMLElement[]): voi
     const post = document.createRange();
     post.selectNodeContents(b);
     post.setStart(r.startContainer, r.startOffset);
-    if (pre.toString() === '') {
+    if (pre.toString() === '' && !pre.cloneContents().querySelector('.mk')) {
         b.before(...nuevos);
         return;
     }
-    if (post.toString() === '') {
+    if (post.toString() === '' && !post.cloneContents().querySelector('.mk')) {
         b.after(...nuevos);
         return;
     }
@@ -972,14 +1100,29 @@ function limpiarAtributos(b: HTMLElement): void {
         if (alin) b.style.textAlign = alin;
         if (lh) b.style.lineHeight = lh;
     }
-    for (const e of Array.from(b.querySelectorAll<HTMLElement>('span:not(.mk):not([data-fam]):not([data-pt])'))) {
+    for (const e of Array.from(b.querySelectorAll<HTMLElement>('span:not(.mk):not([data-fam]):not([data-pt]):not([data-hl])'))) {
         if (e.style.length === 0) continue;
         for (const p of ESTILOS_RUIDO) e.style.removeProperty(p);
         if (e.style.length === 0) e.removeAttribute('style');
     }
 }
 
+function limpiarCelda(celda: HTMLElement): void {
+    const hojas = hojasDe(celda);
+    const ultima = hojas[hojas.length - 1];
+    if (!ultima) colocarRelleno(celda);
+    else if (esBr(ultima) && hojas.length > 1 && !esBr(hojas[hojas.length - 2])) ultima.remove();
+}
+
 function limpiarBloque(b: HTMLElement): void {
+    if (esTabla(b)) {
+        b.classList.add('ed-tabla');
+        for (const celda of Array.from(b.querySelectorAll<HTMLElement>('td, th'))) {
+            limpiarAtributos(celda);
+            limpiarCelda(celda);
+        }
+        return;
+    }
     limpiarAtributos(b);
     const hojas = hojasDe(b);
     const ultima = hojas[hojas.length - 1];
@@ -995,6 +1138,42 @@ function limpiarBloque(b: HTMLElement): void {
     // Una línea sin contenido tiene ancho 0: el navegador no la baja de las franjas de página (ver CSS .vacio).
     b.classList.toggle('linea-vacia', chips.length === 0 && texto.trim() === '');
     if (b.classList.length === 0) b.removeAttribute('class');
+}
+
+/** Numera consecutivamente los párrafos con lista ordenada para que el CSS `attr(data-num)` muestre 1., 1.1, I., a., etc. */
+function numerarListas(raiz: HTMLElement): void {
+    let contador = 0;
+    let padre = 0;
+    let sub = 0;
+    let tipoActual = '';
+    for (const b of todosBloques(raiz)) {
+        const t = b.dataset.lista;
+        if (t === 'ol') {
+            padre = tipoActual === 'ol' || tipoActual === 'ol-sub' ? padre + 1 : 1;
+            sub = 0;
+            contador = padre;
+            tipoActual = 'ol';
+            b.dataset.num = formatearMarcadorLista('ol', padre);
+        } else if (t === 'ol-sub') {
+            if (tipoActual !== 'ol' && tipoActual !== 'ol-sub') padre = 1;
+            else if (padre === 0) padre = 1;
+            sub += 1;
+            tipoActual = 'ol-sub';
+            b.dataset.num = formatearMarcadorLista('ol-sub', sub, padre);
+        } else if (esListaOrdenada(t)) {
+            contador = tipoActual === t ? contador + 1 : 1;
+            padre = 0;
+            sub = 0;
+            tipoActual = t;
+            b.dataset.num = formatearMarcadorLista(t, contador);
+        } else {
+            contador = 0;
+            padre = 0;
+            sub = 0;
+            tipoActual = '';
+            if (b.dataset.num) delete b.dataset.num;
+        }
+    }
 }
 
 /** Convierte el texto «{{…}}» escrito a mano en etiquetas de campo. */
@@ -1042,7 +1221,7 @@ function convertirMarcadores(el: HTMLElement): void {
     }
 }
 
-/** Lo que quede suelto en `cont` (texto, <span>, <div>…) pasa a ser párrafo. En la raíz se respetan las regiones de columnas. */
+/** Lo que quede suelto en `cont` (texto, <span>, <div>…) pasa a ser párrafo. En la raíz se respetan las regiones de columnas y tablas. */
 function agruparSueltos(cont: HTMLElement, raiz: boolean): boolean {
     let cambio = false;
     let sueltos: Node[] = [];
@@ -1055,7 +1234,7 @@ function agruparSueltos(cont: HTMLElement, raiz: boolean): boolean {
         cambio = true;
     };
     for (const n of Array.from(cont.childNodes)) {
-        if (n instanceof HTMLElement && (esSalto(n) || BLOQUES.has(n.tagName) || (raiz && esSeccion(n)))) {
+        if (n instanceof HTMLElement && (esSalto(n) || esTabla(n) || BLOQUES.has(n.tagName) || (raiz && esSeccion(n)))) {
             cerrar(n);
             continue;
         }
@@ -1076,11 +1255,11 @@ function agruparSueltos(cont: HTMLElement, raiz: boolean): boolean {
     return cambio;
 }
 
-/** Un salto de página no cabe dentro de una región de columnas: la parte en dos y el salto queda fuera. */
+/** Un salto de página o tabla no cabe dentro de una región de columnas: la parte en dos y queda fuera. */
 function sacarSaltos(sec: HTMLElement): boolean {
     let cambio = false;
     for (; ;) {
-        const s = Array.from(sec.children).find((h) => esSalto(h));
+        const s = Array.from(sec.children).find((h) => esSalto(h) || esTabla(h));
         if (!s) return cambio;
         cambio = true;
         const despues: Node[] = [];
@@ -1135,16 +1314,20 @@ function normalizar(el: HTMLElement, solo?: HTMLElement | null): void {
     agruparSueltos(el, true);
     repararSecciones(el);
     if (el.children.length === 0) el.appendChild(parrafoVacio());
-    // Detrás de un salto o de una región de columnas siempre hay un párrafo donde seguir escribiendo.
-    if (esSalto(el.lastElementChild) || esSeccion(el.lastElementChild)) el.appendChild(parrafoVacio());
+    // Detrás de un salto, tabla o región de columnas siempre hay un párrafo donde seguir escribiendo.
+    if (esSalto(el.lastElementChild) || esTabla(el.lastElementChild) || esSeccion(el.lastElementChild)) {
+        el.appendChild(parrafoVacio());
+    }
 
     if (solo && (solo.parentNode === el || esSeccion(solo.parentNode))) {
         convertirMarcadores(solo);
         limpiarBloque(solo);
+        numerarListas(el);
         return;
     }
     convertirMarcadores(el);
     for (const b of todosBloques(el)) if (!esSalto(b)) limpiarBloque(b);
+    numerarListas(el);
 }
 
 /** Bloques abiertos («#rol») en la posición del cursor, según las etiquetas de campo que lo preceden. */
@@ -1289,9 +1472,9 @@ function pegarTexto(raiz: HTMLElement, r: Range, lineas: string[]): void {
 function pegarBloques(raiz: HTMLElement, r: Range, bloques: Bloque[]): void {
     r.collapse(true);
     const bloque = bloqueRaiz(raiz, r.startContainer);
-    const unico = bloques.length === 1 && bloques[0].tipo === 'parrafo' ? bloques[0] : null;
+    const unico = bloques.length === 1 && bloques[0].tipo === 'parrafo' && !bloques[0].lista ? bloques[0] : null;
 
-    if (unico && bloque && !esSalto(bloque) && !esVacio(bloque)) {
+    if (unico && bloque && !esSalto(bloque) && !esTabla(bloque) && !esVacio(bloque)) {
         const frag = document.createDocumentFragment();
         for (const t of unico.tramos) frag.appendChild(tramoADom(t));
         const ultimo = frag.lastChild;
@@ -1312,7 +1495,7 @@ function pegarBloques(raiz: HTMLElement, r: Range, bloques: Bloque[]): void {
         return;
     }
 
-    const nuevos = bloques.map((b) => (b.tipo === 'salto' ? saltoADom() : parrafoADom(b)));
+    const nuevos = bloques.map((b) => (b.tipo === 'salto' ? saltoADom() : b.tipo === 'tabla' ? tablaADom(b) : parrafoADom(b)));
     colocarBloques(raiz, r, nuevos);
     const ult = nuevos[nuevos.length - 1];
     if (!ult) return;
@@ -1342,8 +1525,8 @@ function mostrarCursor(raiz: HTMLElement): void {
     else if (rect.top < arriba) cont.scrollTop -= arriba - rect.top;
 }
 
-/* ================= Fuente, tamaño y párrafo (independientes por selección) ================= */
-function spanLetra(fam?: string, pt?: number): HTMLElement {
+/* ================= Fuente, tamaño, resaltado y párrafo (independientes por selección) ================= */
+function spanLetra(fam?: string, pt?: number, hl?: ColorResaltado): HTMLElement {
     const s = document.createElement('span');
     if (fam) {
         s.dataset.fam = fam;
@@ -1354,19 +1537,25 @@ function spanLetra(fam?: string, pt?: number): HTMLElement {
         // --esc es la escala de la hoja en pantalla: así el tamaño real (pt) se mantiene proporcional.
         s.style.fontSize = `calc(${pt}pt * var(--esc, 1))`;
     }
+    if (hl) {
+        s.dataset.hl = hl;
+        s.classList.add('ed-hl');
+    }
     return s;
 }
 
-/** Fuente y tamaño efectivos en un punto del texto (el más cercano hacia arriba). */
-function letraEn(nodo: Node, hasta: HTMLElement): { fam: string | null; pt: number | null } {
+/** Fuente, tamaño y resaltado efectivos en un punto del texto (el más cercano hacia arriba). */
+function letraEn(nodo: Node, hasta: HTMLElement): { fam: string | null; pt: number | null; hl: ColorResaltado | null } {
     let fam: string | null = null;
     let pt: number | null = null;
+    let hl: ColorResaltado | null = null;
     for (let n: Node | null = nodo; n && n !== hasta; n = n.parentNode) {
         if (!(n instanceof HTMLElement)) continue;
         if (fam === null && n.dataset.fam) fam = n.dataset.fam;
         if (pt === null && n.dataset.pt) pt = Number(n.dataset.pt) || null;
+        if (hl === null && esColorResaltado(n.dataset.hl)) hl = n.dataset.hl;
     }
-    return { fam, pt };
+    return { fam, pt, hl };
 }
 
 /** Nodo donde empieza la selección (con selección, el primer texto dentro del punto de inicio). */
@@ -1380,8 +1569,8 @@ function nodoInicial(r: Range): Node {
     return n;
 }
 
-/** Envuelve en un <span> de fuente/tamaño solo lo que toca la selección (texto y campos). */
-function aplicarLetra(r: Range, c: { fam?: string; pt?: number }): void {
+/** Envuelve en un <span> de fuente/tamaño/resaltado solo lo que toca la selección (texto y campos). */
+function aplicarLetra(r: Range, c: { fam?: string; pt?: number; hl?: ColorResaltado }): void {
     const base = r.commonAncestorContainer.nodeType === 3 ? r.commonAncestorContainer.parentNode : r.commonAncestorContainer;
     if (!base) return;
     const sc = r.startContainer, so = r.startOffset, ec = r.endContainer, eo = r.endOffset;
@@ -1414,7 +1603,7 @@ function aplicarLetra(r: Range, c: { fam?: string; pt?: number }): void {
             if (desde > 0) t = t.splitText(desde);
             destino = t;
         }
-        const sp = spanLetra(c.fam, c.pt);
+        const sp = spanLetra(c.fam, c.pt, c.hl);
         destino.parentNode?.replaceChild(sp, destino);
         sp.appendChild(destino);
         envueltos.push(sp);
@@ -1426,11 +1615,74 @@ function aplicarLetra(r: Range, c: { fam?: string; pt?: number }): void {
     ponerRango(nr);
 }
 
+/** Quita el resaltado de los nodos de texto o campos dentro del rango `r`. */
+function quitarResaltadoRango(raiz: HTMLElement, r: Range): void {
+    const base = r.commonAncestorContainer.nodeType === 3 ? r.commonAncestorContainer.parentNode : r.commonAncestorContainer;
+    if (!base) return;
+    const sc = r.startContainer, so = r.startOffset, ec = r.endContainer, eo = r.endOffset;
+    const objetivos: Node[] = [];
+    const w = document.createTreeWalker(base, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode(n: Node): number {
+            if (!r.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
+            if (n.nodeType === 3) {
+                return (n as Text).parentElement?.closest('.mk, [data-salto]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+            }
+            if (n instanceof HTMLElement) {
+                if (n.classList.contains('mk')) return NodeFilter.FILTER_ACCEPT;
+                if (n.dataset.salto !== undefined) return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_SKIP;
+        },
+    });
+    for (let n = w.nextNode(); n; n = w.nextNode()) objetivos.push(n);
+
+    const limpios: Node[] = [];
+    for (const n of objetivos) {
+        let destino: Node = n;
+        if (n.nodeType === 3) {
+            let t = n as Text;
+            const desde = t === sc ? so : 0;
+            const hasta = t === ec ? eo : t.length;
+            if (hasta <= desde) continue;
+            if (hasta < t.length) t.splitText(hasta);
+            if (desde > 0) t = t.splitText(desde);
+            destino = t;
+        }
+        // Sacar de todos los ancestros con data-hl o <mark>
+        for (let i = 0; i < 8; i++) {
+            let anc: HTMLElement | null = null;
+            for (let p = destino.parentElement; p && p !== raiz && !BLOQUES.has(p.tagName) && p.tagName !== 'TD' && p.tagName !== 'TH'; p = p.parentElement) {
+                if (p.dataset.hl || p.tagName === 'MARK') {
+                    anc = p;
+                    break;
+                }
+            }
+            if (!anc) break;
+            if (anc.dataset.fam || anc.dataset.pt) {
+                // Tiene también fuente o tamaño: separar y quitar solo data-hl en la parte central
+                aislarDe(anc, destino);
+            } else {
+                aislarDe(anc, destino);
+            }
+        }
+        limpios.push(destino);
+    }
+    if (limpios.length > 0) {
+        const nr = document.createRange();
+        nr.setStartBefore(limpios[0]);
+        nr.setEndAfter(limpios[limpios.length - 1]);
+        ponerRango(nr);
+    }
+}
+
 function heredarParrafo(de: HTMLElement, a: HTMLElement, alineacion: boolean): void {
     if (alineacion && de.style.textAlign) a.style.textAlign = de.style.textAlign;
     if (de.dataset.lh) {
         a.dataset.lh = de.dataset.lh;
         a.style.lineHeight = de.style.lineHeight;
+    }
+    if (de.dataset.lista) {
+        a.dataset.lista = de.dataset.lista;
     }
 }
 
@@ -1514,11 +1766,117 @@ interface Historial {
 const instantanea = (el: HTMLElement) => el.innerHTML
     .replace(/ style="height: [\d.]+px;"/g, '')
     .replace(/ style="margin-top: [\d.]+px;"/g, '')
+    .replace(/--lista-extra:\s*[\d.]+px;\s*/g, '')
     .replace(/ style=""/g, '');
+
+interface SegmentoDom {
+    ini: number;
+    fin: number;
+    nodo: Text;
+}
+
+interface HallazgoDom {
+    hallazgo: HallazgoObservador;
+    rango: Range;
+    rects: { left: number; top: number; width: number; height: number }[];
+}
+
+interface PopoverObservadorInfo {
+    izq: number;
+    arriba: number;
+    hallazgo?: HallazgoObservador;
+    sinonimos?: ResultadoSinonimos | null;
+    palabra: string;
+    rangoPalabra?: Range;
+}
+
+function extraerTextoYMapa(contenedor: HTMLElement): { texto: string; mapa: SegmentoDom[] } {
+    let texto = '';
+    const mapa: SegmentoDom[] = [];
+    const rec = (n: Node) => {
+        for (const h of Array.from(n.childNodes)) {
+            if (h.nodeType === 3) {
+                const t = h as Text;
+                const d = t.data;
+                if (d.length > 0) {
+                    const ini = texto.length;
+                    texto += d;
+                    mapa.push({ ini, fin: texto.length, nodo: t });
+                }
+            } else if (h instanceof HTMLElement) {
+                if (h.classList.contains('mk')) {
+                    texto += '{{campo}}';
+                } else if (h.tagName === 'BR') {
+                    texto += '\n';
+                } else {
+                    rec(h);
+                }
+            }
+        }
+    };
+    rec(contenedor);
+    return { texto, mapa };
+}
+
+function crearRangoDesdeMapa(mapa: SegmentoDom[], desde: number, hasta: number): Range | null {
+    if (mapa.length === 0 || hasta <= desde) return null;
+    const segIni = mapa.find((s) => desde >= s.ini && desde <= s.fin);
+    const segFin = mapa.find((s) => hasta >= s.ini && hasta <= s.fin);
+    if (!segIni || !segFin || !segIni.nodo.isConnected || !segFin.nodo.isConnected) return null;
+    try {
+        const r = document.createRange();
+        r.setStart(segIni.nodo, Math.max(0, Math.min(desde - segIni.ini, segIni.nodo.length)));
+        r.setEnd(segFin.nodo, Math.max(0, Math.min(hasta - segFin.ini, segFin.nodo.length)));
+        return r;
+    } catch {
+        return null;
+    }
+}
+
+function celdaActual(raiz: HTMLElement): HTMLTableCellElement | null {
+    const s = window.getSelection();
+    if (!s || s.rangeCount === 0 || !s.anchorNode || !raiz.contains(s.anchorNode)) return null;
+    const el = s.anchorNode.nodeType === 1 ? (s.anchorNode as Element) : s.anchorNode.parentElement;
+    const td = el?.closest<HTMLTableCellElement>('td, th');
+    return td && raiz.contains(td) ? td : null;
+}
+
+function extraerPalabraEnCursor(raiz: HTMLElement): { palabra: string; rango: Range } | null {
+    const s = window.getSelection();
+    if (!s || s.rangeCount === 0 || !s.anchorNode || !raiz.contains(s.anchorNode)) return null;
+    const r0 = s.getRangeAt(0);
+    if (!r0.collapsed) {
+        const txt = r0.toString().trim();
+        if (txt && txt.length <= 45) return { palabra: txt, rango: r0.cloneRange() };
+        return null;
+    }
+    if (s.anchorNode.nodeType !== 3) return null;
+    const t = s.anchorNode as Text;
+    if (t.parentElement?.closest('.mk')) return null;
+    const data = t.data;
+    const pos = s.anchorOffset;
+    const esLetra = (ch: string) => /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(ch);
+    let ini = pos;
+    let fin = pos;
+    while (ini > 0 && esLetra(data[ini - 1])) ini--;
+    while (fin < data.length && esLetra(data[fin])) fin++;
+    if (fin <= ini) return null;
+    const r = document.createRange();
+    r.setStart(t, ini);
+    r.setEnd(t, fin);
+    return { palabra: data.slice(ini, fin), rango: r };
+}
+
+const ETIQ_CAT_OBS: Record<CategoriaObservador, string> = {
+    ortografia: 'Ortografía y acentuación',
+    puntuacion: 'Signos de puntuación',
+    gramatica: 'Gramática y concordancia',
+    estilo: 'Estilo forense',
+};
 
 export function HojaEditable({
     ref, textoInicial, config, onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito,
-    onMenuCampo, contexto, verCodigos, soloLectura, llenado,
+    onMenuCampo, contexto, verCodigos, soloLectura, llenado, zoom = 1,
 }: {
     ref?: Ref<ControlHoja>;
     textoInicial: string;
@@ -1538,6 +1896,8 @@ export function HojaEditable({
     onMenuCampo?: (info: MenuCampoInfo) => void;
     soloLectura?: boolean;
     llenado?: LlenadoHoja;
+    /** Factor de zoom del editor (1 = 100%). */
+    zoom?: number;
 }) {
     const raizRef = useRef<HTMLDivElement>(null);
     const cfgRef = useRef(config);
@@ -1549,16 +1909,125 @@ export function HojaEditable({
         tipoPendiente: null, selAntesPendiente: null, ultimaSel: null,
     });
     const oyentesHist = useRef<Set<(e: EstadoHistorial) => void>>(new Set());
+    const oyentesObs = useRef<Set<(e: EstadoObservador) => void>>(new Set());
     const ultimoFmt = useRef('');
     const ultimoAmbito = useRef('');
     const pegando = useRef(false);
     const cuadro = useRef(0);
+    const timerObs = useRef(0);
     const edicion = useRef<{ chip: HTMLElement; cerrar: (confirmar: boolean, salida: Salida) => void } | null>(null);
     const cb = useRef({ onCambio, onFormato, onEditarCampo, onMargenes, onConfigurarPagina, onPaginas, onAmbito, onMenuCampo });
     const acc = useRef<{ deshacer(): void; rehacer(): void; parrafo(): void; salto(): void; antesDeEntrada(tipo: string, data: string): void } | null>(null);
     const [tip, setTip] = useState<Tip | null>(null);
     const chipTip = useRef<HTMLElement | null>(null);
     const [selector, setSelector] = useState<SelectorVisible | null>(null);
+
+    /* ----- Estado del Observador de Ortografía, Puntuación, Gramática y Sinónimos ----- */
+    const [obsActivo, setObsActivo] = useState(true);
+    const obsActivoRef = useRef(true);
+    const dicPersonalRef = useRef<Set<string>>(cargarDiccionarioPersonal());
+    const ignoradosRef = useRef<Set<string>>(new Set());
+    const hallazgosDomRef = useRef<HallazgoDom[]>([]);
+    const [hallazgosDom, setHallazgosDom] = useState<HallazgoDom[]>([]);
+    const metricasRef = useRef<MetricasDocumento>({
+        palabras: 0, caracteres: 0, oraciones: 0, parrafos: 0,
+        promedioPalabrasPorOracion: 0, oracionesLargas: 0, puntajeCalidad: 100, nivelClaridad: 'Excelente',
+    });
+    const palabraActualRef = useRef('');
+    const rangoPalabraActualRef = useRef<Range | null>(null);
+    const [popoverObs, setPopoverObs] = useState<PopoverObservadorInfo | null>(null);
+    const [modoResaltado, setModoResaltadoState] = useState<ColorResaltado | 'quitar' | null>(null);
+    const modoResaltadoRef = useRef<ColorResaltado | 'quitar' | null>(null);
+    const setModoResaltado = (m: ColorResaltado | 'quitar' | null) => {
+        modoResaltadoRef.current = m;
+        setModoResaltadoState(m);
+        programarEstado();
+    };
+
+    function estadoObservador(): EstadoObservador {
+        return {
+            activo: obsActivoRef.current,
+            hallazgos: hallazgosDomRef.current.map((h) => h.hallazgo),
+            metricas: metricasRef.current,
+            palabraSeleccionada: palabraActualRef.current,
+        };
+    }
+
+    function notificarObservador() {
+        if (oyentesObs.current.size === 0) return;
+        const est = estadoObservador();
+        for (const fn of oyentesObs.current) fn(est);
+    }
+
+    function suscribirObservador(fn: (e: EstadoObservador) => void): () => void {
+        oyentesObs.current.add(fn);
+        return () => {
+            oyentesObs.current.delete(fn);
+        };
+    }
+
+    function recalcularObservador() {
+        const el = raizRef.current;
+        const flujo = pg.refFlujo.current;
+        if (!el || !flujo) return;
+        if (!obsActivoRef.current) {
+            hallazgosDomRef.current = [];
+            setHallazgosDom([]);
+            notificarObservador();
+            return;
+        }
+        const rectFlujo = flujo.getBoundingClientRect();
+        const contenedores: HTMLElement[] = [];
+        for (const b of todosBloques(el)) {
+            if (esSalto(b)) continue;
+            if (esTabla(b)) {
+                for (const celda of Array.from(b.querySelectorAll<HTMLElement>('td, th'))) contenedores.push(celda);
+            } else {
+                contenedores.push(b);
+            }
+        }
+        const nuevosHallazgos: HallazgoDom[] = [];
+        const textosParrafos: string[] = [];
+
+        contenedores.forEach((cont, idx) => {
+            const { texto, mapa } = extraerTextoYMapa(cont);
+            textosParrafos.push(texto);
+            if (!texto.trim()) return;
+            const lista = analizarParrafoObservador(texto, idx, dicPersonalRef.current);
+            for (const h of lista) {
+                if (ignoradosRef.current.has(h.id) || ignoradosRef.current.has(`${h.reglaId}:${h.fragmento.toLowerCase()}`)) {
+                    continue;
+                }
+                const r = crearRangoDesdeMapa(mapa, h.desde, h.hasta);
+                if (!r) continue;
+                const clientRects = Array.from(r.getClientRects());
+                const rects = clientRects
+                    .filter((cr) => cr.width > 1 && cr.height > 1)
+                    .map((cr) => ({
+                        left: cr.left - rectFlujo.left,
+                        top: cr.top - rectFlujo.top,
+                        width: cr.width,
+                        height: cr.height,
+                    }));
+                if (rects.length > 0) {
+                    nuevosHallazgos.push({ hallazgo: h, rango: r, rects });
+                }
+            }
+        });
+
+        hallazgosDomRef.current = nuevosHallazgos;
+        metricasRef.current = calcularMetricasDocumento(
+            textosParrafos,
+            nuevosHallazgos.map((x) => x.hallazgo),
+        );
+        setHallazgosDom(nuevosHallazgos);
+        notificarObservador();
+    }
+
+    function programarObservador(delayMs = 160) {
+        window.clearTimeout(timerObs.current);
+        timerObs.current = window.setTimeout(recalcularObservador, delayMs);
+    }
 
     function ocultarTip() {
         chipTip.current = null;
@@ -1601,7 +2070,8 @@ export function HojaEditable({
     /* ----- geometría y paginación ----- */
     const pag = PAGINA_CM[config.tamano] ?? PAGINA_CM.carta;
     const mg = margenesSeguros(config.margenes, config.tamano);
-    const escala = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
+    const escalaBase = ancho > 0 ? Math.min(1, Math.max(0.5, (ancho - MARGEN_LIENZO) / (pag.w * PX_POR_CM))) : 0.75;
+    const escala = Math.max(0.3, Math.min(2.4, escalaBase * zoom));
     const pg = usePaginacion(raizRef, config, PX_POR_CM * escala);
     const razon = useRazonLinea(config.fuente);
 
@@ -1609,11 +2079,12 @@ export function HojaEditable({
         cb.current.onPaginas(pg.paginas);
     }, [pg.paginas]);
 
-    // Interlineado, espaciado o métricas de fuente cambian la altura del texto: hay que volver a paginar.
+    // Interlineado, espaciado, zoom o métricas de fuente cambian la altura del texto: hay que volver a paginar.
     useEffect(() => {
         pg.remedir();
+        programarObservador(80);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [razon, config.interlineado, config.espacioAntes, config.espacioDespues, config.fuente, config.tamanoPt]);
+    }, [razon, config.interlineado, config.espacioAntes, config.espacioDespues, config.fuente, config.tamanoPt, ancho, zoom]);
 
     /* ----- historial propio (deshacer / rehacer) ----- */
     function estadoHistorial(): EstadoHistorial {
@@ -1735,7 +2206,8 @@ export function HojaEditable({
         if (!el || !s || !s.anchorNode || !el.contains(s.anchorNode)) return;
         const b = bloqueRaiz(el, s.anchorNode);
         if (!b || esSalto(b)) return;
-        const estilo = estiloDe(b);
+        const celda = celdaActual(el);
+        const estilo = esTabla(b) ? 'normal' : estiloDe(b);
         const q = (c: string) => {
             try {
                 return document.queryCommandState(c);
@@ -1743,7 +2215,7 @@ export function HojaEditable({
                 return false;
             }
         };
-        const explicito = formatoEn(s.anchorNode, b);
+        const explicito = formatoEn(s.anchorNode, celda ?? b);
         const rango = s.getRangeAt(0);
         const letra = letraEn(nodoInicial(rango), el);
         // Con campos {{…}} seleccionados el navegador no conoce su formato: se calcula aparte.
@@ -1751,17 +2223,31 @@ export function HojaEditable({
         const activo = (c: ComandoFmt, nativo: string) => (conCampos ? formatoUniforme(el, rango, c) : q(nativo));
         const lh = Number(b.dataset.lh);
         const padre = b.parentNode;
+        const listaActiva: TipoLista | null = esTipoLista(b.dataset.lista) ? b.dataset.lista : null;
         const f: FormatoActivo = {
             negrita: estilo === 'normal' ? activo('negrita', 'bold') : explicito.b,
             cursiva: activo('cursiva', 'italic'),
             subrayado: activo('subrayado', 'underline'),
-            alineacion: leerAlineacion(b) ?? BASE[estilo],
+            alineacion: leerAlineacion(celda ?? b) ?? BASE[estilo],
             estilo,
             fuente: letra.fam,
             tamanoPt: letra.pt,
             interlineado: lh > 0 ? lh : null,
             columnas: esSeccion(padre) ? 2 : 1,
+            resaltado: letra.hl,
+            modoResaltado: modoResaltadoRef.current,
+            lista: listaActiva,
+            enTabla: Boolean(celda),
         };
+        const pal = extraerPalabraEnCursor(el);
+        const nuevaPal = pal?.palabra ?? '';
+        if (nuevaPal !== palabraActualRef.current) {
+            palabraActualRef.current = nuevaPal;
+            rangoPalabraActualRef.current = pal?.rango ?? null;
+            notificarObservador();
+        } else if (pal?.rango) {
+            rangoPalabraActualRef.current = pal.rango;
+        }
         const clave = JSON.stringify(f);
         if (clave === ultimoFmt.current) return;
         ultimoFmt.current = clave;
@@ -1800,18 +2286,21 @@ export function HojaEditable({
         else programarSnapshot();
         cb.current.onCambio();
         programarEstado();
+        programarObservador(inmediato ? 60 : 180);
     }
 
     function restaurar(s: Snap, selObjetivo: SelGuardada | null) {
         const el = raizRef.current;
         if (!el) return;
         edicion.current?.cerrar(false, 'blur');
+        setPopoverObs(null);
         const h = hist.current;
         window.clearTimeout(h.timer);
         h.pendiente = false;
         h.tipoPendiente = null;
         el.innerHTML = s.html;
         repintar(el);
+        numerarListas(el);
         s.html = instantanea(el);
         el.focus({ preventScroll: true });
         ponerSel(el, selObjetivo ?? s.selDespues);
@@ -1826,6 +2315,7 @@ export function HojaEditable({
         cb.current.onCambio();
         programarEstado();
         notificarHistorial();
+        programarObservador(60);
     }
 
     function deshacer() {
@@ -1896,10 +2386,26 @@ export function HojaEditable({
         return r;
     }
 
-    /** Borra la selección como Word: el borrado nativo une bien los bloques de los extremos. */
+    /** Borra la selección como Word: el borrado nativo une bien los bloques de los extremos, respetando tablas. */
     function borrarSeleccion() {
+        const el = raizRef.current;
         const s = window.getSelection();
-        if (!s || s.rangeCount === 0 || s.isCollapsed) return;
+        if (!el || !s || s.rangeCount === 0 || s.isCollapsed) return;
+        const r = s.getRangeAt(0);
+        const elAncla = s.anchorNode?.nodeType === 1 ? (s.anchorNode as Element) : s.anchorNode?.parentElement;
+        const elFoco = s.focusNode?.nodeType === 1 ? (s.focusNode as Element) : s.focusNode?.parentElement;
+        const tdAncla = elAncla?.closest<HTMLTableCellElement>('td, th');
+        const tdFoco = elFoco?.closest<HTMLTableCellElement>('td, th');
+        // Si la selección cruza distintas celdas de tabla (o entra/sale de una tabla), vaciamos las celdas tocadas sin destruir <tr>/<td>
+        if ((tdAncla || tdFoco) && tdAncla !== tdFoco) {
+            const celdas = Array.from(el.querySelectorAll<HTMLTableCellElement>('td, th')).filter((c) => r.intersectsNode(c));
+            for (const c of celdas) {
+                c.replaceChildren(document.createElement('br'));
+            }
+            const destino = tdAncla ?? celdas[0];
+            if (destino) ponerRango(inicioDe(destino));
+            return;
+        }
         pegando.current = true; // su evento input se ignora: tras() corre al final de la operación
         try {
             document.execCommand('delete');
@@ -1912,12 +2418,27 @@ export function HojaEditable({
     function nuevoParrafo() {
         const el = raizRef.current;
         if (!el) return;
+        const celda = celdaActual(el);
+        if (celda) {
+            // Dentro de una celda de tabla, Enter inserta salto de línea limpio dentro de la celda
+            saltoSuave();
+            return;
+        }
         registrar();
         borrarSeleccion();
         const r = rangoActual();
         r.collapse(true);
         const bloque = bloqueRaiz(el, r.startContainer);
-        if (!bloque || esSalto(bloque)) return;
+        if (!bloque || esSalto(bloque) || esTabla(bloque)) return;
+
+        // Si el párrafo actual es un elemento de lista vacío y se presiona Enter, salir de la lista (como en Word)
+        if (bloque.dataset.lista && esVacio(bloque)) {
+            delete bloque.dataset.lista;
+            delete bloque.dataset.num;
+            numerarListas(el);
+            tras(true, false);
+            return;
+        }
 
         const trasBr = brAntesDe(r);
         const corte = document.createRange();
@@ -1945,12 +2466,13 @@ export function HojaEditable({
         }
         limpiarBloque(bloque);
         limpiarBloque(nuevo);
+        numerarListas(el);
         ponerRango(inicioProfundo(nuevo));
         tras(true, false);
         mostrarCursor(el);
     }
 
-    /** Shift+Enter: salto de línea dentro del mismo párrafo. */
+    /** Shift+Enter: salto de línea dentro del mismo párrafo o celda. */
     function saltoSuave() {
         const el = raizRef.current;
         if (!el) return;
@@ -1958,7 +2480,8 @@ export function HojaEditable({
         borrarSeleccion();
         const r = rangoActual();
         r.collapse(true);
-        const bloque = bloqueRaiz(el, r.startContainer);
+        const celda = celdaActual(el);
+        const bloque = celda ?? bloqueRaiz(el, r.startContainer);
         if (!bloque || esSalto(bloque)) return;
         const br = document.createElement('br');
         r.insertNode(br);
@@ -1968,9 +2491,31 @@ export function HojaEditable({
         mostrarCursor(el);
     }
 
-    /** Tab: inserta una tabulación (en vez de sacar el foco del editor). */
-    function tabulador() {
-        if (!raizRef.current) return;
+    /** Tab: en tabla navega entre celdas (o agrega fila al final); en párrafo inserta tabulación. */
+    function tabulador(inverso = false) {
+        const el = raizRef.current;
+        if (!el) return;
+        const celda = celdaActual(el);
+        if (celda) {
+            const tbl = celda.closest<HTMLTableElement>('table');
+            if (!tbl) return;
+            const celdas = Array.from(tbl.querySelectorAll<HTMLTableCellElement>('td, th'));
+            const idx = celdas.indexOf(celda);
+            if (idx < 0) return;
+            if (!inverso && idx === celdas.length - 1) {
+                // Estamos en la última celda: agregar una nueva fila automáticamente como en Word
+                accionTabla('filaAbajo');
+                return;
+            }
+            const destino = celdas[inverso ? Math.max(0, idx - 1) : Math.min(celdas.length - 1, idx + 1)];
+            if (destino) {
+                ponerRango(alFinal(destino));
+                mostrarCursor(el);
+                programarEstado();
+            }
+            return;
+        }
+        if (inverso) return;
         registrar();
         document.execCommand('insertText', false, '\t');
     }
@@ -2021,7 +2566,7 @@ export function HojaEditable({
         foco();
         const s = window.getSelection();
         const b = s?.anchorNode ? bloqueRaiz(el, s.anchorNode) : null;
-        if (c === 'negrita' && b && estiloDe(b) !== 'normal') return; // títulos y subtítulos van siempre en negrita
+        if (c === 'negrita' && b && !esTabla(b) && estiloDe(b) !== 'normal') return; // títulos y subtítulos van siempre en negrita
         registrar();
 
         // Los campos {{…}} no son editables: el navegador no les aplica formato, se hace aparte.
@@ -2054,7 +2599,14 @@ export function HojaEditable({
         const el = raizRef.current;
         if (!el) return;
         foco();
-        const bloques = bloquesSeleccionados(el);
+        const celda = celdaActual(el);
+        if (celda) {
+            registrar();
+            celda.style.textAlign = A_CSS[a];
+            tras(true);
+            return;
+        }
+        const bloques = bloquesSeleccionados(el).filter((b) => !esTabla(b));
         if (bloques.length === 0) return;
         registrar();
         for (const b of bloques) {
@@ -2100,6 +2652,255 @@ export function HojaEditable({
         if (pt > 0) formatoLetra({ pt });
     };
 
+    /** Resaltado de texto: si hay selección, la resalta; si no, activa/alterna el cursor de resaltado (como en Word). */
+    function resaltar(color: ColorResaltado | null) {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const s = window.getSelection();
+        if (!s || s.rangeCount === 0 || !s.anchorNode || !el.contains(s.anchorNode) || s.isCollapsed) {
+            const objetivo: ColorResaltado | 'quitar' = color ?? 'quitar';
+            setModoResaltado(modoResaltadoRef.current === objetivo ? null : objetivo);
+            return;
+        }
+        const r = s.getRangeAt(0);
+        registrar();
+        const actual = letraEn(nodoInicial(r), el).hl;
+        if (color === null || actual === color) {
+            quitarResaltadoRango(el, r);
+        } else {
+            quitarResaltadoRango(el, r);
+            const s2 = window.getSelection();
+            if (s2 && s2.rangeCount > 0) aplicarLetra(s2.getRangeAt(0), { hl: color });
+        }
+        tras(true);
+    }
+
+    /** Al soltar el ratón con el modo resaltador activo, resalta la selección recién hecha. */
+    function alSoltarMouse() {
+        const modo = modoResaltadoRef.current;
+        const el = raizRef.current;
+        if (!modo || !el || soloLectura) return;
+        const s = window.getSelection();
+        if (!s || s.rangeCount === 0 || s.isCollapsed || !s.anchorNode || !el.contains(s.anchorNode)) return;
+        const r = s.getRangeAt(0);
+        if (!r.toString().trim()) return;
+        registrar();
+        quitarResaltadoRango(el, r);
+        if (modo !== 'quitar') {
+            const s2 = window.getSelection();
+            if (s2 && s2.rangeCount > 0) aplicarLetra(s2.getRangeAt(0), { hl: modo });
+        }
+        const sFin = window.getSelection();
+        if (sFin && sFin.rangeCount > 0) {
+            const rFin = sFin.getRangeAt(0).cloneRange();
+            rFin.collapse(false);
+            ponerRango(rFin);
+            guardada.current = rFin.cloneRange();
+        }
+        tras(true);
+    }
+
+    /** Alterna o quita lista con viñetas o numeración en los párrafos seleccionados. */
+    function ponerLista(tipo: TipoLista | null) {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const bloques = bloquesSeleccionados(el).filter((b) => !esTabla(b) && !esSalto(b));
+        if (bloques.length === 0) return;
+        registrar();
+        const g = guardarNodos();
+        const quitar = tipo === null || bloques.every((b) => b.dataset.lista === tipo);
+        const resultantes: HTMLElement[] = [];
+        for (const b of bloques) {
+            if (quitar) {
+                delete b.dataset.lista;
+                delete b.dataset.num;
+                resultantes.push(b);
+            } else {
+                const p = b.tagName !== 'P' ? renombrar(b, 'p') : b;
+                p.dataset.lista = tipo;
+                resultantes.push(p);
+            }
+        }
+        numerarListas(el);
+        // Si el cursor estaba en un bloque vacío (o colapsado tras renombrar), aseguramos posición limpia al inicio del contenido
+        const s = window.getSelection();
+        if (resultantes.length === 1 && esVacio(resultantes[0])) {
+            const rng = inicioProfundo(resultantes[0]);
+            ponerRango(rng);
+            guardada.current = rng.cloneRange();
+        } else {
+            restaurarNodos(g);
+            if (s && s.rangeCount > 0 && el.contains(s.anchorNode)) {
+                guardada.current = s.getRangeAt(0).cloneRange();
+            }
+        }
+        tras(true);
+        mostrarCursor(el);
+    }
+
+    /** Inserta una tabla nueva en la posición del cursor. */
+    function insertarTabla(filas: number, columnas: number) {
+        const el = raizRef.current;
+        if (!el) return;
+        const nFilas = Math.max(1, Math.min(20, Math.round(filas)));
+        const nCols = Math.max(1, Math.min(10, Math.round(columnas)));
+        foco();
+        registrar();
+        borrarSeleccion();
+        const r = rangoActual();
+        const bTabla: BloqueTabla = {
+            tipo: 'tabla',
+            encabezado: true,
+            filas: Array.from({ length: nFilas }, (_, rIdx) =>
+                Array.from({ length: nCols }, () => ({
+                    tramos: [],
+                    ...(rIdx === 0 ? { alineacion: 'center' as Alineacion } : {}),
+                })),
+            ),
+        };
+        const domTabla = tablaADom(bTabla);
+        const b = bloqueRaiz(el, r.startContainer);
+        if (b && esSeccion(b.parentElement)) {
+            extraerDeSeccion(b);
+        }
+        colocarBloques(el, r, [domTabla]);
+        normalizar(el);
+        const primeraCelda = domTabla.querySelector<HTMLElement>('th, td');
+        if (primeraCelda) {
+            const rng = inicioDe(primeraCelda);
+            ponerRango(rng);
+            guardada.current = rng.cloneRange();
+        }
+        tras(true);
+        mostrarCursor(el);
+    }
+
+    /** Ejecuta una acción de edición estructural sobre la tabla actual (filas/columnas/encabezado/eliminar). */
+    function accionTabla(accion: AccionTabla) {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const celda = celdaActual(el);
+        const tbl = celda?.closest<HTMLTableElement>('table');
+        if (!celda || !tbl) return;
+        const tr = celda.closest('tr');
+        const tbody = tbl.querySelector('tbody') ?? tbl;
+        if (!tr) return;
+
+        const filasTr = Array.from(tbl.querySelectorAll('tr')).filter((row) => row.closest('table') === tbl);
+        const filaIdx = filasTr.indexOf(tr);
+        const celdasFila = Array.from(tr.children).filter((c): c is HTMLTableCellElement => c.tagName === 'TD' || c.tagName === 'TH');
+        const colIdx = celdasFila.indexOf(celda);
+        const numCols = Math.max(1, celdasFila.length);
+
+        registrar();
+
+        if (accion === 'eliminarTabla') {
+            const p = parrafoVacio();
+            tbl.replaceWith(p);
+            ponerRango(inicioDe(p));
+            tras(true);
+            return;
+        }
+
+        if (accion === 'alternarEncabezado') {
+            const tenia = tbl.dataset.encabezado === '1';
+            if (tenia) delete tbl.dataset.encabezado;
+            else tbl.dataset.encabezado = '1';
+            const primera = filasTr[0];
+            if (primera) {
+                for (const c of Array.from(primera.children)) {
+                    if (c instanceof HTMLElement) renombrar(c, tenia ? 'td' : 'th');
+                }
+            }
+            tras(true);
+            return;
+        }
+
+        if (accion === 'filaArriba' || accion === 'filaAbajo') {
+            const insertarEnEncabezado = accion === 'filaArriba' && filaIdx === 0 && tbl.dataset.encabezado === '1';
+            if (insertarEnEncabezado) {
+                // Convertir la antigua primera fila en td y la nueva en th
+                for (const c of Array.from(tr.children)) {
+                    if (c instanceof HTMLElement) renombrar(c, 'td');
+                }
+            }
+            const nuevaTr = document.createElement('tr');
+            const tagCelda = insertarEnEncabezado ? 'th' : 'td';
+            for (let k = 0; k < numCols; k++) {
+                const td = document.createElement(tagCelda);
+                td.appendChild(document.createElement('br'));
+                nuevaTr.appendChild(td);
+            }
+            if (accion === 'filaArriba') tr.before(nuevaTr);
+            else tr.after(nuevaTr);
+            const primera = nuevaTr.querySelector<HTMLElement>('td, th');
+            if (primera) ponerRango(inicioDe(primera));
+            tras(true);
+            return;
+        }
+
+        if (accion === 'eliminarFila') {
+            if (filasTr.length <= 1) {
+                const p = parrafoVacio();
+                tbl.replaceWith(p);
+                ponerRango(inicioDe(p));
+                tras(true);
+                return;
+            }
+            const sigTr = filasTr[filaIdx + 1] ?? filasTr[filaIdx - 1];
+            tr.remove();
+            if (filaIdx === 0 && tbl.dataset.encabezado === '1' && sigTr) {
+                for (const c of Array.from(sigTr.children)) {
+                    if (c instanceof HTMLElement) renombrar(c, 'th');
+                }
+            }
+            const celdaDestino = sigTr?.children[Math.min(colIdx, sigTr.children.length - 1)] as HTMLElement | undefined;
+            if (celdaDestino) ponerRango(inicioDe(celdaDestino));
+            tras(true);
+            return;
+        }
+
+        if (accion === 'colIzquierda' || accion === 'colDerecha') {
+            filasTr.forEach((row, rIdx) => {
+                const esTh = rIdx === 0 && tbl.dataset.encabezado === '1';
+                const nuevaCelda = document.createElement(esTh ? 'th' : 'td');
+                nuevaCelda.appendChild(document.createElement('br'));
+                const refCelda = row.children[colIdx];
+                if (refCelda) {
+                    if (accion === 'colIzquierda') refCelda.before(nuevaCelda);
+                    else refCelda.after(nuevaCelda);
+                } else {
+                    row.appendChild(nuevaCelda);
+                }
+            });
+            const nuevaEnFila = tr.children[accion === 'colIzquierda' ? colIdx : colIdx + 1] as HTMLElement | undefined;
+            if (nuevaEnFila) ponerRango(inicioDe(nuevaEnFila));
+            tras(true);
+            return;
+        }
+
+        if (accion === 'eliminarColumna') {
+            if (numCols <= 1) {
+                const p = parrafoVacio();
+                tbl.replaceWith(p);
+                ponerRango(inicioDe(p));
+                tras(true);
+                return;
+            }
+            filasTr.forEach((row) => {
+                const c = row.children[colIdx];
+                if (c) c.remove();
+            });
+            const destino = tr.children[Math.max(0, Math.min(colIdx, tr.children.length - 1))] as HTMLElement | undefined;
+            if (destino) ponerRango(inicioDe(destino));
+            else if (tbody) ponerRango(inicioDe(tbody));
+            tras(true);
+        }
+    }
+
     /** Interlineado de los párrafos seleccionados (o del párrafo del cursor). */
     function ponerInterlineado(v: number) {
         const el = raizRef.current;
@@ -2123,15 +2924,15 @@ export function HojaEditable({
     }
 
     /**
- * Como en Word: lo seleccionado pasa a 1 o 2 columnas y el resto del documento no cambia.
- * Sin selección y pidiendo 1 columna, se deshace toda la región donde está el cursor.
- */
+     * Como en Word: lo seleccionado pasa a 1 o 2 columnas y el resto del documento no cambia.
+     * Sin selección y pidiendo 1 columna, se deshace toda la región donde está el cursor.
+     */
     function ponerColumnas(n: number) {
         const el = raizRef.current;
         if (!el) return;
         foco();
         const s = window.getSelection();
-        let objetivo = bloquesSeleccionados(el);
+        let objetivo = bloquesSeleccionados(el).filter((b) => !esTabla(b));
         if (objetivo.length === 0) return;
         if (n < 2 && s?.isCollapsed) {
             const sec = objetivo[0].parentElement;
@@ -2184,6 +2985,109 @@ export function HojaEditable({
         tras(true);
     }
 
+    /* ----- Acciones del Observador y Sinónimos ----- */
+    function alternarObservador(forzar?: boolean) {
+        const nuevo = forzar !== undefined ? forzar : !obsActivoRef.current;
+        obsActivoRef.current = nuevo;
+        setObsActivo(nuevo);
+        setPopoverObs(null);
+        recalcularObservador();
+    }
+
+    function reemplazarRangoTexto(rango: Range, reemplazo: string) {
+        const el = raizRef.current;
+        if (!el || !rango.startContainer.isConnected) return;
+        foco();
+        registrar();
+        rango.deleteContents();
+        if (reemplazo) {
+            const nodoTxt = document.createTextNode(reemplazo);
+            rango.insertNode(nodoTxt);
+            ponerRango(trasNodo(nodoTxt));
+        } else {
+            ponerRango(rango);
+        }
+        setPopoverObs(null);
+        tras(true, false);
+        recalcularObservador();
+    }
+
+    function aplicarHallazgo(id: string, reemplazo: string) {
+        const item = hallazgosDomRef.current.find((x) => x.hallazgo.id === id);
+        if (!item) return;
+        reemplazarRangoTexto(item.rango, reemplazo);
+    }
+
+    function irAHallazgo(id: string) {
+        const el = raizRef.current;
+        const item = hallazgosDomRef.current.find((x) => x.hallazgo.id === id);
+        if (!el || !item || !item.rango.startContainer.isConnected) return;
+        foco();
+        ponerRango(item.rango.cloneRange());
+        mostrarCursor(el);
+        const rect = item.rango.getBoundingClientRect();
+        const pal = item.hallazgo.fragmento.trim();
+        setPopoverObs({
+            izq: Math.max(12, Math.min(rect.left, window.innerWidth - 360)),
+            arriba: rect.bottom + 8 + 260 < window.innerHeight ? rect.bottom + 8 : Math.max(12, rect.top - 240),
+            hallazgo: item.hallazgo,
+            sinonimos: buscarSinonimos(pal),
+            palabra: pal,
+            rangoPalabra: item.rango.cloneRange(),
+        });
+    }
+
+    function ignorarHallazgo(id: string) {
+        const item = hallazgosDomRef.current.find((x) => x.hallazgo.id === id);
+        if (item) {
+            ignoradosRef.current.add(id);
+            ignoradosRef.current.add(`${item.hallazgo.reglaId}:${item.hallazgo.fragmento.toLowerCase()}`);
+        } else {
+            ignoradosRef.current.add(id);
+        }
+        setPopoverObs(null);
+        recalcularObservador();
+    }
+
+    function agregarPalabraDiccionario(palabra: string) {
+        dicPersonalRef.current = agregarAlDiccionarioPersonal(palabra);
+        setPopoverObs(null);
+        recalcularObservador();
+    }
+
+    function reemplazarPalabraActual(reemplazo: string) {
+        const r = popoverObs?.rangoPalabra ?? rangoPalabraActualRef.current;
+        if (!r || !r.startContainer.isConnected) return;
+        reemplazarRangoTexto(r, reemplazo);
+    }
+
+    function abrirSinonimos() {
+        const el = raizRef.current;
+        if (!el) return;
+        foco();
+        const extraida = extraerPalabraEnCursor(el);
+        if (!extraida) return;
+        const rect = extraida.rango.getBoundingClientRect();
+        // Ver si además hay un hallazgo activo que toque este rango
+        const itemHallazgo = hallazgosDomRef.current.find((x) => {
+            try {
+                return x.rango.intersectsNode(extraida.rango.startContainer)
+                    && x.rango.compareBoundaryPoints(Range.END_TO_START, extraida.rango) <= 0
+                    && x.rango.compareBoundaryPoints(Range.START_TO_END, extraida.rango) >= 0;
+            } catch {
+                return false;
+            }
+        });
+        setPopoverObs({
+            izq: Math.max(12, Math.min(rect.left, window.innerWidth - 360)),
+            arriba: rect.bottom + 8 + 260 < window.innerHeight ? rect.bottom + 8 : Math.max(12, rect.top - 240),
+            hallazgo: itemHallazgo?.hallazgo,
+            sinonimos: buscarSinonimos(extraida.palabra),
+            palabra: extraida.palabra,
+            rangoPalabra: extraida.rango,
+        });
+    }
+
     /** Ctrl+E: selecciona todo el documento (igual que el Ctrl+A nativo: la selección queda dentro de los bloques). */
     function seleccionarTodo() {
         foco();
@@ -2202,6 +3106,7 @@ export function HojaEditable({
             case 'todo': seleccionarTodo(); break;
             case 'deshacer': deshacer(); break;
             case 'rehacer': rehacer(); break;
+            case 'sinonimos': abrirSinonimos(); break;
         }
     }
 
@@ -2211,6 +3116,9 @@ export function HojaEditable({
             leerTexto, insertar, comando, alinear, saltoPagina, deshacer, rehacer,
             estadoHistorial, suscribirHistorial, enfocar: foco,
             fuente: ponerFuente, tamano: ponerTamano, interlineado: ponerInterlineado, columnas: ponerColumnas, saltoColumna,
+            resaltar, lista: ponerLista, insertarTabla, accionTabla,
+            abrirSinonimos, estadoObservador, suscribirObservador, alternarObservador,
+            aplicarHallazgo, irAHallazgo, ignorarHallazgo, agregarPalabraDiccionario, reemplazarPalabraActual,
             contarPendientes: () => raizRef.current?.querySelectorAll('.mk[data-k="pendiente"]').length ?? 0,
             reasignar: (fn) => {
                 const el = raizRef.current;
@@ -2248,6 +3156,7 @@ export function HojaEditable({
 
     useEffect(() => {
         pg.remedir();
+        programarObservador(80);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [verCodigos]);
 
@@ -2257,6 +3166,7 @@ export function HojaEditable({
                 chipTip.current = null;
                 setTip(null);
             }
+            setPopoverObs(null);
         };
         window.addEventListener('scroll', f, true);
         return () => window.removeEventListener('scroll', f, true);
@@ -2270,6 +3180,7 @@ export function HojaEditable({
         repintar(el);
         registrar();
         pg.remedir();
+        programarObservador(100);
         try {
             document.execCommand('defaultParagraphSeparator', false, 'p');
         } catch {
@@ -2317,6 +3228,7 @@ export function HojaEditable({
 
     useEffect(() => () => {
         window.clearTimeout(hist.current.timer);
+        window.clearTimeout(timerObs.current);
         cancelAnimationFrame(cuadro.current);
     }, []);
 
@@ -2333,18 +3245,136 @@ export function HojaEditable({
     /* ----- eventos ----- */
     function alEscribir(e: FormEvent<HTMLDivElement>) {
         if (pegando.current) return;
-        const tipo = (e.nativeEvent as InputEvent).inputType ?? '';
+        setPopoverObs(null);
+        const el = raizRef.current;
+        const ev = e.nativeEvent as InputEvent;
+        const tipo = ev.inputType ?? '';
+        // Auto-lista al escribir "- ", "* ", "1. ", "1) ", "a. ", "A. ", "I. " al inicio de un párrafo normal
+        if (el && tipo === 'insertText' && ev.data === ' ') {
+            const b = bloqueActual(el);
+            const s = window.getSelection();
+            if (b && b.tagName === 'P' && !b.dataset.lista && s && s.isCollapsed && s.anchorNode && b.contains(s.anchorNode)) {
+                const rPre = document.createRange();
+                rPre.setStart(b, 0);
+                rPre.setEnd(s.anchorNode, s.anchorOffset);
+                const preTxt = rPre.toString().replace(/\u200B/g, '');
+                let autoTipo: TipoLista | null = null;
+                if (/^[-•*]\s$/.test(preTxt)) autoTipo = 'ul';
+                else if (/^1\.1\.?\s$/.test(preTxt)) autoTipo = 'ol-sub';
+                else if (/^1\.\s$/.test(preTxt)) autoTipo = 'ol';
+                else if (/^1\)\s$/.test(preTxt)) autoTipo = 'ol-paren';
+                else if (/^a\.\s$/.test(preTxt)) autoTipo = 'ol-letra-min';
+                else if (/^A\.\s$/.test(preTxt)) autoTipo = 'ol-letra';
+                else if (/^I\.\s$/.test(preTxt)) autoTipo = 'ol-romano';
+                else if (/^i\.\s$/.test(preTxt)) autoTipo = 'ol-romano-min';
+                if (autoTipo) {
+                    rPre.deleteContents();
+                    b.dataset.lista = autoTipo;
+                    limpiarBloque(b);
+                    numerarListas(el);
+                    const rng = inicioProfundo(b);
+                    ponerRango(rng);
+                    guardada.current = rng.cloneRange();
+                    tras(true, false);
+                    mostrarCursor(el);
+                    return;
+                }
+            }
+        }
         tras(false, !RAPIDOS.test(tipo));
     }
 
     function alTeclear(e: KeyboardEvent<HTMLDivElement>) {
         // No interferir con tildes por tecla muerta (´ + a) ni con IME.
-
         if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (chipTip.current) ocultarTip();
+        if (e.key === 'Escape') {
+            if (popoverObs) {
+                setPopoverObs(null);
+                return;
+            }
+            if (modoResaltadoRef.current) {
+                e.preventDefault();
+                setModoResaltado(null);
+                return;
+            }
+        }
 
         if (TECLAS_NAVEGACION.has(e.key) && hist.current.pendiente) {
             registrar();
+        }
+
+        // Protección de estructura de celdas en tablas y listas con Backspace / Delete
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            const el = raizRef.current;
+            const s = window.getSelection();
+            if (el && s && s.rangeCount > 0 && s.anchorNode) {
+                const celda = celdaActual(el);
+                if (celda) {
+                    if (!s.isCollapsed) {
+                        const elFoco = s.focusNode?.nodeType === 1 ? (s.focusNode as Element) : s.focusNode?.parentElement;
+                        const celdaFoco = elFoco?.closest<HTMLTableCellElement>('td, th');
+                        if (celdaFoco !== celda) {
+                            e.preventDefault();
+                            registrar();
+                            borrarSeleccion();
+                            tras(true, false);
+                            return;
+                        }
+                    } else if (e.key === 'Backspace') {
+                        if (offsetEnBloque(celda, s.anchorNode, s.anchorOffset) === 0) {
+                            e.preventDefault();
+                            return;
+                        }
+                    } else if (e.key === 'Delete') {
+                        const fin = alFinal(celda);
+                        const maxOff = offsetEnBloque(celda, fin.startContainer, fin.startOffset);
+                        if (offsetEnBloque(celda, s.anchorNode, s.anchorOffset) >= maxOff) {
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                } else if (e.key === 'Backspace' && s.isCollapsed) {
+                    const b = bloqueActual(el);
+                    if (b && b.dataset.lista && offsetEnBloque(b, s.anchorNode, s.anchorOffset) === 0) {
+                        e.preventDefault();
+                        registrar();
+                        delete b.dataset.lista;
+                        delete b.dataset.num;
+                        numerarListas(el);
+                        tras(true, false);
+                        return;
+                    }
+                    // Evitar que Backspace al inicio de un párrafo justo después de una tabla destruya la última celda de la tabla
+                    if (b && offsetEnBloque(b, s.anchorNode, s.anchorOffset) === 0 && esTabla(b.previousElementSibling)) {
+                        e.preventDefault();
+                        const tblPrev = b.previousElementSibling as HTMLElement;
+                        const celdasPrev = tblPrev.querySelectorAll<HTMLElement>('td, th');
+                        const ultCelda = celdasPrev[celdasPrev.length - 1];
+                        if (ultCelda) {
+                            if (esVacio(b) && el.children.length > 2) {
+                                registrar();
+                                b.remove();
+                                normalizar(el);
+                            }
+                            ponerRango(alFinal(ultCelda));
+                            mostrarCursor(el);
+                            programarEstado();
+                        }
+                        return;
+                    }
+                } else if (e.key === 'Delete' && s.isCollapsed) {
+                    const b = bloqueActual(el);
+                    if (b && esTabla(b.nextElementSibling)) {
+                        const fin = alFinal(b);
+                        const maxOff = offsetEnBloque(b, fin.startContainer, fin.startOffset);
+                        if (offsetEnBloque(b, s.anchorNode, s.anchorOffset) >= maxOff) {
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         if (e.key === 'Enter') {
@@ -2357,9 +3387,9 @@ export function HojaEditable({
             else if (!e.altKey) { e.preventDefault(); nuevoParrafo(); }             // Enter: párrafo nuevo
             return;
         }
-        if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
             e.preventDefault();
-            tabulador();
+            tabulador(e.shiftKey);
             return;
         }
 
@@ -2644,6 +3674,47 @@ export function HojaEditable({
         }
     }
 
+    /** Al hacer clic sobre una palabra subrayada por el observador (o Alt+Clic en cualquier palabra), abre el popover inteligente. */
+    function alClickHoja(e: MouseEvent<HTMLDivElement>) {
+        if (soloLectura || CHIP_EDITANDO) return;
+        const chip = e.target instanceof Element ? e.target.closest<HTMLElement>('.mk') : null;
+        if (chip) {
+            setPopoverObs(null);
+            return;
+        }
+        const flujo = pg.refFlujo.current;
+        if (!flujo) return;
+        const rectFlujo = flujo.getBoundingClientRect();
+        const xRel = e.clientX - rectFlujo.left;
+        const yRel = e.clientY - rectFlujo.top;
+
+        // Buscar si el clic cayó sobre el subrayado de algún hallazgo activo
+        const tocado = hallazgosDomRef.current.find((item) =>
+            item.rects.some(
+                (r) => xRel >= r.left - 4 && xRel <= r.left + r.width + 4 && yRel >= r.top - 4 && yRel <= r.top + r.height + 6,
+            ),
+        );
+        if (tocado) {
+            const r = tocado.rango.getBoundingClientRect();
+            const pal = tocado.hallazgo.fragmento.trim();
+            setPopoverObs({
+                izq: Math.max(12, Math.min(r.left, window.innerWidth - 360)),
+                arriba: r.bottom + 8 + 260 < window.innerHeight ? r.bottom + 8 : Math.max(12, r.top - 240),
+                hallazgo: tocado.hallazgo,
+                sinonimos: buscarSinonimos(pal),
+                palabra: pal,
+                rangoPalabra: tocado.rango.cloneRange(),
+            });
+            return;
+        }
+
+        if (e.altKey) {
+            abrirSinonimos();
+            return;
+        }
+        if (popoverObs) setPopoverObs(null);
+    }
+
     /** Doble clic en un campo del texto: pide al padre que lo edite (no aplica al llenar). */
     function alDobleClic(e: MouseEvent<HTMLDivElement>) {
         if (LLENADO && !LLENADO.soloVista) return;
@@ -2721,13 +3792,31 @@ export function HojaEditable({
 
                 <div className="pg-flujo" ref={pg.refFlujo}>
                     <div className="pg-excl" ref={pg.refExcl} aria-hidden="true" />
+                    {obsActivo && hallazgosDom.length > 0 && (
+                        <div className="ed-capa-observador" aria-hidden="true">
+                            {hallazgosDom.map((item) =>
+                                item.rects.map((r, rIdx) => (
+                                    <span
+                                        key={`${item.hallazgo.id}-${rIdx}`}
+                                        className={`ed-subrayado-obs ed-obs-${item.hallazgo.categoria}`}
+                                        style={{
+                                            left: `${r.left}px`,
+                                            top: `${r.top + r.height - 3}px`,
+                                            width: `${Math.max(6, r.width)}px`,
+                                        }}
+                                    />
+                                )),
+                            )}
+                        </div>
+                    )}
                     <div
                         ref={raizRef}
-                        className={`hoja-ed${config.sangria ? ' con-sangria' : ''}${verCodigos ? ' ver-codigos' : ''}`}
+                        className={`hoja-ed${config.sangria ? ' con-sangria' : ''}${verCodigos ? ' ver-codigos' : ''}${modoResaltado ? ' modo-resaltado' : ''}`}
+                        data-hl-cursor={modoResaltado ?? undefined}
                         style={estiloHoja}
                         contentEditable={!soloLectura}
                         suppressContentEditableWarning
-                        spellCheck
+                        spellCheck={!obsActivo}
                         lang="es"
                         role="textbox"
                         aria-multiline="true"
@@ -2736,6 +3825,8 @@ export function HojaEditable({
                         onKeyDown={alTeclear}
                         onPaste={alPegar}
                         onMouseDown={alMouseDown}
+                        onMouseUp={alSoltarMouse}
+                        onClick={alClickHoja}
                         onDoubleClick={alDobleClic}
                         onContextMenu={alMenuContextual}
                         onMouseOver={alPasar}
@@ -2743,6 +3834,105 @@ export function HojaEditable({
                     />
                 </div>
             </div>
+            {popoverObs && (
+                <div
+                    className="ed-pop-observador"
+                    role="dialog"
+                    aria-label="Sugerencias de redacción y sinónimos"
+                    style={{ left: popoverObs.izq, top: popoverObs.arriba }}
+                    onMouseDown={(e) => e.preventDefault()}
+                >
+                    <div className="ed-pop-obs-cab">
+                        {popoverObs.hallazgo ? (
+                            <span className={`ed-pop-obs-badge ed-badge-${popoverObs.hallazgo.categoria}`}>
+                                {ETIQ_CAT_OBS[popoverObs.hallazgo.categoria]}
+                            </span>
+                        ) : (
+                            <span className="ed-pop-obs-badge ed-badge-sinonimos">
+                                Sinónimos y Léxico Forense
+                            </span>
+                        )}
+                        <button
+                            type="button"
+                            className="ed-pop-obs-cerrar"
+                            title="Cerrar (Esc)"
+                            onClick={() => setPopoverObs(null)}
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    {popoverObs.hallazgo && (
+                        <div className="ed-pop-obs-bloque">
+                            <strong className="ed-pop-obs-titulo">{popoverObs.hallazgo.titulo}</strong>
+                            <p className="ed-pop-obs-exp">{popoverObs.hallazgo.explicacion}</p>
+                            {popoverObs.hallazgo.sugerencias.length > 0 && (
+                                <div className="ed-pop-obs-sugs">
+                                    {popoverObs.hallazgo.sugerencias.map((sug, i) => (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            className="ed-pop-obs-btn-sug"
+                                            onClick={() => aplicarHallazgo(popoverObs.hallazgo!.id, sug)}
+                                        >
+                                            {sug || '(Eliminar)'}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="ed-pop-obs-acciones">
+                                <button
+                                    type="button"
+                                    className="ed-pop-obs-accion"
+                                    onClick={() => ignorarHallazgo(popoverObs.hallazgo!.id)}
+                                >
+                                    Ignorar
+                                </button>
+                                {popoverObs.hallazgo.categoria === 'ortografia' && !popoverObs.hallazgo.fragmento.includes(' ') && (
+                                    <button
+                                        type="button"
+                                        className="ed-pop-obs-accion"
+                                        onClick={() => agregarPalabraDiccionario(popoverObs.hallazgo!.fragmento)}
+                                    >
+                                        + Añadir al diccionario
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {popoverObs.sinonimos ? (
+                        <div className="ed-pop-obs-sinonimos">
+                            <div className="ed-pop-obs-sin-enc">
+                                <span>Sinónimos para <b>«{popoverObs.sinonimos.terminoOriginal}»</b></span>
+                                <small>{popoverObs.sinonimos.definicionBreve}</small>
+                            </div>
+                            {popoverObs.sinonimos.grupos.map((g, gi) => (
+                                <div key={gi} className="ed-pop-obs-grupo-sin">
+                                    <span className={`ed-pop-obs-reg ed-reg-${g.registro}`}>{g.etiqueta}</span>
+                                    <div className="ed-pop-obs-sugs">
+                                        {g.opciones.map((op, oi) => (
+                                            <button
+                                                key={oi}
+                                                type="button"
+                                                className={`ed-pop-obs-btn-sin${g.registro === 'antonimo' ? ' es-ant' : ''}`}
+                                                title={`Lema: ${op.base}`}
+                                                onClick={() => reemplazarPalabraActual(op.reemplazo)}
+                                            >
+                                                {op.reemplazo}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : !popoverObs.hallazgo ? (
+                        <div className="ed-pop-obs-vacio">
+                            No se encontraron sinónimos directos para «{popoverObs.palabra}». Usa el panel de Redacción y Tesauro para explorar términos jurídicos afines.
+                        </div>
+                    ) : null}
+                </div>
+            )}
             {tip && (
                 <div className="mk-tip" role="tooltip"
                     style={{ left: tip.izq, top: tip.arriba ?? undefined, bottom: tip.abajo ?? undefined }}>
@@ -2778,3 +3968,4 @@ export function HojaEditable({
         </div>
     );
 }
+export { COLORES_RESALTADO };

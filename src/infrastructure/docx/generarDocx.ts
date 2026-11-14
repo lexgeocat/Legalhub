@@ -1,9 +1,19 @@
 import { strToU8, zipSync, type Zippable } from 'fflate';
 import type { GeneradorDocx } from '../../application/puertos/modelos';
 import {
-    CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, espacioSeguro, margenesSeguros, parsearTexto,
-    type BloqueParrafo, type ConfigPagina, type FuenteModelo, type Tramo,
+    CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, esListaOrdenada, espacioSeguro,
+    formatearMarcadorLista, margenesSeguros, parsearTexto,
+    type BloqueParrafo, type BloqueTabla, type ColorResaltado, type ConfigPagina, type FuenteModelo, type Tramo,
 } from '../../domain/modelos/fuenteModelo';
+
+const HIGHLIGHT_DOCX: Record<ColorResaltado, string> = {
+    yellow: 'yellow',
+    green: 'green',
+    cyan: 'cyan',
+    magenta: 'magenta',
+    orange: 'darkYellow',
+    gray: 'lightGray',
+};
 
 const NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const CABECERA = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -50,12 +60,14 @@ function corrida(t: Tramo, estilo: BloqueParrafo['estilo'], mediosPuntos: number
     const negrita = t.negrita || estilo !== 'normal';
     const sz = t.tamanoPt ? Math.round(acotar(t.tamanoPt, 4, 96, 12) * 2) : estilo === 'titulo' ? mediosPuntos + 4 : 0;
     const tamano = sz ? `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>` : '';
+    const hl = t.resaltado ? `<w:highlight w:val="${HIGHLIGHT_DOCX[t.resaltado]}"/>` : '';
     const props =
         (t.fuente ? rFuentes(t.fuente) : '') +
         (negrita ? '<w:b/><w:bCs/>' : '') +
         (t.cursiva ? '<w:i/><w:iCs/>' : '') +
         tamano +
-        (t.subrayado ? '<w:u w:val="single"/>' : '');
+        (t.subrayado ? '<w:u w:val="single"/>' : '') +
+        hl;
     const rPr = props ? `<w:rPr>${props}</w:rPr>` : '';
 
     // Los marcadores van siempre en una sola corrida, sin partir.
@@ -73,7 +85,7 @@ function corrida(t: Tramo, estilo: BloqueParrafo['estilo'], mediosPuntos: number
         .join('');
 }
 
-function parrafo(b: BloqueParrafo, cfg: ConfigPagina): string {
+function parrafo(b: BloqueParrafo, cfg: ConfigPagina, numLista?: number, numPadre?: number): string {
     const mediosPuntos = Math.round(cfg.tamanoPt * 2);
 
     const pPr: string[] = [];
@@ -83,15 +95,63 @@ function parrafo(b: BloqueParrafo, cfg: ConfigPagina): string {
     if (b.interlineado) {
         pPr.push(`<w:spacing w:line="${Math.round(240 * acotar(b.interlineado, 0.5, 5, cfg.interlineado))}" w:lineRule="auto"/>`);
     }
-    // Sangría de primera línea (1,25 cm = 709 twips), igual que en el editor.
-    if (cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')) {
+    if (b.lista) {
+        pPr.push(b.lista === 'ol-sub' ? '<w:ind w:left="992" w:hanging="425"/>' : '<w:ind w:left="709" w:hanging="354"/>');
+    } else if (cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')) {
+        // Sangría de primera línea (1,25 cm = 709 twips), igual que en el editor.
         pPr.push('<w:ind w:firstLine="709"/>');
     }
 
     pPr.push(`<w:jc w:val="${b.alineacion}"/>`);
     // Salto de columna: va primero y lo que sigue empieza en la columna siguiente (solo tiene sentido dentro de columnas).
     const salto = b.nuevaColumna && (b.columnas ?? 1) > 1 ? '<w:r><w:br w:type="column"/></w:r>' : '';
-    return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${salto}${b.tramos.map((t) => corrida(t, b.estilo, mediosPuntos)).join('')}</w:p>`;
+    const prefLista = b.lista
+        ? `<w:r><w:t xml:space="preserve">${escTexto(formatearMarcadorLista(b.lista, numLista ?? 1, numPadre ?? 1))} </w:t></w:r>`
+        : '';
+    return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${salto}${prefLista}${b.tramos.map((t) => corrida(t, b.estilo, mediosPuntos)).join('')}</w:p>`;
+}
+
+function tablaXml(b: BloqueTabla, cfg: ConfigPagina): string {
+    const mediosPuntos = Math.round(cfg.tamanoPt * 2);
+    const numCols = Math.max(1, ...b.filas.map((f) => f.length));
+    const pctCol = Math.floor(5000 / numCols);
+    const bordes =
+        '<w:tblBorders>' +
+        '<w:top w:val="single" w:sz="4" w:space="0" w:color="94A3B8"/>' +
+        '<w:left w:val="single" w:sz="4" w:space="0" w:color="94A3B8"/>' +
+        '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="94A3B8"/>' +
+        '<w:right w:val="single" w:sz="4" w:space="0" w:color="94A3B8"/>' +
+        '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="94A3B8"/>' +
+        '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="94A3B8"/>' +
+        '</w:tblBorders>';
+    const cellMar =
+        '<w:tblCellMar>' +
+        '<w:top w:w="80" w:type="dxa"/>' +
+        '<w:left w:w="120" w:type="dxa"/>' +
+        '<w:bottom w:w="80" w:type="dxa"/>' +
+        '<w:right w:w="120" w:type="dxa"/>' +
+        '</w:tblCellMar>';
+    const tblPr = `<w:tblPr><w:tblW w:w="5000" w:type="pct"/>${bordes}${cellMar}</w:tblPr>`;
+
+    const filasXml = b.filas
+        .map((fila, idx) => {
+            const esTh = idx === 0 && !!b.encabezado;
+            const celdasXml = Array.from({ length: numCols }, (_, cIdx) => {
+                const celda = fila[cIdx] ?? { tramos: [] };
+                const al = celda.alineacion ?? (esTh ? 'center' : 'left');
+                const shd = esTh ? '<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>' : '';
+                const tcPr = `<w:tcPr><w:tcW w:w="${pctCol}" w:type="pct"/>${shd}</w:tcPr>`;
+                const tramos = esTh
+                    ? celda.tramos.map((t) => ({ ...t, negrita: true }))
+                    : celda.tramos;
+                const pXml = `<w:p><w:pPr><w:spacing w:before="20" w:after="20"/><w:jc w:val="${al}"/></w:pPr>${tramos.map((t) => corrida(t, 'normal', mediosPuntos)).join('')}</w:p>`;
+                return `<w:tc>${tcPr}${pXml}</w:tc>`;
+            }).join('');
+            return `<w:tr>${esTh ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${celdasXml}</w:tr>`;
+        })
+        .join('');
+
+    return `<w:tbl>${tblPr}${filasXml}</w:tbl>`;
 }
 
 /** Propiedades de una sección. La primera no lleva «type»; las demás empiezan de forma continua (sin cambiar de hoja). */
@@ -116,9 +176,47 @@ const portadora = (cfg: ConfigPagina, columnas: number, continua: boolean) =>
 function documentoXml(fuente: FuenteModelo, cfg: ConfigPagina): string {
     const secciones: { columnas: number; xml: string[] }[] = [];
     let columnas = 1;
+    let numOl = 0;
+    let numPadre = 0;
+    let numSub = 0;
+    let tipoOlActual = '';
     for (const b of parsearTexto(fuente.texto)) {
-        if (b.tipo === 'parrafo') columnas = (b.columnas ?? 1) > 1 ? 2 : 1;
-        const xml = b.tipo === 'salto' ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : parrafo(b, cfg);
+        if (b.tipo === 'parrafo') {
+            columnas = (b.columnas ?? 1) > 1 ? 2 : 1;
+            if (b.lista === 'ol') {
+                numPadre = tipoOlActual === 'ol' || tipoOlActual === 'ol-sub' ? numPadre + 1 : 1;
+                numSub = 0;
+                numOl = numPadre;
+                tipoOlActual = 'ol';
+            } else if (b.lista === 'ol-sub') {
+                if (tipoOlActual !== 'ol' && tipoOlActual !== 'ol-sub') numPadre = 1;
+                else if (numPadre === 0) numPadre = 1;
+                numSub += 1;
+                numOl = numSub;
+                tipoOlActual = 'ol-sub';
+            } else if (esListaOrdenada(b.lista)) {
+                numOl = tipoOlActual === b.lista ? numOl + 1 : 1;
+                numPadre = 0;
+                numSub = 0;
+                tipoOlActual = b.lista;
+            } else {
+                numOl = 0;
+                numPadre = 0;
+                numSub = 0;
+                tipoOlActual = '';
+            }
+        } else {
+            columnas = 1;
+            numOl = 0;
+            numPadre = 0;
+            numSub = 0;
+            tipoOlActual = '';
+        }
+        const xml = b.tipo === 'salto'
+            ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+            : b.tipo === 'tabla'
+                ? tablaXml(b, cfg)
+                : parrafo(b, cfg, numOl, numPadre);
         const ultima = secciones[secciones.length - 1];
         if (ultima && ultima.columnas === columnas) ultima.xml.push(xml);
         else secciones.push({ columnas, xml: [xml] });

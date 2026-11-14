@@ -7,13 +7,12 @@ import { VERSION_APP } from '../../domain/comun/version';
 import { Alerta, Aviso, Campo, Icono, Insignia, Modal, avisar, confirmar, registrarTarea } from '../_core/comunes';
 import { FormularioPersona } from '../compartidos/FormularioPersona';
 import { mensajeError, useCargar, useServicios } from '../_core/servicios';
-import { useTema } from '../_core/tema';
+import { ConfiguradorTema } from '../_core/ConfiguradorTema';
 import { ModalSubirDiccionario } from '../diccionarios/ModalSubirDiccionario';
 
 type Ocupado = 'guardar' | 'respaldo' | 'restaurar' | 'auditoria' | 'limpieza' | null;
 
 export function Configuracion() {
-    const [tema, fijarTema] = useTema();
     const s = useServicios();
     const cfg = useCargar(() => s.config.cargar(), []);
     const personas = useCargar(() => s.consultas.listarPersonas(), []);
@@ -252,86 +251,11 @@ export function Configuracion() {
             <section className="tarjeta">
                 <div className="tarjeta-cab">
                     <div>
-                        <h3>Apariencia y tema</h3>
-                        <p className="suave">Personaliza el entorno visual del despacho. El modo oscuro reduce la fatiga visual durante sesiones prolongadas de redacción y lectura de expedientes.</p>
+                        <h3>Apariencia y Sistema de Temas</h3>
+                        <p className="suave">Personaliza Primary, Surface, Presets geométricos, Color Scheme y Layout Theme en tiempo real.</p>
                     </div>
                 </div>
-                <div className="tema-selector-grid">
-                    <button
-                        type="button"
-                        className={`tema-opcion-card${tema === 'oxford' ? ' sel' : ''}`}
-                        onClick={() => {
-                            fijarTema('oxford');
-                            avisar('Tema Oxford Editorial activado');
-                        }}
-                    >
-                        <div className="tema-preview tema-preview-claro">
-                            <div className="tp-nav" />
-                            <div className="tp-content">
-                                <div className="tp-bar" />
-                                <div className="tp-card" />
-                            </div>
-                        </div>
-                        <div className="tema-opcion-info">
-                            <div className="tema-opcion-titulo">
-                                <Icono n="sol" tam={16} />
-                                <b>Oxford Editorial</b>
-                                {tema === 'oxford' && <Insignia tono="azul">Activo</Insignia>}
-                            </div>
-                            <p className="suave">Oxford Navy & Pizarra Perla Intermedio. Tono descansado sin deslumbramiento para despachos.</p>
-                        </div>
-                    </button>
-
-                    <button
-                        type="button"
-                        className={`tema-opcion-card${tema === 'slate' ? ' sel' : ''}`}
-                        onClick={() => {
-                            fijarTema('slate');
-                            avisar('Tema Slate Dusk activado');
-                        }}
-                    >
-                        <div className="tema-preview tema-preview-oscuro">
-                            <div className="tp-nav" />
-                            <div className="tp-content">
-                                <div className="tp-bar" />
-                                <div className="tp-card" />
-                            </div>
-                        </div>
-                        <div className="tema-opcion-info">
-                            <div className="tema-opcion-titulo">
-                                <Icono n="luna" tam={16} />
-                                <b>Slate Dusk</b>
-                                {tema === 'slate' && <Insignia tono="azul">Activo</Insignia>}
-                            </div>
-                            <p className="suave">Pizarra nocturno suave anti-fatiga. Diseñado para juristas en jornadas de trabajo prolongadas.</p>
-                        </div>
-                    </button>
-
-                    <button
-                        type="button"
-                        className={`tema-opcion-card${tema === 'rose' ? ' sel' : ''}`}
-                        onClick={() => {
-                            fijarTema('rose');
-                            avisar('Tema Rose Quartz Boutique activado');
-                        }}
-                    >
-                        <div className="tema-preview tema-preview-rose">
-                            <div className="tp-nav" />
-                            <div className="tp-content">
-                                <div className="tp-bar" />
-                                <div className="tp-card" />
-                            </div>
-                        </div>
-                        <div className="tema-opcion-info">
-                            <div className="tema-opcion-titulo">
-                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#9d4466' }} />
-                                <b>Rose Quartz Boutique</b>
-                                {tema === 'rose' && <Insignia tono="violeta">Activo</Insignia>}
-                            </div>
-                            <p className="suave">Panel oscuro boutique (Plum Wine & Rose Gold) con lienzo cálido cachemira intermedio anti-fatiga.</p>
-                        </div>
-                    </button>
-                </div>
+                <ConfiguradorTema variante="pagina" />
             </section>
 
             {c && (

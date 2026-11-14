@@ -16,6 +16,7 @@ import { Campo, Icono, Segmentado, confirmar } from '../_core/comunes';
 import { fecha, fechalarga, hoyISO } from '../../domain/modelos/filtros/fecha';
 import { BuscadorLeyes } from '../leyes/PanelLeyes';
 import { PanelDiccionario } from '../diccionarios/PanelDiccionario';
+import { ICO, Ico, Tb } from './BarraFormato';
 
 type Pestana = 'datos' | 'partes' | 'genero' | 'leyes' | 'diccionario';
 type Insertar = (texto: string, bloque: boolean) => void;
@@ -899,6 +900,7 @@ function TabGenero({ lista, quien, onSel, onInsertar }: {
 export function PanelCampos({
     campos, partes, grupos, ambito = SIN_AMBITO, pendientes = 0,
     onCampos, onPartes, onGrupos, onInsertar, onDetectar, onAsignarPendientes,
+    verEjemplos, onAlternarEjemplos, verCodigos, onAlternarCodigos,
 }: {
     campos: CampoPropio[];
     partes: string[];
@@ -913,6 +915,10 @@ export function PanelCampos({
     onInsertar: Insertar;
     onDetectar: () => void;
     onAsignarPendientes?: (rol: string) => void;
+    verEjemplos?: boolean;
+    onAlternarEjemplos?: () => void;
+    verCodigos?: boolean;
+    onAlternarCodigos?: () => void;
 }) {
     const [pestana, setPestana] = useState<Pestana>('datos');
     const [sel, setSel] = useState('');
@@ -947,7 +953,31 @@ export function PanelCampos({
     return (
         <div className="pc">
             <div className="pc-cab">
-                <h3>Campos del documento</h3>
+                <div className="pc-cab-fila">
+                    <h3>Campos del documento</h3>
+                    {(onAlternarEjemplos || onAlternarCodigos) && (
+                        <div className="ed-subgrupo" role="group" aria-label="Vista de marcadores">
+                            {onAlternarEjemplos && (
+                                <Tb
+                                    titulo="Ver el documento con los datos de ejemplo de cada campo"
+                                    activo={verEjemplos}
+                                    onClick={onAlternarEjemplos}
+                                >
+                                    <Ico d={ICO.ojo} />
+                                </Tb>
+                            )}
+                            {onAlternarCodigos && (
+                                <Tb
+                                    titulo="Mostrar el código {{…}} de cada campo en vez de su etiqueta corta"
+                                    activo={verCodigos}
+                                    onClick={onAlternarCodigos}
+                                >
+                                    <Ico d={ICO.codigos} />
+                                </Tb>
+                            )}
+                        </div>
+                    )}
+                </div>
                 <div className="pc-tabs" role="tablist" aria-label="Constructor de campos">
                     {items.map((i) => (
                         <button key={i.id} type="button" role="tab" aria-selected={i.id === pestana}
@@ -987,12 +1017,6 @@ export function PanelCampos({
                 {pestana === 'genero' && <TabGenero lista={lista} quien={quien} onSel={setSel} onInsertar={onInsertar} />}
                 {pestana === 'leyes' && <BuscadorLeyes onInsertar={onInsertar} />}
                 {pestana === 'diccionario' && <PanelDiccionario onInsertar={onInsertar} />}
-            </div>
-
-            <div className="pc-pie">
-                <p className="pc-ayuda">
-                    Clic: inserta en el cursor · Clic derecho en un dato ámbar: asignarlo a una parte · Doble clic en un campo: editarlo.
-                </p>
             </div>
         </div>
     );

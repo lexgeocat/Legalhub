@@ -1,4 +1,4 @@
-﻿import {
+import {
     useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
     type CSSProperties, type ReactNode, type RefObject,
 } from 'react';
@@ -119,13 +119,28 @@ export function usePaginacion(
 
         /** Cada salto de página mide lo necesario para que lo siguiente empiece en la hoja siguiente. */
         const esSeccion = (n: Element) => n.classList.contains('sec-cols');
+        const esTabla = (n: Element) => n.tagName === 'TABLE' || (n instanceof HTMLElement && n.dataset.tabla !== undefined);
 
         /**
          * Saltos de página: cada uno mide lo necesario para que lo siguiente empiece en la hoja siguiente.
-         * Regiones de columnas: si no caben en lo que queda de la hoja, pasan enteras a la siguiente.
+         * Regiones de columnas y filas de tabla: si no caben en lo que queda de la hoja, pasan a la siguiente.
          */
         const ajustarSaltos = () => {
             const util = g.alto - g.mSup - g.mInf;
+            // En márgenes simétricos, las listas en hojas con margen izquierdo mayor al padding base
+            // necesitan compensar ese margen extra para que el texto y la viñeta se recorran respecto al margen real.
+            for (const item of Array.from(raiz.querySelectorAll<HTMLElement>('p[data-lista]'))) {
+                if (item.style.getPropertyValue('--lista-extra')) {
+                    item.style.removeProperty('--lista-extra');
+                    if (!item.getAttribute('style')) item.removeAttribute('style');
+                }
+                const rItem = item.getBoundingClientRect();
+                const kItem = paginaDe(g, rItem.top - origen());
+                const extraIzq = margenesLaterales(g, kItem).izq - g.padIzq;
+                if (extraIzq > 0.01) {
+                    item.style.setProperty('--lista-extra', `${extraIzq}px`);
+                }
+            }
             for (const s of Array.from(raiz.children)) {
                 const el = s as HTMLElement;
                 if (esSeccion(el)) {
@@ -140,6 +155,23 @@ export function usePaginacion(
                     const prev = el.previousElementSibling;
                     const mb = prev ? Number.parseFloat(getComputedStyle(prev).marginBottom) || 0 : 0;
                     el.style.marginTop = `${(inicioContenido(g, k + 1) - y + mb).toFixed(2)}px`;
+                    continue;
+                }
+                if (esTabla(el)) {
+                    const filas = Array.from(el.querySelectorAll<HTMLElement>('tr'));
+                    for (const tr of filas) {
+                        if (tr.style.marginTop) {
+                            tr.style.marginTop = '';
+                            if (!tr.getAttribute('style')) tr.removeAttribute('style');
+                        }
+                    }
+                    for (const tr of filas) {
+                        const r = tr.getBoundingClientRect();
+                        const y = r.top - origen();
+                        const k = paginaDe(g, y);
+                        if (r.height > util || y + r.height <= finContenido(g, k) + 0.5) continue;
+                        tr.style.marginTop = `${(inicioContenido(g, k + 1) - y).toFixed(2)}px`;
+                    }
                     continue;
                 }
                 if (!esSalto(el)) continue;

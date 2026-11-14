@@ -620,12 +620,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-[data-tema="slate"] .juris-fecha-destacada,
-[data-tema="oscuro"] .juris-fecha-destacada {
-  background: rgba(59, 130, 246, 0.18);
-  border-color: rgba(96, 165, 250, 0.4);
-  color: #93c5fd;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+[data-color-scheme="dark"] .juris-fecha-destacada {
+  box-shadow: var(--sombra-xs);
 }
 
 /* Cabecera de la tarjeta: Título y partes */
@@ -659,11 +655,6 @@
   font-weight: 800;
   color: var(--primario);
   letter-spacing: -0.01em;
-}
-
-[data-tema="slate"] .juris-tarjeta-num,
-[data-tema="oscuro"] .juris-tarjeta-num {
-  color: #60a5fa;
 }
 
 .juris-expediente-badge {
@@ -764,61 +755,33 @@
 }
 
 .juris-forma-exito {
-  background: rgba(22, 163, 74, 0.12);
-  color: #15803d;
-  border: 1px solid rgba(22, 163, 74, 0.25);
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok-borde);
 }
 
 .juris-forma-error {
-  background: rgba(220, 38, 38, 0.12);
-  color: #b91c1c;
-  border: 1px solid rgba(220, 38, 38, 0.25);
+  background: var(--err-bg);
+  color: var(--err);
+  border: 1px solid var(--err-borde);
 }
 
 .juris-forma-aviso {
-  background: rgba(217, 119, 6, 0.12);
-  color: #b45309;
-  border: 1px solid rgba(217, 119, 6, 0.25);
+  background: var(--adv-bg);
+  color: var(--adv);
+  border: 1px solid var(--adv-borde);
 }
 
 .juris-forma-azul {
-  background: rgba(37, 99, 235, 0.12);
-  color: #1d4ed8;
-  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid var(--info-borde);
 }
 
 .juris-forma-gris {
   background: var(--superficie-3);
   color: var(--texto-2);
   border: 1px solid var(--borde);
-}
-
-[data-tema="slate"] .juris-forma-exito,
-[data-tema="oscuro"] .juris-forma-exito {
-  background: rgba(34, 197, 94, 0.18);
-  color: #86efac;
-  border-color: rgba(34, 197, 94, 0.35);
-}
-
-[data-tema="slate"] .juris-forma-error,
-[data-tema="oscuro"] .juris-forma-error {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.35);
-}
-
-[data-tema="slate"] .juris-forma-aviso,
-[data-tema="oscuro"] .juris-forma-aviso {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fde68a;
-  border-color: rgba(245, 158, 11, 0.35);
-}
-
-[data-tema="slate"] .juris-forma-azul,
-[data-tema="oscuro"] .juris-forma-azul {
-  background: rgba(59, 130, 246, 0.18);
-  color: #93c5fd;
-  border-color: rgba(59, 130, 246, 0.35);
 }
 
 /* Extracto y Máxima compactos */
@@ -929,28 +892,6 @@
   background-color: #fed7aa;
   color: #9a3412;
   border: 1px solid rgba(249, 115, 22, 0.35);
-}
-
-[data-tema="slate"] .juris-tarjeta-tcp .juris-tarjeta-resumen-caja mark,
-[data-tema="slate"] .juris-tarjeta-tcp .juris-tarjeta-resumen-caja b,
-[data-tema="oscuro"] .juris-tarjeta-tcp .juris-tarjeta-resumen-caja mark,
-[data-tema="oscuro"] .juris-tarjeta-tcp .juris-tarjeta-resumen-caja b {
-  background-color: rgba(234, 179, 8, 0.25);
-  color: #fef08a;
-  border-color: rgba(234, 179, 8, 0.5);
-}
-
-[data-tema="slate"] .juris-tarjeta-tsj .juris-tarjeta-resumen-caja mark,
-[data-tema="slate"] .juris-tarjeta-tsj .juris-tarjeta-resumen-caja b,
-[data-tema="slate"] .juris-tarjeta-tsj .juris-tarjeta-maxima-caja mark,
-[data-tema="slate"] .juris-tarjeta-tsj .juris-tarjeta-maxima-caja b,
-[data-tema="oscuro"] .juris-tarjeta-tsj .juris-tarjeta-resumen-caja mark,
-[data-tema="oscuro"] .juris-tarjeta-tsj .juris-tarjeta-resumen-caja b,
-[data-tema="oscuro"] .juris-tarjeta-tsj .juris-tarjeta-maxima-caja mark,
-[data-tema="oscuro"] .juris-tarjeta-tsj .juris-tarjeta-maxima-caja b {
-  background-color: rgba(249, 115, 22, 0.28);
-  color: #fdba74;
-  border-color: rgba(249, 115, 22, 0.5);
 }
 
 /* ================= MODAL DE DETALLE Y LECTOR ================= */
@@ -1288,9 +1229,15 @@
   background: #d2dae6;
 }
 
-[data-tema="slate"] .juris-modal-visor-pdf-container .ley-visor-caja,
-[data-tema="oscuro"] .juris-modal-visor-pdf-container .ley-visor-caja {
-  background: #11151e;
+[data-color-scheme="dark"] .juris-modal-visor-pdf-container .ley-visor-caja {
+  background: var(--ed-desk, #262a33);
+  border-color: var(--bar-borde);
+}
+
+[data-color-scheme="dark"] .juris-modal-visor-pdf-container .ley-visor-barra {
+  background: var(--bar-bg);
+  border-bottom-color: var(--bar-borde);
+  color: var(--bar-texto);
 }
 
 .juris-modal-visor-pdf-container .ley-visor-barra {

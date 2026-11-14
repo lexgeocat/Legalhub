@@ -9,7 +9,7 @@
 const ABRE = '\u27E6';
 const CIERRA = '\u27E7';
 
-const PREFIJOS = '(?:\\[(?:c|d|i|j)\\]\\s?|\\[int=\\d+(?:\\.\\d+)?\\]\\s?|\\[col=\\d\\]\\s?|\\[nc\\]\\s?|#{1,2}\\s+){0,6}';
+const PREFIJOS = '(?:\\[(?:c|d|i|j|ul|ol|th|tr)\\]\\s?|\\[int=\\d+(?:\\.\\d+)?\\]\\s?|\\[col=\\d\\]\\s?|\\[nc\\]\\s?|#{1,2}\\s+){0,8}';
 const RE_PREFIJO = new RegExp(`^(${PREFIJOS})`, 'i');
 const RE_ORIGEN = new RegExp(`^${PREFIJOS}(?:\\*{1,3}|\\+\\+)*${ABRE}(\\d+)${CIERRA}`, 'i');
 const RE_MARCA = new RegExp(`${ABRE}(\\d+|<|>)${CIERRA}`, 'g');

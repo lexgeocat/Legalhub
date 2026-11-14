@@ -1,7 +1,8 @@
-﻿import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
     CONFIG_POR_DEFECTO, ESPACIO_SUBTITULO_PT, ESPACIO_TITULO_PT, PAGINA_CM,
-    type Bloque, type BloqueParrafo, type ConfigPagina, type Tramo,
+    esListaOrdenada, formatearMarcadorLista,
+    type Bloque, type BloqueParrafo, type BloqueTabla, type ConfigPagina, type Tramo,
 } from '../../domain/modelos/fuenteModelo';
 import { usePaginacion } from '../compartidos/Paginacion';
 import { pilaCss } from '../../domain/fuentes/fuentes';
@@ -33,7 +34,7 @@ function Tramos({ tramos, estilo, resaltar, escala, contexto }: {
                         </span>
                     );
                 }
-                return (
+                const nodo = (
                     <span
                         key={i}
                         style={{
@@ -47,12 +48,19 @@ function Tramos({ tramos, estilo, resaltar, escala, contexto }: {
                         {t.texto}
                     </span>
                 );
+                return t.resaltado ? (
+                    <mark key={i} className="ed-hl" data-hl={t.resaltado}>
+                        {nodo}
+                    </mark>
+                ) : nodo;
             })}
         </>
     );
 }
 
-function ParrafoHoja({ b, cfg, escala, resaltar, contexto }: { b: BloqueParrafo; cfg: ConfigPagina; escala: number; resaltar: boolean; contexto?: ContextoMarcadores }) {
+function ParrafoHoja({ b, cfg, escala, resaltar, contexto, numLista, numPadre }: {
+    b: BloqueParrafo; cfg: ConfigPagina; escala: number; resaltar: boolean; contexto?: ContextoMarcadores; numLista?: number; numPadre?: number;
+}) {
     const titulo = b.estilo === 'titulo';
     const sub = b.estilo === 'subtitulo';
     const esBloque = resaltar && b.tramos.length === 1 && b.tramos[0].marcador && /^\{\{\s*[#/]/.test(b.tramos[0].texto);
@@ -67,14 +75,61 @@ function ParrafoHoja({ b, cfg, escala, resaltar, contexto }: { b: BloqueParrafo;
         lineHeight: b.interlineado ? lineaCss(b.interlineado) : undefined,
         breakBefore: b.nuevaColumna && (b.columnas ?? 1) > 1 ? 'column' : undefined,
         textIndent:
-            cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')
+            !b.lista && cfg.sangria && b.estilo === 'normal' && (b.alineacion === 'both' || b.alineacion === 'left')
                 ? `${1.25 * escala}cm`
                 : undefined,
     };
     return (
-        <p className={esBloque ? 'mk-bloque' : undefined} style={estilo}>
+        <p
+            className={esBloque ? 'mk-bloque' : undefined}
+            style={estilo}
+            data-lista={b.lista}
+            data-num={esListaOrdenada(b.lista) ? formatearMarcadorLista(b.lista, numLista ?? 1, numPadre ?? 1) : undefined}
+        >
             <Tramos tramos={b.tramos} estilo={b.estilo} resaltar={resaltar} escala={escala} contexto={contexto} />
         </p>
+    );
+}
+
+function TablaHoja({ b, cfg, escala, resaltar, contexto }: {
+    b: BloqueTabla; cfg: ConfigPagina; escala: number; resaltar: boolean; contexto?: ContextoMarcadores;
+}) {
+    const despues = cfg.espacioDespues;
+    return (
+        <table
+            className="ed-tabla"
+            data-tabla="1"
+            data-encabezado={b.encabezado ? '1' : undefined}
+            style={{ margin: `0 0 ${(despues * escala).toFixed(2)}pt` }}
+        >
+            <tbody>
+                {b.filas.map((fila, rIdx) => {
+                    const esTh = rIdx === 0 && !!b.encabezado;
+                    return (
+                        <tr key={rIdx}>
+                            {fila.map((celda, cIdx) => {
+                                const Tag = esTh ? 'th' : 'td';
+                                const al = celda.alineacion ?? (esTh ? 'center' : 'left');
+                                return (
+                                    <Tag
+                                        key={cIdx}
+                                        style={{ textAlign: al === 'both' ? 'justify' : al }}
+                                    >
+                                        <Tramos
+                                            tramos={celda.tramos}
+                                            estilo="normal"
+                                            resaltar={resaltar}
+                                            escala={escala}
+                                            contexto={contexto}
+                                        />
+                                    </Tag>
+                                );
+                            })}
+                        </tr>
+                    );
+                })}
+            </tbody>
+        </table>
     );
 }
 
@@ -112,15 +167,51 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true, co
 
     // Los párrafos consecutivos en columnas van dentro de una región de 2 columnas.
     const piezas: ReactNode[] = [];
+    let numOl = 0;
+    let numPadre = 0;
+    let numSub = 0;
+    let tipoOlActual = '';
+    const avanzarLista = (lista: BloqueParrafo['lista']) => {
+        if (lista === 'ol') {
+            numPadre = tipoOlActual === 'ol' || tipoOlActual === 'ol-sub' ? numPadre + 1 : 1;
+            numSub = 0;
+            numOl = numPadre;
+            tipoOlActual = 'ol';
+        } else if (lista === 'ol-sub') {
+            if (tipoOlActual !== 'ol' && tipoOlActual !== 'ol-sub') numPadre = 1;
+            else if (numPadre === 0) numPadre = 1;
+            numSub += 1;
+            numOl = numSub;
+            tipoOlActual = 'ol-sub';
+        } else if (esListaOrdenada(lista)) {
+            numOl = tipoOlActual === lista ? numOl + 1 : 1;
+            numPadre = 0;
+            numSub = 0;
+            tipoOlActual = lista;
+        } else {
+            numOl = 0;
+            numPadre = 0;
+            numSub = 0;
+            tipoOlActual = '';
+        }
+    };
     for (let i = 0; i < bloques.length;) {
         const b = bloques[i];
         if (b.tipo === 'salto') {
+            avanzarLista(undefined);
             piezas.push(<div key={i} className="pg-salto" data-salto="1"><span>Salto de página</span></div>);
             i += 1;
             continue;
         }
+        if (b.tipo === 'tabla') {
+            avanzarLista(undefined);
+            piezas.push(<TablaHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} />);
+            i += 1;
+            continue;
+        }
         if ((b.columnas ?? 1) < 2) {
-            piezas.push(<ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} />);
+            avanzarLista(b.lista);
+            piezas.push(<ParrafoHoja key={i} b={b} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} numLista={numOl} numPadre={numPadre} />);
             i += 1;
             continue;
         }
@@ -129,7 +220,8 @@ export function Hoja({ bloques, config = CONFIG_POR_DEFECTO, resaltar = true, co
         while (j < bloques.length) {
             const x = bloques[j];
             if (x.tipo !== 'parrafo' || (x.columnas ?? 1) < 2) break;
-            grupo.push(<ParrafoHoja key={j} b={x} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} />);
+            avanzarLista(x.lista);
+            grupo.push(<ParrafoHoja key={j} b={x} cfg={config} escala={escala} resaltar={resaltar} contexto={contexto} numLista={numOl} numPadre={numPadre} />);
             j += 1;
         }
         piezas.push(<div key={`c${i}`} className="sec-cols">{grupo}</div>);

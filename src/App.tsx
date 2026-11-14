@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { VERSION_APP } from './domain/comun/version';
 import { Buscador } from './ui/compartidos/Buscador';
 import { Icono, Notificaciones, avisar, permitirSalir, type NombreIcono } from './ui/_core/comunes';
@@ -16,7 +16,9 @@ import { Jurisprudencia } from './ui/paginas/Jurisprudencia';
 import { DiccionarioJuridico } from './ui/paginas/DiccionarioJuridico';
 import { ControlesVentana } from './ui/_core/ControlesVentana';
 
-import { useTema } from './ui/_core/tema';
+import { PRIMARIOS, useConfigTema } from './ui/_core/tema';
+import { ConfiguradorTema } from './ui/_core/ConfiguradorTema';
+import { IconoPaleta, IconoTema } from './ui/_core/IconoTema';
 
 type Item = 'expedientes' | 'personas' | 'modelos' | 'procedimientos' | 'leyes' | 'jurisprudencia' | 'diccionarios' | 'config';
 type Vista = { n: Item } | { n: 'expediente'; id: string };
@@ -47,7 +49,10 @@ function FichaPersona({ id, cerrar }: { id: string; cerrar: () => void }) {
 }
 
 export default function App() {
-  const [tema, , alternarTema] = useTema();
+  const { config: cfgTema, esOscuro, alternarEsquema } = useConfigTema();
+  const [menuTema, setMenuTema] = useState(false);
+  const refMenuTema = useRef<HTMLDivElement>(null);
+  const swatchPrimario = PRIMARIOS.find((p) => p.id === cfgTema.primary)?.swatch;
   const [vista, setVista] = useState<Vista>({ n: 'expedientes' });
   const [buscando, setBuscando] = useState(false);
   const [persona, setPersona] = useState<string | null>(null);
@@ -59,6 +64,24 @@ export default function App() {
     }
   });
   const [tooltip, setTooltip] = useState<{ texto: string; top: number } | null>(null);
+
+  useEffect(() => {
+    if (!menuTema) return;
+    const alClic = (e: MouseEvent) => {
+      if (refMenuTema.current && e.target instanceof Node && !refMenuTema.current.contains(e.target)) {
+        setMenuTema(false);
+      }
+    };
+    const alTecla = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuTema(false);
+    };
+    window.addEventListener('mousedown', alClic);
+    window.addEventListener('keydown', alTecla);
+    return () => {
+      window.removeEventListener('mousedown', alClic);
+      window.removeEventListener('keydown', alTecla);
+    };
+  }, [menuTema]);
 
   const alternarColapso = () => {
     setColapsado((prev) => {
@@ -95,12 +118,12 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
-        alternarTema();
+        alternarEsquema();
       }
     };
     window.addEventListener('keydown', f);
     return () => window.removeEventListener('keydown', f);
-  }, [alternarTema]);
+  }, [alternarEsquema]);
 
   /** Toda navegación pasa por aquí: si hay datos sin guardar en un expediente, pregunta antes de salir. */
   async function navegar(destino: Vista) {
@@ -197,7 +220,7 @@ export default function App() {
           );
         })}
 
-        <div className={`nav-pie${colapsado ? ' colapsado' : ''}`}>
+        <div className={`nav-pie${colapsado ? ' colapsado' : ''}`} ref={refMenuTema}>
           {colapsado ? (
             <div className="nav-pie-colapsado-grupo">
               <button
@@ -212,30 +235,18 @@ export default function App() {
               </button>
               <button
                 type="button"
-                className="nav-btn-tema colapsado"
-                onClick={alternarTema}
+                className={`nav-btn-tema colapsado${menuTema ? ' activo' : ''}`}
+                onClick={() => setMenuTema((v) => !v)}
                 onMouseEnter={(e) =>
                   mostrarTooltip(
                     e,
-                    `Tema activo: ${
-                      tema === 'rose' ? 'Rose Quartz' : tema === 'slate' ? 'Slate Dusk' : 'Oxford Light'
-                    } · Clic para alternar (Ctrl+Shift+T)`,
+                    `Tema: ${esOscuro ? 'Oscuro' : 'Claro'} · Clic para personalizar (Ctrl+Shift+T alterna)`,
                   )
                 }
                 onMouseLeave={ocultarTooltip}
-                aria-label="Alternar tema visual"
+                aria-label="Personalizar tema"
               >
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor:
-                      tema === 'rose' ? '#9D4466' : tema === 'slate' ? '#60A5FA' : '#1D4ED8',
-                    boxShadow: '0 0 6px rgba(0,0,0,0.3)'
-                  }}
-                />
+                <IconoPaleta color={swatchPrimario} tam={16} />
               </button>
             </div>
           ) : (
@@ -250,33 +261,38 @@ export default function App() {
                 <span className="nav-item-texto">Configuración</span>
               </button>
               <div className="nav-pie-fila">
-                <button
-                  type="button"
-                  className="nav-btn-tema"
-                  onClick={alternarTema}
-                  title="Cambiar tema (Oxford Editorial → Slate Dusk → Rose Quartz Boutique) (Ctrl+Shift+T)"
-                  aria-label="Alternar tema"
-                >
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor:
-                        tema === 'rose' ? '#9D4466' : tema === 'slate' ? '#60A5FA' : '#1D4ED8',
-                      boxShadow: '0 0 4px currentColor'
-                    }}
-                  />
-                  <span>
-                    {tema === 'rose' ? 'Rose Boutique' : tema === 'slate' ? 'Slate Dusk' : 'Oxford Light'}
-                  </span>
-                </button>
+                <div className="nav-tema-grupo">
+                  <button
+                    type="button"
+                    className="nav-btn-tema"
+                    onClick={alternarEsquema}
+                    title="Alternar entre Claro y Oscuro (Ctrl+Shift+T)"
+                    aria-label="Alternar claro y oscuro"
+                  >
+                    <IconoTema oscuro={esOscuro} tam={14} />
+                    <span>{esOscuro ? 'Oscuro' : 'Claro'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`nav-btn-paleta${menuTema ? ' activo' : ''}`}
+                    onClick={() => setMenuTema((v) => !v)}
+                    title="Personalizar Primary, Surface, Presets y Layout Theme"
+                    aria-label="Personalizar tema"
+                    aria-expanded={menuTema}
+                  >
+                    <IconoPaleta color={swatchPrimario} tam={15} />
+                  </button>
+                </div>
                 <span className="nav-pie-version" title={`Legal-Hub versión ${VERSION_APP}`}>
                   v{VERSION_APP}
                 </span>
               </div>
             </>
+          )}
+          {menuTema && (
+            <div className={`nav-tema-popover${colapsado ? ' colapsado' : ''}`}>
+              <ConfiguradorTema variante="popover" cerrar={() => setMenuTema(false)} />
+            </div>
           )}
         </div>
       </nav>

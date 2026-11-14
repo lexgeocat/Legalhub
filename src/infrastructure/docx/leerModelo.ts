@@ -1,15 +1,36 @@
 import { strFromU8, unzipSync } from 'fflate';
 import type { LectorDocx } from '../../application/puertos/modelos';
 import { ErrorDeDatos } from '../../domain/comun/errores';
-import type { Alineacion, Bloque, BloqueParrafo, EstiloParrafo, Tramo } from '../../domain/modelos/fuenteModelo';
+import type {
+    Alineacion, Bloque, BloqueParrafo, BloqueTabla, CeldaTabla, ColorResaltado, EstiloParrafo, TipoLista, Tramo,
+} from '../../domain/modelos/fuenteModelo';
 import { normalizarCaracteres } from './gramatica';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
-interface Formato { negrita: boolean; cursiva: boolean; subrayado: boolean; fuente?: string; tamanoPt?: number }
+interface Formato {
+    negrita: boolean;
+    cursiva: boolean;
+    subrayado: boolean;
+    fuente?: string;
+    tamanoPt?: number;
+    resaltado?: ColorResaltado;
+}
 interface Letra { fuente?: string; tamanoPt?: number }
 type Pieza = { tipo: 'texto'; texto: string; formato: Formato } | { tipo: 'salto' } | { tipo: 'columna' };
+
+const HIGHLIGHT_MAP: Record<string, ColorResaltado> = {
+    yellow: 'yellow',
+    green: 'green',
+    cyan: 'cyan',
+    magenta: 'magenta',
+    darkyellow: 'orange',
+    red: 'magenta',
+    blue: 'cyan',
+    lightgray: 'gray',
+    darkgray: 'gray',
+};
 
 const ESTILO_TITULO = /^(title|heading1|titulo1?|ttulo1?)$/i;
 const ESTILO_SUBTITULO = /^(subtitle|heading2|subtitulo|subttulo|titulo2|ttulo2)$/i;
@@ -76,6 +97,8 @@ function formatoDe(r: Element, base: Letra, estilo: EstiloParrafo): Formato {
         return !!el && !apagado(valorW(el));
     };
     const u = hijoW(rPr, 'u');
+    const hl = valorW(hijoW(rPr, 'highlight'))?.toLowerCase() ?? '';
+    const resaltado = HIGHLIGHT_MAP[hl];
     const l = letraDe(rPr);
     const propiaFuente = !!l.fuente && l.fuente.toLowerCase() !== (base.fuente ?? '').toLowerCase();
     // Los títulos generados llevan base + 2 pt: no es un tamaño propio.
@@ -87,6 +110,7 @@ function formatoDe(r: Element, base: Letra, estilo: EstiloParrafo): Formato {
         subrayado: !!u && (valorW(u) ?? 'single').toLowerCase() !== 'none',
         ...(propiaFuente ? { fuente: l.fuente } : {}),
         ...(propioTam ? { tamanoPt: l.tamanoPt } : {}),
+        ...(resaltado ? { resaltado } : {}),
     };
 }
 
@@ -123,7 +147,7 @@ function piezasDe(p: Element, base: Letra, estilo: EstiloParrafo): Pieza[] {
 
 const mismoFormato = (a: Formato, b: Formato) =>
     a.negrita === b.negrita && a.cursiva === b.cursiva && a.subrayado === b.subrayado
-    && a.fuente === b.fuente && a.tamanoPt === b.tamanoPt;
+    && a.fuente === b.fuente && a.tamanoPt === b.tamanoPt && a.resaltado === b.resaltado;
 
 /** Une las corridas y reconstruye los marcadores {{…}} aunque Word los haya partido en varias. */
 function aTramos(piezas: Pieza[]): Tramo[] {
@@ -166,12 +190,34 @@ function aTramos(piezas: Pieza[]): Tramo[] {
 
 interface Segmento { piezas: Pieza[]; antes: 'salto' | 'columna' | null }
 
+function limpiarPrefijoLista(tramos: Tramo[]): { tramos: Tramo[]; lista?: TipoLista } {
+    if (tramos.length === 0) return { tramos };
+    const primero = tramos[0];
+    if (primero.marcador) return { tramos };
+    const mUl = /^(?:[•·▪◦]\s+|\uF0B7\s+)/.exec(primero.texto);
+    if (mUl) {
+        const resto = primero.texto.slice(mUl[0].length);
+        const nuevos = resto ? [{ ...primero, texto: resto }, ...tramos.slice(1)] : tramos.slice(1);
+        return { tramos: nuevos, lista: 'ul' };
+    }
+    const mOl = /^\d{1,3}\.\s+/.exec(primero.texto);
+    if (mOl) {
+        const resto = primero.texto.slice(mOl[0].length);
+        const nuevos = resto ? [{ ...primero, texto: resto }, ...tramos.slice(1)] : tramos.slice(1);
+        return { tramos: nuevos, lista: 'ol' };
+    }
+    return { tramos };
+}
+
 function bloquesDe(p: Element, base: Letra): Bloque[] {
     const pPr = hijoW(p, 'pPr');
     const idEstilo = (valorW(pPr ? hijoW(pPr, 'pStyle') : null) ?? '').replace(/[\s_-]/g, '');
     const estilo: EstiloParrafo = ESTILO_SUBTITULO.test(idEstilo) ? 'subtitulo' : ESTILO_TITULO.test(idEstilo) ? 'titulo' : 'normal';
     const jc = (valorW(pPr ? hijoW(pPr, 'jc') : null) ?? '').toLowerCase();
     const alineacion: Alineacion = ALINEACION[jc] ?? BASE[estilo];
+    const tieneNumPr = Boolean(pPr && hijoW(pPr, 'numPr'));
+    const ind = pPr ? hijoW(pPr, 'ind') : null;
+    const tieneHanging = Boolean(ind && ind.getAttributeNS(W, 'hanging'));
 
     // Interlineado propio del párrafo (solo el proporcional: «automático»)
     const sp = pPr ? hijoW(pPr, 'spacing') : null;
@@ -200,14 +246,53 @@ function bloquesDe(p: Element, base: Letra): Bloque[] {
     segmentos.forEach((seg) => {
         if (seg.antes === 'salto') salida.push({ tipo: 'salto' });
         if (seg.piezas.length === 0 && segmentos.length > 1 && seg.antes !== 'columna') return;
+        const tramosBase = aTramos(seg.piezas);
+        const det = (tieneHanging || tieneNumPr) ? limpiarPrefijoLista(tramosBase) : { tramos: tramosBase };
+        const lista = det.lista ?? (tieneNumPr ? 'ul' : undefined);
         const parrafo: BloqueParrafo = {
-            tipo: 'parrafo', alineacion, estilo, tramos: aTramos(seg.piezas),
+            tipo: 'parrafo', alineacion, estilo, tramos: det.tramos,
             ...(interlineado ? { interlineado } : {}),
             ...(seg.antes === 'columna' ? { nuevaColumna: true } : {}),
+            ...(lista ? { lista } : {}),
         };
         salida.push(parrafo);
     });
     return salida;
+}
+
+function tablaDe(tbl: Element, base: Letra): BloqueTabla | null {
+    const filas: CeldaTabla[][] = [];
+    let encabezado = false;
+    const trNodes = Array.from(tbl.childNodes).filter((n): n is Element => esW(n, 'tr'));
+    trNodes.forEach((tr, rIdx) => {
+        const trPr = hijoW(tr, 'trPr');
+        if (rIdx === 0 && trPr && hijoW(trPr, 'tblHeader')) encabezado = true;
+        const celdas: CeldaTabla[] = [];
+        for (const tc of Array.from(tr.childNodes)) {
+            if (!esW(tc, 'tc')) continue;
+            const parrafos = Array.from(tc.getElementsByTagNameNS(W, 'p')).filter(
+                (p) => ancestroW(p.parentNode, 'tc') === tc && !dentroDeFallback(p),
+            );
+            const piezas: Pieza[] = [];
+            let alinCelda: Alineacion | undefined;
+            parrafos.forEach((p, pIdx) => {
+                if (pIdx > 0) piezas.push({ tipo: 'texto', texto: ' ', formato: { negrita: false, cursiva: false, subrayado: false } });
+                const pPr = hijoW(p, 'pPr');
+                const jc = (valorW(pPr ? hijoW(pPr, 'jc') : null) ?? '').toLowerCase();
+                if (!alinCelda && ALINEACION[jc]) alinCelda = ALINEACION[jc];
+                for (const pz of piezasDe(p, base, 'normal')) {
+                    if (pz.tipo === 'texto') piezas.push(pz);
+                }
+            });
+            celdas.push({
+                tramos: aTramos(piezas),
+                ...(alinCelda && alinCelda !== 'left' ? { alineacion: alinCelda } : {}),
+            });
+        }
+        if (celdas.length > 0) filas.push(celdas);
+    });
+    if (filas.length === 0) return null;
+    return { tipo: 'tabla', filas, ...(encabezado ? { encabezado: true } : {}) };
 }
 
 function columnasDe(sect: Element | null): number {
@@ -224,7 +309,6 @@ function asignarColumnas(bloques: Bloque[], desde: number, n: number): void {
     }
 }
 
-/** Lectura simplificada: solo el cuerpo del documento. Se pierden encabezados, pies, tablas (cada celda queda como línea) e imágenes. */
 export class LectorDocxFflate implements LectorDocx {
     aBloques(docx: Uint8Array): Bloque[] {
         let partes: Record<string, Uint8Array>;
@@ -245,22 +329,34 @@ export class LectorDocxFflate implements LectorDocx {
 
         const bloques: Bloque[] = [];
         let desde = 0; // primer bloque de la sección en curso
-        for (const p of Array.from(xml.getElementsByTagNameNS(W, 'p'))) {
-            if (dentroDeFallback(p)) continue;
-            const nuevos = bloquesDe(p, base);
-            const pPr = hijoW(p, 'pPr');
-            const sect = pPr ? hijoW(pPr, 'sectPr') : null;
-            if (!sect) {
-                bloques.push(...nuevos);
-                continue;
-            }
-            // Este párrafo cierra una sección. Si está vacío solo era el portador del salto de sección.
-            const vacio = nuevos.every((b) => b.tipo === 'parrafo' && b.tramos.length === 0);
-            if (!vacio) bloques.push(...nuevos);
-            asignarColumnas(bloques, desde, columnasDe(sect));
-            desde = bloques.length;
-        }
         const cuerpo = xml.getElementsByTagNameNS(W, 'body')[0];
+        const recorrerNodos = (contenedor: Element) => {
+            for (const n of Array.from(contenedor.childNodes)) {
+                if (dentroDeFallback(n)) continue;
+                if (esW(n, 'tbl')) {
+                    const t = tablaDe(n, base);
+                    if (t) bloques.push(t);
+                    continue;
+                }
+                if (esW(n, 'p')) {
+                    const nuevos = bloquesDe(n, base);
+                    const pPr = hijoW(n, 'pPr');
+                    const sect = pPr ? hijoW(pPr, 'sectPr') : null;
+                    if (!sect) {
+                        bloques.push(...nuevos);
+                        continue;
+                    }
+                    // Este párrafo cierra una sección. Si está vacío solo era el portador del salto de sección.
+                    const vacio = nuevos.every((b) => b.tipo === 'parrafo' && b.tramos.length === 0);
+                    if (!vacio) bloques.push(...nuevos);
+                    asignarColumnas(bloques, desde, columnasDe(sect));
+                    desde = bloques.length;
+                    continue;
+                }
+                if (n.nodeType === 1) recorrerNodos(n as Element);
+            }
+        };
+        if (cuerpo) recorrerNodos(cuerpo);
         asignarColumnas(bloques, desde, columnasDe(cuerpo ? hijoW(cuerpo, 'sectPr') : null));
 
         while (bloques.length > 0) {

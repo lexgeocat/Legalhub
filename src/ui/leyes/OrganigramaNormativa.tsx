@@ -5,7 +5,7 @@ import {
     type ModoCita, type NivelLey, type NodoArbol, type NodoLey, type NodoOrg,
 } from '../../domain/leyes/leyes';
 import { Icono, Insignia, avisar } from '../_core/comunes';
-import { useTema } from '../_core/tema';
+import { useConfigTema } from '../_core/tema';
 import './leyes.css';
 
 /* ================= Paleta y estilos por nivel ================= */
@@ -556,8 +556,7 @@ export function OrganigramaNormativa({
     onVerLector,
 }: Props) {
     const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
-    const [tema] = useTema();
-    const esOscuro = tema === 'slate';
+    const { esOscuro } = useConfigTema();
     const svgRef = useRef<SVGSVGElement>(null);
     const lienzoRef = useRef<HTMLDivElement>(null);
 

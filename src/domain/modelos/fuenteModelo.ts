@@ -284,12 +284,112 @@ export function marcadorDeCampo(c: CampoPropio): string {
 
 export type Alineacion = 'left' | 'center' | 'right' | 'both';
 export type EstiloParrafo = 'normal' | 'titulo' | 'subtitulo';
+export type TipoVineta = 'ul' | 'ul-circulo' | 'ul-cuadro' | 'ul-flecha' | 'ul-check' | 'ul-guion';
+export type TipoNumeracion = 'ol' | 'ol-paren' | 'ol-sub' | 'ol-romano' | 'ol-romano-min' | 'ol-letra' | 'ol-letra-min';
+export type TipoLista = TipoVineta | TipoNumeracion;
+
+export const ESTILOS_VINETA: readonly { valor: TipoVineta; etiqueta: string; simbolo: string }[] = [
+    { valor: 'ul', etiqueta: 'Disco sólido', simbolo: '•' },
+    { valor: 'ul-circulo', etiqueta: 'Círculo', simbolo: '◦' },
+    { valor: 'ul-cuadro', etiqueta: 'Cuadrado', simbolo: '▪' },
+    { valor: 'ul-flecha', etiqueta: 'Flecha', simbolo: '➢' },
+    { valor: 'ul-check', etiqueta: 'Verificación', simbolo: '✓' },
+    { valor: 'ul-guion', etiqueta: 'Guion', simbolo: '—' },
+];
+
+export const ESTILOS_NUMERACION: readonly { valor: TipoNumeracion; etiqueta: string; muestra: readonly string[] }[] = [
+    { valor: 'ol', etiqueta: 'Números (1. 2. 3.)', muestra: ['1.', '2.', '3.'] },
+    { valor: 'ol-paren', etiqueta: 'Paréntesis (1) 2) 3))', muestra: ['1)', '2)', '3)'] },
+    { valor: 'ol-sub', etiqueta: 'Subniveles (1.1 1.2)', muestra: ['1.1', '1.2', '2.1'] },
+    { valor: 'ol-romano', etiqueta: 'Romanos (I. II. III.)', muestra: ['I.', 'II.', 'III.'] },
+    { valor: 'ol-romano-min', etiqueta: 'Romanos min. (i. ii. iii.)', muestra: ['i.', 'ii.', 'iii.'] },
+    { valor: 'ol-letra', etiqueta: 'Letras (A. B. C.)', muestra: ['A.', 'B.', 'C.'] },
+    { valor: 'ol-letra-min', etiqueta: 'Letras min. (a. b. c.)', muestra: ['a.', 'b.', 'c.'] },
+];
+
+const LISTAS_VALIDAS = new Set<string>([
+    ...ESTILOS_VINETA.map((v) => v.valor),
+    ...ESTILOS_NUMERACION.map((n) => n.valor),
+]);
+
+export const esTipoLista = (v: string | undefined | null): v is TipoLista =>
+    Boolean(v && LISTAS_VALIDAS.has(v));
+
+export const esListaOrdenada = (v: TipoLista | string | undefined | null): v is TipoNumeracion =>
+    Boolean(v && v.startsWith('ol'));
+
+function aRomano(n: number): string {
+    const num = Math.max(1, Math.min(3999, Math.floor(n)));
+    const tabla: readonly [number, string][] = [
+        [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+        [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+        [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+    ];
+    let rest = num;
+    let res = '';
+    for (const [val, sim] of tabla) {
+        while (rest >= val) {
+            res += sim;
+            rest -= val;
+        }
+    }
+    return res;
+}
+
+function aLetra(n: number): string {
+    let num = Math.max(1, Math.floor(n));
+    let res = '';
+    while (num > 0) {
+        num -= 1;
+        res = String.fromCharCode(65 + (num % 26)) + res;
+        num = Math.floor(num / 26);
+    }
+    return res;
+}
+
+/** Devuelve el prefijo visual/textual exacto de un elemento de lista (p. ej. "•", "1.", "1.1", "II.", "a."). */
+export function formatearMarcadorLista(tipo: TipoLista, num = 1, padre = 1): string {
+    const vineta = ESTILOS_VINETA.find((v) => v.valor === tipo);
+    if (vineta) return vineta.simbolo;
+    switch (tipo) {
+        case 'ol-paren': return `${num})`;
+        case 'ol-sub': return `${Math.max(1, padre)}.${num}`;
+        case 'ol-romano': return `${aRomano(num)}.`;
+        case 'ol-romano-min': return `${aRomano(num).toLowerCase()}.`;
+        case 'ol-letra': return `${aLetra(num)}.`;
+        case 'ol-letra-min': return `${aLetra(num).toLowerCase()}.`;
+        case 'ol':
+        default:
+            return `${num}.`;
+    }
+}
+export type ColorResaltado = 'yellow' | 'green' | 'cyan' | 'magenta' | 'orange' | 'gray';
+
+export const COLORES_RESALTADO: readonly { valor: ColorResaltado; etiqueta: string; hex: string }[] = [
+    { valor: 'yellow', etiqueta: 'Amarillo', hex: '#fef08a' },
+    { valor: 'green', etiqueta: 'Verde', hex: '#bbf7d0' },
+    { valor: 'cyan', etiqueta: 'Celeste', hex: '#bae6fd' },
+    { valor: 'magenta', etiqueta: 'Rosa', hex: '#fbcfe8' },
+    { valor: 'orange', etiqueta: 'Ámbar', hex: '#fed7aa' },
+    { valor: 'gray', etiqueta: 'Gris', hex: '#e2e8f0' },
+];
+
+const COLORES_SET = new Set<string>(COLORES_RESALTADO.map((c) => c.valor));
+export const esColorResaltado = (v: string | undefined | null): v is ColorResaltado =>
+    Boolean(v && COLORES_SET.has(v));
 
 export interface Tramo {
     texto: string; negrita: boolean; cursiva: boolean; subrayado: boolean; marcador: boolean;
     /** Fuente y tamaño propios de este fragmento (sin valor = los base del documento). */
     fuente?: string;
     tamanoPt?: number;
+    /** Color de resaltado (sin valor = sin resaltado). */
+    resaltado?: ColorResaltado;
+}
+
+export interface CeldaTabla {
+    tramos: Tramo[];
+    alineacion?: Alineacion;
 }
 
 export type Bloque =
@@ -302,12 +402,22 @@ export type Bloque =
         columnas?: number;
         /** Solo en columnas: el párrafo empieza en la columna siguiente (salto de columna). */
         nuevaColumna?: boolean;
+        /** Lista con viñetas ('ul') o numerada ('ol'). */
+        lista?: TipoLista;
+    }
+    | {
+        tipo: 'tabla';
+        filas: CeldaTabla[][];
+        encabezado?: boolean;
     };
 export type BloqueParrafo = Extract<Bloque, { tipo: 'parrafo' }>;
+export type BloqueTabla = Extract<Bloque, { tipo: 'tabla' }>;
 
-/** Marcas de fuente/tamaño dentro de una línea del texto fuente: ⟪Arial|14⟫texto⟪/⟫ */
+/** Marcas de fuente/tamaño/resaltado dentro de una línea del texto fuente: ⟪Arial|14|yellow⟫texto⟪/⟫ */
 export const ABRE_LETRA = '\u27EA';
 export const CIERRA_LETRA = '\u27EB';
+/** Separador de celdas en filas de tabla: [tr] celda 1 │ celda 2 */
+export const SEP_CELDA = '\u2502';
 
 const POR_LETRA: Record<string, Alineacion> = { c: 'center', d: 'right', i: 'left', j: 'both' };
 const LETRA: Record<Alineacion, string> = { center: 'c', right: 'd', left: 'i', both: 'j' };
@@ -318,7 +428,12 @@ export function tramosDe(linea: string): Tramo[] {
     let negrita = false, cursiva = false, subrayado = false, buf = '';
     let fuente: string | undefined;
     let tam: number | undefined;
-    const letra = () => ({ ...(fuente ? { fuente } : {}), ...(tam ? { tamanoPt: tam } : {}) });
+    let resaltado: ColorResaltado | undefined;
+    const letra = () => ({
+        ...(fuente ? { fuente } : {}),
+        ...(tam ? { tamanoPt: tam } : {}),
+        ...(resaltado ? { resaltado } : {}),
+    });
     const vaciar = () => {
         if (buf) tramos.push({ texto: buf, negrita, cursiva, subrayado, marcador: false, ...letra() });
         buf = '';
@@ -343,11 +458,14 @@ export function tramosDe(linea: string): Tramo[] {
                 if (cuerpo === '/') {
                     fuente = undefined;
                     tam = undefined;
+                    resaltado = undefined;
                 } else {
-                    const [f = '', t = ''] = cuerpo.split('|');
+                    const [f = '', t = '', r = ''] = cuerpo.split('|');
                     fuente = f.trim() || undefined;
                     const n = Number(t.replace(',', '.'));
                     tam = Number.isFinite(n) && n > 0 ? n : undefined;
+                    const rc = r.trim().toLowerCase();
+                    resaltado = esColorResaltado(rc) ? rc : undefined;
                 }
                 i = fin + 1;
                 continue;
@@ -363,18 +481,68 @@ export function tramosDe(linea: string): Tramo[] {
     return tramos;
 }
 
+function dividirCeldas(cuerpo: string): CeldaTabla[] {
+    const partes: string[] = [];
+    let actual = '';
+    for (let i = 0; i < cuerpo.length; i++) {
+        if (cuerpo[i] === '\\' && i + 1 < cuerpo.length) {
+            actual += cuerpo[i] + cuerpo[i + 1];
+            i++;
+            continue;
+        }
+        if (cuerpo[i] === SEP_CELDA) {
+            partes.push(actual.trim());
+            actual = '';
+            continue;
+        }
+        actual += cuerpo[i];
+    }
+    partes.push(actual.trim());
+    return partes.map((celdaTxt): CeldaTabla => {
+        const a = /^\[(c|d|i|j)\]\s?/i.exec(celdaTxt);
+        const alineacion = a ? POR_LETRA[a[1].toLowerCase()] : undefined;
+        const limpio = a ? celdaTxt.slice(a[0].length) : celdaTxt;
+        return {
+            tramos: tramosDe(limpio),
+            ...(alineacion && alineacion !== 'left' ? { alineacion } : {}),
+        };
+    });
+}
+
 export function parsearTexto(texto: string): Bloque[] {
     const lineas = texto.split(/\r?\n/);
     while (lineas.length > 0 && lineas[lineas.length - 1].trim() === '') lineas.pop();
-    return lineas.map((linea): Bloque => {
-        if (linea.trim() === '===') return { tipo: 'salto' };
+    const bloques: Bloque[] = [];
+    for (let idx = 0; idx < lineas.length; idx++) {
+        const linea = lineas[idx];
+        if (linea.trim() === '===') {
+            bloques.push({ tipo: 'salto' });
+            continue;
+        }
+        const mTabla = /^\[(th|tr)\]\s?(.*)$/i.exec(linea);
+        if (mTabla) {
+            const esEncabezado = mTabla[1].toLowerCase() === 'th';
+            const fila = dividirCeldas(mTabla[2]);
+            const ultimo = bloques[bloques.length - 1];
+            if (ultimo && ultimo.tipo === 'tabla' && !esEncabezado) {
+                ultimo.filas.push(fila);
+            } else {
+                bloques.push({
+                    tipo: 'tabla',
+                    filas: [fila],
+                    ...(esEncabezado ? { encabezado: true } : {}),
+                });
+            }
+            continue;
+        }
         let resto = linea;
         let alineacion: Alineacion | null = null;
         let estilo: EstiloParrafo = 'normal';
         let interlineado: number | undefined;
         let columnas = false;
         let nuevaColumna = false;
-        for (let n = 0; n < 8; n++) {
+        let lista: TipoLista | undefined;
+        for (let n = 0; n < 10; n++) {
             const a = /^\[(c|d|i|j)\]\s?/i.exec(resto);
             if (a) { alineacion = POR_LETRA[a[1].toLowerCase()]; resto = resto.slice(a[0].length); continue; }
             const l = /^\[int=(\d+(?:[.,]\d+)?)\]\s?/i.exec(resto);
@@ -384,34 +552,44 @@ export function parsearTexto(texto: string): Bloque[] {
             if (c) { columnas = true; resto = resto.slice(c[0].length); continue; }
             const k = /^\[nc\]\s?/i.exec(resto);
             if (k) { nuevaColumna = true; resto = resto.slice(k[0].length); continue; }
+            const li = /^\[(ul(?:-[a-z-]+)?|ol(?:-[a-z-]+)?)\]\s?/i.exec(resto);
+            if (li && esTipoLista(li[1].toLowerCase())) {
+                lista = li[1].toLowerCase() as TipoLista;
+                resto = resto.slice(li[0].length);
+                continue;
+            }
             const h = /^(#{1,2})\s+/.exec(resto);
             if (h) { estilo = h[1].length === 1 ? 'titulo' : 'subtitulo'; resto = resto.slice(h[0].length); continue; }
             break;
         }
-        return {
+        bloques.push({
             tipo: 'parrafo', alineacion: alineacion ?? ALINEACION_BASE[estilo], estilo, tramos: tramosDe(resto),
             ...(interlineado && interlineado > 0 ? { interlineado } : {}),
             ...(columnas ? { columnas: 2, ...(nuevaColumna ? { nuevaColumna: true } : {}) } : {}),
-        };
-    });
+            ...(lista ? { lista } : {}),
+        });
+    }
+    return bloques;
 }
 
 function tramoATexto(t: Tramo): string {
     let o = t.marcador
         ? t.texto
-        : t.texto.replace(/[\\*\u27EA]/g, '\\$&').replace(/\+\+/g, '\\+\\+').replace(/\n/g, '\u2028');
+        : t.texto.replace(/[\\*\u27EA\u2502]/g, '\\$&').replace(/\+\+/g, '\\+\\+').replace(/\n/g, '\u2028');
     if (t.subrayado) o = `++${o}++`;
     if (t.cursiva) o = `*${o}*`;
     if (t.negrita) o = `**${o}**`;
     return o;
 }
 
-/** Agrupa los tramos consecutivos con la misma fuente/tamaño dentro de una sola marca. */
+/** Agrupa los tramos consecutivos con la misma fuente/tamaño/resaltado dentro de una sola marca. */
 function tramosATexto(tramos: Tramo[]): string {
     let salida = '';
     let abierto = '';
     for (const t of tramos) {
-        const k = t.fuente || t.tamanoPt ? `${t.fuente ?? ''}|${t.tamanoPt ?? ''}` : '';
+        const k = t.fuente || t.tamanoPt || t.resaltado
+            ? (t.resaltado ? `${t.fuente ?? ''}|${t.tamanoPt ?? ''}|${t.resaltado}` : `${t.fuente ?? ''}|${t.tamanoPt ?? ''}`)
+            : '';
         if (k !== abierto) {
             if (abierto) salida += `${ABRE_LETRA}/${CIERRA_LETRA}`;
             if (k) salida += `${ABRE_LETRA}${k}${CIERRA_LETRA}`;
@@ -427,8 +605,18 @@ const numTxt = (n: number) => String(Math.round(n * 100) / 100);
 
 export function bloquesATexto(bloques: Bloque[]): string {
     return bloques
-        .map((b) => {
-            if (b.tipo === 'salto') return '===';
+        .flatMap((b): string[] => {
+            if (b.tipo === 'salto') return ['==='];
+            if (b.tipo === 'tabla') {
+                return b.filas.map((fila, idx) => {
+                    const etiqueta = idx === 0 && b.encabezado ? '[th]' : '[tr]';
+                    const celdas = fila.map((celda) => {
+                        const al = celda.alineacion && celda.alineacion !== 'left' ? `[${LETRA[celda.alineacion]}] ` : '';
+                        return al + tramosATexto(celda.tramos);
+                    });
+                    return `${etiqueta} ${celdas.join(` ${SEP_CELDA} `)}`;
+                });
+            }
             let pref = '';
             if (b.columnas && b.columnas > 1) {
                 pref += '[col=2] ';
@@ -436,11 +624,12 @@ export function bloquesATexto(bloques: Bloque[]): string {
             }
             if (b.interlineado) pref += `[int=${numTxt(b.interlineado)}] `;
             if (b.alineacion !== ALINEACION_BASE[b.estilo]) pref += `[${LETRA[b.alineacion]}] `;
+            if (b.lista) pref += `[${b.lista}] `;
             if (b.estilo === 'titulo') pref += '# ';
             if (b.estilo === 'subtitulo') pref += '## ';
             const cuerpo = tramosATexto(b.tramos);
-            const seguro = /^(#|\[(?:[cdij]\]|int=|col=|nc\])|===\s*$)/i.test(cuerpo) ? `\\${cuerpo}` : cuerpo;
-            return pref + seguro;
+            const seguro = /^(#|\[(?:[cdij]\]|int=|col=|nc\]|(?:ul|ol)(?:-[a-z-]+)?\]|th\]|tr\])|===\s*$)/i.test(cuerpo) ? `\\${cuerpo}` : cuerpo;
+            return [pref + seguro];
         })
         .join('\n');
 }

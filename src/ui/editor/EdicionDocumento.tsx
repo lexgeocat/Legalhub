@@ -25,6 +25,7 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
     const [modificado, setModificado] = useState(false);
     const [panelActivo, setPanelActivo] = useState<'leyes' | 'diccionario' | null>(null);
     const [verGuiaRedaccion, setVerGuiaRedaccion] = useState(false);
+    const [dlgPagina, setDlgPagina] = useState(false);
 
     useEffect(() => {
         if (modificado) {
@@ -52,6 +53,15 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                     {modificado && <Insignia tono="ambar">Sin aplicar</Insignia>}
                 </div>
                 <div className="ed-acciones-top">
+                    <button
+                        type="button"
+                        className="ed-top-pagina-btn"
+                        title="Configurar página: tamaño de papel, márgenes y espaciado"
+                        onClick={() => setDlgPagina(true)}
+                    >
+                        <Ico d={ICO.pagina} />
+                        <span>Configuración de página</span>
+                    </button>
                     <button type="button" className="btn btn-sec" onClick={() => void salir()}>Descartar</button>
                     <button type="button" className="btn btn-pri"
                         onClick={() => aplicar(hoja.current?.leerTexto() ?? textoInicial, config)}>
@@ -66,6 +76,8 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
 
             <EditorHoja
                 hoja={hoja}
+                paginaAbierta={dlgPagina}
+                onPaginaAbierta={setDlgPagina}
                 textoInicial={textoInicial}
                 config={config}
                 onConfig={(c) => { setConfig(c); setModificado(true); }}
@@ -79,7 +91,6 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                                 onClick={() => setPanelActivo((p) => (p === 'leyes' ? null : 'leyes'))}
                             >
                                 <Ico d={ICO.leyes} />
-                                <span>Leyes</span>
                             </Tb>
                             <Tb
                                 titulo="Buscar términos y citar definiciones doctrinales en el cursor"
@@ -87,7 +98,6 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                                 onClick={() => setPanelActivo((p) => (p === 'diccionario' ? null : 'diccionario'))}
                             >
                                 <Ico d={ICO.diccionario} />
-                                <span>Diccionario</span>
                             </Tb>
                         </div>
                         <Tb
@@ -96,7 +106,6 @@ export function EditorDocumento({ bloques, config: configInicial, aviso, aplicar
                             onClick={() => setVerGuiaRedaccion(true)}
                         >
                             <Ico d={ICO.guia} />
-                            <span>Guía Redacción</span>
                         </Tb>
                     </>
                 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { estaSalidaAutorizada, solicitarCierreSistema } from './guardiaCierre';
+import { estaSalidaAutorizada, registrarInterceptorCierre, solicitarCierreSistema } from './guardiaCierre';
 
 export function useControlVentana() {
   const [maximizada, setMaximizada] = useState(false);
@@ -29,16 +29,25 @@ export function useControlVentana() {
         });
 
         // Intercepta Alt+F4 y el cierre desde el sistema operativo para mostrar la ventana emergente
+        let quitarRegistro: (() => void) | null = null;
         const unlistenClosePromise = appWindow.onCloseRequested((event) => {
           if (estaSalidaAutorizada()) {
             return;
           }
           event.preventDefault();
           solicitarCierreSistema();
+        }).then((unlisten) => {
+          if (cancelado) {
+            unlisten();
+          } else {
+            quitarRegistro = registrarInterceptorCierre(unlisten);
+          }
+          return unlisten;
         });
 
         return () => {
           cancelado = true;
+          quitarRegistro?.();
           unlistenResizePromise.then((unlisten) => unlisten()).catch(() => {});
           unlistenClosePromise.then((unlisten) => unlisten()).catch(() => {});
         };
